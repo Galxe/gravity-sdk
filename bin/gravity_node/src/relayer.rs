@@ -9,7 +9,7 @@ use gaptos::api_types::{
     relayer::{PollResult, Relayer},
     ExecError,
 };
-use greth::reth_pipe_exec_layer_relayer::OracleRelayerManager;
+use greth::reth_pipe_exec_layer_relayer::{parse_oracle_uri, OracleRelayerManager};
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 use tracing::{info, warn};
@@ -37,19 +37,17 @@ impl RelayerConfig {
     }
 }
 
-/// Sanitize a URL for safe logging: keep only scheme://host[:port], redact path and query.
-/// e.g. "https://mainnet.infura.io/v3/SECRET_KEY" → "https://mainnet.infura.io/***"
+/// Keep only scheme and host for logging; redact userinfo, path, query, and fragment.
 fn sanitize_url(url: &str) -> String {
-    if let Some(scheme_end) = url.find("://") {
-        let scheme = &url[..scheme_end];
-        let rest = &url[scheme_end + 3..];
-        // Host ends at the first '/' or '?' or end of string
-        let host_end = rest.find('/').or_else(|| rest.find('?')).unwrap_or(rest.len());
-        let host_port = &rest[..host_end];
-        format!("{scheme}://{host_port}/***")
-    } else {
-        "***".to_string()
-    }
+    let Ok(parsed) = reqwest::Url::parse(url) else {
+        return "***".to_string();
+    };
+    let Some(host) = parsed.host_str() else {
+        return "***".to_string();
+    };
+    let host = if host.contains(':') { format!("[{host}]") } else { host.to_string() };
+    let port = parsed.port().map(|value| format!(":{value}")).unwrap_or_default();
+    format!("{}://{}{} /***", parsed.scheme(), host, port)
 }
 
 #[derive(Debug, Clone, Default)]
@@ -100,7 +98,10 @@ impl RelayerWrapper {
         let config = config_path
             .and_then(|path| match RelayerConfig::from_file(&path) {
                 Ok(cfg) => {
-                    info!("Loaded relayer config from {:?}", path);
+                    info!(
+                        file = %path.file_name().and_then(|name| name.to_str()).unwrap_or("<config>"),
+                        "Loaded relayer config"
+                    );
                     Some(cfg)
                 }
                 Err(e) => {
@@ -113,67 +114,61 @@ impl RelayerWrapper {
             info!("relayer config: URI {} -> {}", uri, sanitize_url(url));
         }
 
-        // update reth commit and use
         let manager = OracleRelayerManager::new(datadir);
         Self { manager, tracker: ProviderProgressTracker::new(), config }
     }
 
     /// Fetch oracle source states from on-chain storage
-    async fn get_oracle_source_states() -> Vec<OracleSourceState> {
+    async fn get_oracle_source_states() -> Result<Vec<OracleSourceState>, ExecError> {
         let block_number = get_block_buffer_manager().latest_commit_block_number().await;
         info!("get_oracle_source_states latest commit block number: {}", block_number);
 
-        let config_bytes = match GLOBAL_CONFIG_STORAGE
-            .get()
-            .expect("GLOBAL_CONFIG_STORAGE not initialized")
+        let config_storage = GLOBAL_CONFIG_STORAGE.get().ok_or_else(|| {
+            ExecError::Other("GLOBAL_CONFIG_STORAGE is not initialized".to_string())
+        })?;
+
+        let config_bytes = match config_storage
             .fetch_config_bytes(OnChainConfig::OracleState, block_number.into())
         {
             Some(bytes) => bytes,
             None => {
-                warn!("Failed to fetch OracleState config");
-                return vec![];
+                let message = format!("OracleState unavailable at committed block {block_number}");
+                warn!("{message}");
+                return Err(ExecError::Other(message));
             }
         };
 
         let bytes: Bytes = match config_bytes.try_into() {
             Ok(b) => b,
             Err(e) => {
-                warn!("Failed to convert OracleState config bytes: {:?}", e);
-                return vec![];
+                let message = format!("Failed to convert OracleState config bytes: {e:?}");
+                warn!("{message}");
+                return Err(ExecError::Other(message));
             }
         };
 
-        match bcs::from_bytes::<Vec<OracleSourceState>>(&bytes) {
-            Ok(states) => {
-                info!("Fetched {} oracle source states", states.len());
-                states
-            }
-            Err(e) => {
-                warn!("Failed to deserialize OracleSourceStates: {:?}", e);
-                vec![]
-            }
-        }
+        let states = Self::decode_oracle_source_states(&bytes).map_err(|error| {
+            warn!("{error:?}");
+            error
+        })?;
+        info!("Fetched {} oracle source states", states.len());
+        Ok(states)
     }
 
-    /// Parse URI to extract source_type and source_id
-    /// URI format: gravity://<source_type>/<source_id>/<task_type>?<params>
+    fn decode_oracle_source_states(bytes: &[u8]) -> Result<Vec<OracleSourceState>, ExecError> {
+        bcs::from_bytes(bytes).map_err(|error| {
+            ExecError::Other(format!("Failed to deserialize OracleSourceStates: {error}"))
+        })
+    }
+
+    /// Parse only the source identity used to reconcile on-chain state.
+    ///
+    /// The reth relayer validates the task type and provider-specific parameters when the URI is
+    /// added. Keeping this helper limited to `(source_type, source_id)` avoids duplicating those
+    /// rules in the SDK wrapper.
     fn parse_source_from_uri(uri: &str) -> Option<(u32, u64)> {
-        if !uri.starts_with("gravity://") {
-            return None;
-        }
-
-        let rest = &uri[10..]; // len("gravity://") = 10
-        let parts: Vec<&str> = rest.split('/').collect();
-        if parts.len() < 2 {
-            return None;
-        }
-
-        let source_type: u32 = parts[0].parse().ok()?;
-        // Remove query string from source_id if present
-        let source_id_str = parts[1].split('?').next()?;
-        let source_id: u64 = source_id_str.parse().ok()?;
-
-        Some((source_type, source_id))
+        let task = parse_oracle_uri(uri).ok()?;
+        Some((task.source_type, task.source_id))
     }
 
     /// Find oracle state for a URI by matching source_type and source_id
@@ -185,24 +180,34 @@ impl RelayerWrapper {
         states.iter().find(|s| s.source_type == source_type && s.source_id == source_id)
     }
 
-    /// Block poll if we returned data and on-chain hasn't caught up
-    fn should_block_poll(state: &ProviderState, onchain_nonce: Option<u128>) -> bool {
-        if let Some(fetched) = state.fetched_nonce {
-            if let Some(onchain) = onchain_nonce {
-                // Block if we returned data and on-chain nonce hasn't caught up
-                return state.last_had_update && fetched > onchain;
-            }
-        }
-        false
+    fn require_oracle_state_for_uri<'a>(
+        uri: &str,
+        states: &'a [OracleSourceState],
+    ) -> Result<&'a OracleSourceState, ExecError> {
+        Self::find_oracle_state_for_uri(uri, states).ok_or_else(|| {
+            let available_sources = states
+                .iter()
+                .map(|state| format!("{}:{}", state.source_type, state.source_id))
+                .collect::<Vec<_>>()
+                .join(", ");
+            ExecError::Other(format!(
+                "Oracle state not found for URI: {uri}. Available source identities: [{available_sources}]"
+            ))
+        })
     }
 
-    /// Submission-side dedup guard (gravity-audit subtask 2). Returns true when the observed
+    /// Block poll if we returned data and on-chain hasn't caught up
+    fn should_block_poll(state: &ProviderState, onchain_nonce: u128) -> bool {
+        state.last_had_update && state.fetched_nonce.is_some_and(|fetched| fetched > onchain_nonce)
+    }
+
+    /// Submission-side dedup guard. Returns true when the observed
     /// oracle nonce is already committed on-chain (`observed <= onchain`), so surfacing it as an
     /// update would inject a `recordBatch` system-tx that re-submits an already-recorded nonce
     /// (provided <= currentNonce) and NECESSARILY reverts (NonceNotSequential). The revert is
-    /// benign (logged, block proceeds) but wastes a full propose/certify/execute round
-    /// (~2.5x/day on mainnet). A legitimately-needed observation always carries `observed >
-    /// onchain`, so suppressing this never stalls a real update. Missing data is never suppressed.
+    /// benign (logged, block proceeds) but wastes a full propose/certify/execute round. A
+    /// legitimately-needed observation always carries `observed > onchain`, so suppressing this
+    /// never stalls a real update. Missing data is never suppressed.
     fn is_already_committed(observed_nonce: Option<u128>, onchain_nonce: Option<u128>) -> bool {
         matches!(
             (observed_nonce, onchain_nonce),
@@ -210,7 +215,7 @@ impl RelayerWrapper {
         )
     }
 
-    /// Apply the subtask-2 submission-side guard to a freshly polled result: if the observation's
+    /// Apply the submission-side guard to a freshly polled result: if the observation's
     /// nonce is already committed on-chain, mark it not-updated so `JWKObserver` drops it and the
     /// doomed `recordBatch` vtxn is never proposed. A genuinely-new observation (nonce > onchain)
     /// passes through untouched.
@@ -233,18 +238,18 @@ impl RelayerWrapper {
         &self,
         uri: &str,
         onchain_nonce: Option<u128>,
-        onchain_block_number: Option<u64>,
+        onchain_position: Option<u128>,
         state: &ProviderState,
     ) -> Result<PollResult, ExecError> {
         info!(
-            "Polling uri: {} (onchain_nonce: {:?}, onchain_block: {:?}, fetched_nonce: {:?}, last_had_update: {})",
-            uri, onchain_nonce, onchain_block_number, state.fetched_nonce, state.last_had_update
+            "Polling uri: {} (onchain_nonce: {:?}, onchain_position: {:?}, fetched_nonce: {:?}, last_had_update: {})",
+            uri, onchain_nonce, onchain_position, state.fetched_nonce, state.last_had_update
         );
 
         // Pass onchain state to poll_uri for reconciliation
         let result = self
             .manager
-            .poll_uri(uri, onchain_nonce, onchain_block_number)
+            .poll_uri(uri, onchain_nonce, onchain_position)
             .await
             .map_err(|e| ExecError::Other(e.to_string()))?;
 
@@ -263,38 +268,31 @@ impl RelayerWrapper {
 #[async_trait]
 impl Relayer for RelayerWrapper {
     async fn add_uri(&self, uri: &str, _rpc_url: &str) -> Result<(), ExecError> {
-        // Use local config URL if available, otherwise fall back to the provided rpc_url
+        // Provider endpoints are validator-local and never sourced from consensus data.
         let actual_url = self
             .config
             .get_url(uri)
             .ok_or_else(|| ExecError::Other(format!("Provider {uri} not found in local config")))?;
 
         // Get onchain state for this URI using source_type/source_id from URI
-        let oracle_states = Self::get_oracle_source_states().await;
-        info!("Oracle states: {:?}", oracle_states);
-        let oracle_state =
-            Self::find_oracle_state_for_uri(uri, &oracle_states).ok_or_else(|| {
-                ExecError::Other(format!(
-                    "Oracle state not found for URI: {uri}. Available states: {oracle_states:?}"
-                ))
-            })?;
+        let oracle_states = Self::get_oracle_source_states().await?;
+        let oracle_state = Self::require_oracle_state_for_uri(uri, &oracle_states)?;
 
-        // Extract nonce and block_number from oracle state
+        // Extract fixed-size progress from the authoritative oracle snapshot.
         let onchain_nonce = oracle_state.latest_nonce;
-        let onchain_block_number =
-            oracle_state.latest_record.as_ref().map(|r| r.block_number).unwrap_or(0);
+        let onchain_position = oracle_state.latest_position;
 
         info!(
-            "Adding URI: {}, RPC URL: {}, onchain_nonce: {}, onchain_block: {}",
+            "Adding URI: {}, RPC URL: {}, onchain_nonce: {}, onchain_position: {}",
             uri,
             sanitize_url(actual_url),
             onchain_nonce,
-            onchain_block_number
+            onchain_position
         );
 
         // Pass onchain state to manager for warm-start
         self.manager
-            .add_uri(uri, actual_url, onchain_nonce, onchain_block_number)
+            .add_uri(uri, actual_url, onchain_nonce, onchain_position)
             .await
             .map_err(|e| ExecError::Other(e.to_string()))
     }
@@ -302,23 +300,18 @@ impl Relayer for RelayerWrapper {
     // All URIs starting with gravity:// are definitely UnsupportedJWK
     async fn get_last_state(&self, uri: &str) -> Result<PollResult, ExecError> {
         // Get onchain state for this URI using source_type/source_id from URI
-        let oracle_states = Self::get_oracle_source_states().await;
-        let oracle_state = Self::find_oracle_state_for_uri(uri, &oracle_states);
+        let oracle_states = Self::get_oracle_source_states().await?;
+        let oracle_state = Self::require_oracle_state_for_uri(uri, &oracle_states)?;
 
-        // Extract nonce and block_number for reconciliation
-        let (onchain_nonce, onchain_block_number) = if let Some(state) = oracle_state {
-            let nonce = Some(state.latest_nonce);
-            let block = state.latest_record.as_ref().map(|r| r.block_number);
-            (nonce, block)
-        } else {
-            (None, None)
-        };
+        // Extract fixed-size progress from an authoritative OracleState snapshot.
+        let onchain_nonce = oracle_state.latest_nonce;
+        let onchain_position = Some(oracle_state.latest_position);
 
         let state = self.tracker.get_state(uri).await;
 
         info!(
-            "get_last_state - uri: {}, onchain_nonce: {:?}, onchain_block: {:?}, fetched_nonce: {:?}, last_had_update: {}",
-            uri, onchain_nonce, onchain_block_number, state.fetched_nonce, state.last_had_update
+            "get_last_state - uri: {}, onchain_nonce: {:?}, onchain_position: {:?}, fetched_nonce: {:?}, last_had_update: {}",
+            uri, onchain_nonce, onchain_position, state.fetched_nonce, state.last_had_update
         );
 
         if Self::should_block_poll(&state, onchain_nonce) {
@@ -336,11 +329,11 @@ impl Relayer for RelayerWrapper {
         }
 
         let result =
-            self.poll_and_update_state(uri, onchain_nonce, onchain_block_number, &state).await?;
+            self.poll_and_update_state(uri, Some(onchain_nonce), onchain_position, &state).await?;
 
-        // Subtask 2: never surface an observation whose nonce is already committed on-chain — it
+        // Never surface an observation whose nonce is already committed on-chain; it
         // would inject a guaranteed-revert oracle `recordBatch`. See `guard_already_committed`.
-        Ok(Self::guard_already_committed(uri, result, onchain_nonce))
+        Ok(Self::guard_already_committed(uri, result, Some(onchain_nonce)))
     }
 }
 
@@ -369,6 +362,69 @@ mod tests {
     }
 
     #[test]
+    fn oracle_state_decoder_distinguishes_empty_from_invalid() {
+        let authoritative_empty = bcs::to_bytes(&Vec::<OracleSourceState>::new()).unwrap();
+        assert!(RelayerWrapper::decode_oracle_source_states(&authoritative_empty)
+            .unwrap()
+            .is_empty());
+
+        assert!(RelayerWrapper::decode_oracle_source_states(&[0xff]).is_err());
+    }
+
+    #[test]
+    fn oracle_state_decoder_preserves_fixed_size_progress() {
+        let encoded = bcs::to_bytes(&vec![OracleSourceState {
+            source_type: 7,
+            source_id: 1001,
+            latest_nonce: 7,
+            latest_position: 1_710_000_419_999,
+        }])
+        .unwrap();
+
+        let decoded = RelayerWrapper::decode_oracle_source_states(&encoded).unwrap();
+        assert_eq!(decoded.len(), 1);
+        assert_eq!(decoded[0].latest_nonce, 7);
+        assert_eq!(decoded[0].latest_position, 1_710_000_419_999);
+    }
+
+    #[test]
+    fn missing_source_in_authoritative_snapshot_is_an_error() {
+        let error =
+            RelayerWrapper::require_oracle_state_for_uri("gravity://7/1001/custom_task", &[])
+                .unwrap_err();
+
+        assert!(
+            matches!(error, ExecError::Other(message) if message.contains("Oracle state not found"))
+        );
+    }
+
+    #[tokio::test]
+    async fn failed_snapshot_decode_does_not_mutate_pending_tracker() {
+        let tracker = ProviderProgressTracker::new();
+        let uri = "gravity://8/42/custom_task";
+        tracker.update_state(uri, &poll_result(8, true)).await;
+
+        assert!(RelayerWrapper::decode_oracle_source_states(&[0xff]).is_err());
+
+        let pending = tracker.get_state(uri).await;
+        assert_eq!(pending.fetched_nonce, Some(8));
+        assert!(pending.last_had_update);
+        assert_eq!(pending.last_result.unwrap().nonce, Some(8));
+    }
+
+    #[test]
+    fn pending_result_blocks_poll_until_authoritative_nonce_catches_up() {
+        let state = ProviderState {
+            fetched_nonce: Some(8),
+            last_had_update: true,
+            last_result: Some(poll_result(8, true)),
+        };
+
+        assert!(RelayerWrapper::should_block_poll(&state, 7));
+        assert!(!RelayerWrapper::should_block_poll(&state, 8));
+    }
+
+    #[test]
     fn guard_suppresses_an_already_committed_duplicate() {
         // Artificial duplicate: an observation whose nonce (7) is already committed on-chain (7).
         // Re-submitting it would revert NonceNotSequential — the guard must drop it.
@@ -394,5 +450,37 @@ mod tests {
             Some(7),
         );
         assert!(fresh.updated, "a genuinely-new observation (8 > 7) must NOT be suppressed");
+    }
+
+    #[test]
+    fn test_parse_custom_source_uri() {
+        let uri = "gravity://7/1001/custom_task?provider=example";
+        assert_eq!(RelayerWrapper::parse_source_from_uri(uri), Some((7, 1001)));
+    }
+
+    #[test]
+    fn test_parse_blockchain_source_uri() {
+        let uri = "gravity://0/31337/events?contract=0x0000000000000000000000000000000000000001";
+        assert_eq!(RelayerWrapper::parse_source_from_uri(uri), Some((0, 31337)));
+    }
+
+    #[test]
+    fn test_parse_source_accepts_identity_only_uri() {
+        assert_eq!(RelayerWrapper::parse_source_from_uri("gravity://7/1001"), Some((7, 1001)));
+    }
+
+    #[test]
+    fn test_parse_source_rejects_unroutable_uri() {
+        assert_eq!(RelayerWrapper::parse_source_from_uri("gravity://price/1001"), None);
+        assert_eq!(RelayerWrapper::parse_source_from_uri("https://oracle.example/3/1001"), None);
+    }
+
+    #[test]
+    fn test_sanitize_url_removes_credentials_and_path() {
+        let sanitized = sanitize_url("https://user:secret@rpc.example:8443/v1/key?token=abc");
+        assert_eq!(sanitized, "https://rpc.example:8443 /***");
+        assert!(!sanitized.contains("user"));
+        assert!(!sanitized.contains("secret"));
+        assert!(!sanitized.contains("token"));
     }
 }

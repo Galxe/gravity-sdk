@@ -165,10 +165,8 @@ impl<C: ChainSpecParser<ChainSpec = ChainSpec>, Ext: clap::Args + fmt::Debug> Cl
         debug!(target: "reth::cli", "Initialized tracing, log directory: {}, log level {:?}", self.logs.log_file_directory, self.logs.verbosity);
 
         let runner = CliRunner::try_default_runtime()?;
-        // reth v2.3.0: init/init-state execute() now take a Runtime; db/prune
-        // execute() take a CliContext supplied via the *_command_until_exit runner
-        // methods (see gravity-reth crates/ethereum/cli/src/app.rs).
-        let rt = runner.runtime();
+        // reth v2.3.0: init/init-state execute() take a Runtime.
+        let runtime = runner.runtime();
         let components = |spec: Arc<C::ChainSpec>| {
             (EthEvmConfig::ethereum(spec.clone()), Arc::new(EthBeaconConsensus::new(spec)))
         };
@@ -181,10 +179,10 @@ impl<C: ChainSpecParser<ChainSpec = ChainSpec>, Ext: clap::Args + fmt::Debug> Cl
             }
             Commands::Init(command) => {
                 println!("Running init command");
-                runner.run_blocking_until_ctrl_c(command.execute::<EthereumNode>(rt))
+                runner.run_blocking_until_ctrl_c(command.execute::<EthereumNode>(runtime))
             }
             Commands::InitState(command) => {
-                runner.run_blocking_until_ctrl_c(command.execute::<EthereumNode>(rt))
+                runner.run_blocking_until_ctrl_c(command.execute::<EthereumNode>(runtime))
             }
             Commands::DumpGenesis(command) => runner.run_blocking_until_ctrl_c(command.execute()),
             Commands::Db(command) => {
