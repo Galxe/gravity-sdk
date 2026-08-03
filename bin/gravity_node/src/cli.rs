@@ -12,7 +12,7 @@ use greth::{
     reth_node_builder::{NodeBuilder, WithLaunchContext},
     reth_node_core::args::LogArgs,
     reth_node_ethereum::{consensus::EthBeaconConsensus, EthEvmConfig, EthereumNode},
-    reth_tracing::FileWorkerGuard,
+    reth_tracing::TracingGuards,
 };
 use std::{
     collections::BTreeMap,
@@ -155,10 +155,20 @@ impl<C: ChainSpecParser<ChainSpec = ChainSpec>, Ext: clap::Args + fmt::Debug> Cl
         self.logs.log_file_directory =
             self.logs.log_file_directory.join(self.chain.chain.to_string());
 
+        // greth keeps the node-subcommand default (5 files) outside LogArgs, so `--log.file.*`
+        // are otherwise accepted while the file layer is never installed (see its app.rs).
+        if matches!(self.command, Commands::Node(_)) {
+            self.logs.apply_node_defaults();
+        }
+
         let _guard = self.init_tracing()?;
         debug!(target: "reth::cli", "Initialized tracing, log directory: {}, log level {:?}", self.logs.log_file_directory, self.logs.verbosity);
 
         let runner = CliRunner::try_default_runtime()?;
+        // reth v2.3.0: init/init-state execute() now take a Runtime; db/prune
+        // execute() take a CliContext supplied via the *_command_until_exit runner
+        // methods (see gravity-reth crates/ethereum/cli/src/app.rs).
+        let rt = runner.runtime();
         let components = |spec: Arc<C::ChainSpec>| {
             (EthEvmConfig::ethereum(spec.clone()), Arc::new(EthBeaconConsensus::new(spec)))
         };
@@ -171,18 +181,20 @@ impl<C: ChainSpecParser<ChainSpec = ChainSpec>, Ext: clap::Args + fmt::Debug> Cl
             }
             Commands::Init(command) => {
                 println!("Running init command");
-                runner.run_blocking_until_ctrl_c(command.execute::<EthereumNode>())
+                runner.run_blocking_until_ctrl_c(command.execute::<EthereumNode>(rt))
             }
             Commands::InitState(command) => {
-                runner.run_blocking_until_ctrl_c(command.execute::<EthereumNode>())
+                runner.run_blocking_until_ctrl_c(command.execute::<EthereumNode>(rt))
             }
             Commands::DumpGenesis(command) => runner.run_blocking_until_ctrl_c(command.execute()),
             Commands::Db(command) => {
-                runner.run_blocking_until_ctrl_c(command.execute::<EthereumNode>())
+                runner.run_blocking_command_until_exit(|ctx| command.execute::<EthereumNode>(ctx))
             }
             Commands::P2P(command) => runner.run_until_ctrl_c(command.execute::<EthereumNode>()),
             Commands::Config(command) => runner.run_until_ctrl_c(command.execute()),
-            Commands::Prune(command) => runner.run_until_ctrl_c(command.execute::<EthereumNode>()),
+            Commands::Prune(command) => {
+                runner.run_command_until_exit(|ctx| command.execute::<EthereumNode>(ctx))
+            }
             Commands::Stage(command) => {
                 println!("Running stage command");
                 runner.run_command_until_exit(|ctx| {
@@ -197,7 +209,7 @@ impl<C: ChainSpecParser<ChainSpec = ChainSpec>, Ext: clap::Args + fmt::Debug> Cl
     ///
     /// If file logging is enabled, this function returns a guard that must be kept alive to ensure
     /// that all logs are flushed to disk.
-    pub fn init_tracing(&self) -> eyre::Result<Option<FileWorkerGuard>> {
+    pub fn init_tracing(&self) -> eyre::Result<TracingGuards> {
         let guard = self.logs.init_tracing()?;
         Ok(guard)
     }
