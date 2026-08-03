@@ -1,0 +1,70 @@
+[cluster]
+name = "gravity-devnet-binance-price-feed-multivalidator"
+base_dir = "/tmp/gravity-cluster-binance-price-feed-multivalidator"
+
+[genesis_source]
+genesis_path = "./artifacts/genesis.json"
+waypoint_path = "./artifacts/waypoint.txt"
+
+[[nodes]]
+id = "node1"
+role = "genesis"
+source = { project_path = "../" }
+host = "127.0.0.1"
+validator_port = 26080
+vfn_port = 26090
+rpc_port = 26100
+api_port = 26110
+metrics_port = 26120
+inspection_port = 26130
+https_port = 26140
+authrpc_port = 26150
+reth_p2p_port = 26160
+
+[[nodes]]
+id = "node2"
+role = "genesis"
+source = { project_path = "../" }
+host = "127.0.0.1"
+validator_port = 26081
+vfn_port = 26091
+rpc_port = 26101
+api_port = 26111
+metrics_port = 26121
+inspection_port = 26131
+https_port = 26141
+authrpc_port = 26151
+reth_p2p_port = 26161
+
+[[nodes]]
+id = "node3"
+role = "genesis"
+source = { project_path = "../" }
+host = "127.0.0.1"
+validator_port = 26082
+vfn_port = 26092
+rpc_port = 26102
+api_port = 26112
+metrics_port = 26122
+inspection_port = 26132
+https_port = 26142
+authrpc_port = 26152
+reth_p2p_port = 26162
+
+[[nodes]]
+id = "node4"
+role = "genesis"
+source = { project_path = "../" }
+host = "127.0.0.1"
+validator_port = 26083
+vfn_port = 26093
+rpc_port = 26103
+api_port = 26113
+metrics_port = 26123
+inspection_port = 26133
+https_port = 26143
+authrpc_port = 26153
+reth_p2p_port = 26163
+
+[faucet_init]
+num_accounts = 0
