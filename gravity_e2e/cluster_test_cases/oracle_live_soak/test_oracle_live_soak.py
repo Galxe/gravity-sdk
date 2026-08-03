@@ -32,6 +32,9 @@ POLYMARKET_TASK = Web3.keccak(text="polymarket_settlement")
 RECONFIGURATION_ADDRESS = Web3.to_checksum_address(
     "0x00000000000000000000000000000001625F2003"
 )
+EPOCH_CONFIG_ADDRESS = Web3.to_checksum_address(
+    "0x00000000000000000000000000000001625F1005"
+)
 SEL_CURRENT_EPOCH = Web3.keccak(text="currentEpoch()")[:4]
 SEL_REMAINING_TIME = Web3.keccak(text="getRemainingTimeSeconds()")[:4]
 CALLBACK_SUCCESS_TOPIC0 = Web3.keccak(
@@ -45,6 +48,8 @@ EPOCH_TIMEOUT_SECONDS = 180
 ORACLE_TIMEOUT_SECONDS = 360
 MIN_PROPOSAL_WINDOW_SECONDS = 40
 QUORUM_VALIDATORS = 3
+BOOTSTRAP_EPOCH_INTERVAL_MICROS = 60 * 1_000_000
+SOAK_EPOCH_INTERVAL_MICROS = 2 * 60 * 60 * 1_000_000
 
 _HEARTBEAT_FILE = "oracle_live_soak_heartbeat.jsonl"
 _SUMMARY_FILE = "oracle_live_soak_summary.json"
@@ -234,7 +239,9 @@ async def _wait_for_consensus_evidence(
     )
 
 
-async def _wait_for_block(w3: Web3, block_number: int, timeout: int = 90):
+async def _wait_for_block(
+    node_id: str, w3: Web3, block_number: int, timeout: int = 90
+):
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         try:
@@ -243,7 +250,15 @@ async def _wait_for_block(w3: Web3, block_number: int, timeout: int = 90):
         except Exception:
             pass
         await asyncio.sleep(1)
-    raise TimeoutError(f"RPC did not reach Gravity block {block_number}")
+    last_height = None
+    try:
+        last_height = w3.eth.block_number
+    except Exception:
+        pass
+    raise TimeoutError(
+        f"{node_id} RPC did not reach Gravity block {block_number}; "
+        f"last height was {last_height}"
+    )
 
 
 async def _wait_for_settlement(
@@ -397,7 +412,7 @@ async def _replicated_snapshot(
     heights = {}
     for node_id, node in cluster.nodes.items():
         assert node.w3.is_connected(), f"{node_id} RPC disconnected"
-        await _wait_for_block(node.w3, snapshot_block)
+        await _wait_for_block(node_id, node.w3, snapshot_block)
         heights[node_id] = node.w3.eth.block_number
 
     native_oracle = node1.w3.eth.contract(
@@ -716,6 +731,7 @@ async def test_governance_activated_oracles_soak_for_configured_duration(
         ("PolymarketSettlementResolver.sol", "PolymarketSettlementResolver"),
         ("NativeOracle.sol", "NativeOracle"),
         ("OracleTaskConfig.sol", "OracleTaskConfig"),
+        ("EpochConfig.sol", "EpochConfig"),
     ]
     contracts_out = support.ensure_contract_artifacts(SUITE_DIR, required)
     price_artifact = support.load_artifact(
@@ -732,6 +748,9 @@ async def test_governance_activated_oracles_soak_for_configured_duration(
     task_artifact = support.load_artifact(
         contracts_out, "OracleTaskConfig.sol", "OracleTaskConfig"
     )
+    epoch_artifact = support.load_artifact(
+        contracts_out, "EpochConfig.sol", "EpochConfig"
+    )
 
     price_resolver = support.deploy_contract(w3, price_artifact)
     polymarket_resolver = support.deploy_contract(w3, polymarket_artifact)
@@ -741,6 +760,15 @@ async def test_governance_activated_oracles_soak_for_configured_duration(
     task_config = w3.eth.contract(
         address=support.ORACLE_TASK_CONFIG_ADDRESS, abi=task_artifact["abi"]
     )
+    epoch_config = w3.eth.contract(
+        address=EPOCH_CONFIG_ADDRESS, abi=epoch_artifact["abi"]
+    )
+
+    assert (
+        epoch_config.functions.epochIntervalMicros().call()
+        == BOOTSTRAP_EPOCH_INTERVAL_MICROS
+    )
+    assert tuple(epoch_config.functions.getPendingConfig().call()) == (False, 0)
 
     assert not task_config.functions.hasTask(
         support.SOURCE_TYPE_PRICE_FEED, feed_id, support.TASK_PRICE_FEED
@@ -754,6 +782,7 @@ async def test_governance_activated_oracles_soak_for_configured_duration(
         w3,
         support.faucet_voting_pool(w3),
         [
+            EPOCH_CONFIG_ADDRESS,
             support.NATIVE_ORACLE_ADDRESS,
             support.ORACLE_TASK_CONFIG_ADDRESS,
             support.ORACLE_TASK_CONFIG_ADDRESS,
@@ -761,6 +790,11 @@ async def test_governance_activated_oracles_soak_for_configured_duration(
             polymarket_resolver.address,
         ],
         [
+            support.function_calldata(
+                epoch_config.functions.setForNextEpoch(
+                    SOAK_EPOCH_INTERVAL_MICROS
+                )
+            ),
             support.function_calldata(
                 native_oracle.functions.setDefaultCallback(
                     support.SOURCE_TYPE_PRICE_FEED, price_resolver.address
@@ -803,6 +837,14 @@ async def test_governance_activated_oracles_soak_for_configured_duration(
         gas=8_000_000,
     )
     assert _current_epoch(w3) == setup_epoch
+    assert (
+        epoch_config.functions.epochIntervalMicros().call()
+        == BOOTSTRAP_EPOCH_INTERVAL_MICROS
+    )
+    assert tuple(epoch_config.functions.getPendingConfig().call()) == (
+        True,
+        SOAK_EPOCH_INTERVAL_MICROS,
+    )
     for source_type, source_id, task_name, expected_uri in (
         (
             support.SOURCE_TYPE_PRICE_FEED,
@@ -837,6 +879,14 @@ async def test_governance_activated_oracles_soak_for_configured_duration(
 
     activation_epoch = await _wait_for_epoch_advance(cluster, setup_epoch)
     assert activation_epoch == setup_epoch + 1
+    assert (
+        epoch_config.functions.epochIntervalMicros().call()
+        == SOAK_EPOCH_INTERVAL_MICROS
+    )
+    assert tuple(epoch_config.functions.getPendingConfig().call()) == (False, 0)
+    assert _remaining_epoch_seconds(w3) > (
+        SOAK_EPOCH_INTERVAL_MICROS // 1_000_000 - 300
+    )
     price_progress, initial_price = await support.wait_for_latest_price(
         native_oracle,
         price_resolver,
@@ -931,6 +981,12 @@ async def test_governance_activated_oracles_soak_for_configured_duration(
             settlement,
         )
     except BaseException as error:
+        last_heartbeat = None
+        heartbeat_path = SUITE_DIR / "artifacts" / _HEARTBEAT_FILE
+        if heartbeat_path.exists():
+            lines = heartbeat_path.read_text().splitlines()
+            if lines:
+                last_heartbeat = json.loads(lines[-1])
         _write_summary(
             {
                 "status": "failed",
@@ -938,6 +994,7 @@ async def test_governance_activated_oracles_soak_for_configured_duration(
                 "error": str(error),
                 "configuredDurationSeconds": settings.duration_seconds,
                 "polymarketMirrorId": mirror_id,
+                "lastHeartbeat": last_heartbeat,
             }
         )
         raise
@@ -972,6 +1029,9 @@ async def test_governance_activated_oracles_soak_for_configured_duration(
             "governanceBlock": receipt["blockNumber"],
             "priceCallbackEvents": price_delivery_count,
             "polymarketCallbackEvents": polymarket_delivery_count,
+            "soakEpochIntervalSeconds": (
+                SOAK_EPOCH_INTERVAL_MICROS // 1_000_000
+            ),
         }
     )
     _write_summary(summary)
