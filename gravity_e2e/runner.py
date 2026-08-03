@@ -328,6 +328,10 @@ def run_test_suite(
                 env[env_var] = str(tpl_path)
                 logger.info(f"Using custom reth config template: {env_var}={tpl_path}")
 
+        if hooks and hasattr(hooks, "pre_deploy"):
+            logger.info(f"Running pre_deploy hook from {hooks_path}")
+            hooks.pre_deploy(test_dir, env, pytest_args or [])
+
         run_command(
             ["bash", str(deploy_script), str(cluster_config)],
             cwd=CLUSTER_SCRIPTS_DIR,
@@ -439,7 +443,7 @@ def main():
     )
     # Long-running suites excluded from CI by default.
     # Run them explicitly: runner.py long_test
-    DEFAULT_EXCLUDES = ["long_test", "rolling_upgrade"]
+    DEFAULT_EXCLUDES = ["long_test", "rolling_upgrade", "oracle_live_soak"]
 
     parser.add_argument(
         "--exclude",

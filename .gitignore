@@ -182,4 +182,5 @@ __pycache__/
 sentinel.toml
 sentinel_state.json
 gravity_e2e/cluster_test_cases/bridge/mock_anvil_metadata.json
+gravity_e2e/cluster_test_cases/oracle_live_soak/artifacts/
 bench_reports/
