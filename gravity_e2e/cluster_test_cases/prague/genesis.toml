@@ -3,6 +3,11 @@
 # !! pragueTime must be > genesis_timestamp_secs so the EIP-2935 deployment
 #    hook (pipe-exec eip_2935.rs gate parent_ts < pragueTime <= current_ts)
 #    fires on block 1. Change one, change the other.
+#
+# !! betaTime (gravity-reth #412): until Beta, filter_invalid_txs wholesale-rejects
+#    type-4 and from/to-delegated traffic (EIP-7702 emergency lockdown). Missing
+#    betaTime → lockdown forever (fail-closed). This suite exercises Prague 7702
+#    behaviour, so release lockdown at the same timestamp as pragueTime.
 
 [dependencies.genesis_contracts]
 repo = "https://github.com/Galxe/gravity_chain_core_contracts.git"
@@ -29,6 +34,8 @@ initial_locked_until_micros = 1798848000000000
 
 [genesis.hardforks]
 pragueTime = 1775664001
+# Same wall-clock as pragueTime: Prague protocol + Beta lockdown release together.
+betaTime = 1775664001
 
 [genesis.faucet]
 address = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"

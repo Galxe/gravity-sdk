@@ -155,10 +155,17 @@ impl<C: ChainSpecParser<ChainSpec = ChainSpec>, Ext: clap::Args + fmt::Debug> Cl
         self.logs.log_file_directory =
             self.logs.log_file_directory.join(self.chain.chain.to_string());
 
+        // greth keeps the node-subcommand default (5 files) outside LogArgs, so `--log.file.*`
+        // are otherwise accepted while the file layer is never installed (see its app.rs).
+        if matches!(self.command, Commands::Node(_)) {
+            self.logs.apply_node_defaults();
+        }
+
         let _guard = self.init_tracing()?;
         debug!(target: "reth::cli", "Initialized tracing, log directory: {}, log level {:?}", self.logs.log_file_directory, self.logs.verbosity);
 
         let runner = CliRunner::try_default_runtime()?;
+        // reth v2.3.0: init/init-state execute() take a Runtime.
         let runtime = runner.runtime();
         let components = |spec: Arc<C::ChainSpec>| {
             (EthEvmConfig::ethereum(spec.clone()), Arc::new(EthBeaconConsensus::new(spec)))

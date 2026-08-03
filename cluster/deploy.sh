@@ -449,14 +449,44 @@ START_SCRIPT
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORKSPACE="$SCRIPT_DIR/.."
 
+# Wait until the kernel has reaped the process. greth v2.3+ can keep the
+# RocksDB LOCK held for several seconds after SIGTERM while flushing; if we
+# delete the pid file and return early, e2e restart races the lock and dies
+# with "Resource temporarily unavailable".
+wait_pid_gone() {
+    local pid="$1"
+    local max_iters="$2"
+    local i
+    for i in $(seq 1 "$max_iters"); do
+        if ! kill -0 "$pid" 2>/dev/null; then
+            return 0
+        fi
+        sleep 0.5
+    done
+    return 1
+}
+
 if [ -e "${WORKSPACE}/script/node.pid" ]; then
     pid=$(cat "${WORKSPACE}/script/node.pid")
     if kill -0 "$pid" 2>/dev/null; then
-        kill "$pid"
-        echo "Stopped node (PID: $pid)"
+        kill "$pid" 2>/dev/null || true
+        # ~30s graceful (SIGTERM)
+        if wait_pid_gone "$pid" 60; then
+            echo "Stopped node (PID: $pid)"
+        else
+            echo "Node (PID: $pid) still alive after SIGTERM; sending SIGKILL"
+            kill -9 "$pid" 2>/dev/null || true
+            # ~20s after SIGKILL for process to disappear
+            if wait_pid_gone "$pid" 40; then
+                echo "Stopped node (PID: $pid, forced)"
+            else
+                echo "ERROR: node PID $pid still alive after SIGKILL" >&2
+            fi
+        fi
     else
         echo "Node not running (stale PID file)"
     fi
+    # Only drop the pid file after the process is gone (or we gave up).
     rm -f "${WORKSPACE}/script/node.pid"
 else
     echo "No PID file found"
@@ -573,14 +603,44 @@ START_SCRIPT
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORKSPACE="$SCRIPT_DIR/.."
 
+# Wait until the kernel has reaped the process. greth v2.3+ can keep the
+# RocksDB LOCK held for several seconds after SIGTERM while flushing; if we
+# delete the pid file and return early, e2e restart races the lock and dies
+# with "Resource temporarily unavailable".
+wait_pid_gone() {
+    local pid="$1"
+    local max_iters="$2"
+    local i
+    for i in $(seq 1 "$max_iters"); do
+        if ! kill -0 "$pid" 2>/dev/null; then
+            return 0
+        fi
+        sleep 0.5
+    done
+    return 1
+}
+
 if [ -e "${WORKSPACE}/script/node.pid" ]; then
     pid=$(cat "${WORKSPACE}/script/node.pid")
     if kill -0 "$pid" 2>/dev/null; then
-        kill "$pid"
-        echo "Stopped node (PID: $pid)"
+        kill "$pid" 2>/dev/null || true
+        # ~30s graceful (SIGTERM)
+        if wait_pid_gone "$pid" 60; then
+            echo "Stopped node (PID: $pid)"
+        else
+            echo "Node (PID: $pid) still alive after SIGTERM; sending SIGKILL"
+            kill -9 "$pid" 2>/dev/null || true
+            # ~20s after SIGKILL for process to disappear
+            if wait_pid_gone "$pid" 40; then
+                echo "Stopped node (PID: $pid, forced)"
+            else
+                echo "ERROR: node PID $pid still alive after SIGKILL" >&2
+            fi
+        fi
     else
         echo "Node not running (stale PID file)"
     fi
+    # Only drop the pid file after the process is gone (or we gave up).
     rm -f "${WORKSPACE}/script/node.pid"
 else
     echo "No PID file found"
@@ -706,14 +766,44 @@ START_SCRIPT
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORKSPACE="$SCRIPT_DIR/.."
 
+# Wait until the kernel has reaped the process. greth v2.3+ can keep the
+# RocksDB LOCK held for several seconds after SIGTERM while flushing; if we
+# delete the pid file and return early, e2e restart races the lock and dies
+# with "Resource temporarily unavailable".
+wait_pid_gone() {
+    local pid="$1"
+    local max_iters="$2"
+    local i
+    for i in $(seq 1 "$max_iters"); do
+        if ! kill -0 "$pid" 2>/dev/null; then
+            return 0
+        fi
+        sleep 0.5
+    done
+    return 1
+}
+
 if [ -e "${WORKSPACE}/script/node.pid" ]; then
     pid=$(cat "${WORKSPACE}/script/node.pid")
     if kill -0 "$pid" 2>/dev/null; then
-        kill "$pid"
-        echo "Stopped node (PID: $pid)"
+        kill "$pid" 2>/dev/null || true
+        # ~30s graceful (SIGTERM)
+        if wait_pid_gone "$pid" 60; then
+            echo "Stopped node (PID: $pid)"
+        else
+            echo "Node (PID: $pid) still alive after SIGTERM; sending SIGKILL"
+            kill -9 "$pid" 2>/dev/null || true
+            # ~20s after SIGKILL for process to disappear
+            if wait_pid_gone "$pid" 40; then
+                echo "Stopped node (PID: $pid, forced)"
+            else
+                echo "ERROR: node PID $pid still alive after SIGKILL" >&2
+            fi
+        fi
     else
         echo "Node not running (stale PID file)"
     fi
+    # Only drop the pid file after the process is gone (or we gave up).
     rm -f "${WORKSPACE}/script/node.pid"
 else
     echo "No PID file found"

@@ -113,9 +113,13 @@ stop_node() {
     
     log_info "Stopping $node_id (PID: $pid)..."
     kill "$pid" 2>/dev/null || true
-    
-    # Wait for graceful shutdown
-    for i in {1..10}; do
+
+    # Wait until the process is really gone before dropping the pid file.
+    # greth v2.3+ can hold the RocksDB LOCK for several seconds after SIGTERM
+    # while flushing; returning early races the next start
+    # ("Resource temporarily unavailable" on .../db/state/LOCK).
+    # ~30s graceful
+    for i in {1..60}; do
         if ! kill -0 "$pid" 2>/dev/null; then
             rm -f "$pid_file"
             log_info "$node_id stopped"
@@ -123,12 +127,22 @@ stop_node() {
         fi
         sleep 0.5
     done
-    
-    # Force kill if still running
+
+    # Force kill if still running, then wait again for the kernel to reap it.
     log_warn "$node_id: Force killing..."
     kill -9 "$pid" 2>/dev/null || true
+    for i in {1..40}; do
+        if ! kill -0 "$pid" 2>/dev/null; then
+            rm -f "$pid_file"
+            log_info "$node_id stopped (forced)"
+            return 0
+        fi
+        sleep 0.5
+    done
+
+    # Last resort: drop pid bookkeeping so callers are not stuck, but warn.
     rm -f "$pid_file"
-    log_info "$node_id stopped (forced)"
+    log_error "$node_id: PID $pid still alive after SIGKILL"
 }
 
 # Main
