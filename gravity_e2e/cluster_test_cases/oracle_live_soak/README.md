@@ -23,8 +23,10 @@ and Polymarket suites remain the reproducible CI coverage.
 
 ## What Every Heartbeat Checks
 
-- all four Gravity RPC replicas can serve one common snapshot block;
-- each replica returns the same NativeOracle progress and resolver state;
+- all four Gravity RPC replicas expose the same block hash at the common
+  confirmed height `min(latest node heights) - 16`;
+- each replica returns the same NativeOracle progress and resolver state at
+  that historical block, outside the latest-block execution window;
 - Binance delivery nonce, source position, and resolver round never regress;
 - the latest resolver value maps to the exact closed one-minute bucket;
 - the Binance feed and every Gravity node stay within the configured stall

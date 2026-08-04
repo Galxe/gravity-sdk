@@ -50,6 +50,7 @@ MIN_PROPOSAL_WINDOW_SECONDS = 40
 QUORUM_VALIDATORS = 3
 BOOTSTRAP_EPOCH_INTERVAL_MICROS = 60 * 1_000_000
 SOAK_EPOCH_INTERVAL_MICROS = 2 * 60 * 60 * 1_000_000
+SNAPSHOT_CONFIRMATION_BLOCKS = 16
 
 _HEARTBEAT_FILE = "oracle_live_soak_heartbeat.jsonl"
 _SUMMARY_FILE = "oracle_live_soak_summary.json"
@@ -407,13 +408,28 @@ async def _replicated_snapshot(
     mirror_id: int,
     condition_id: bytes,
 ) -> dict:
-    node1 = cluster.get_node("node1")
-    snapshot_block = node1.w3.eth.block_number
     heights = {}
     for node_id, node in cluster.nodes.items():
         assert node.w3.is_connected(), f"{node_id} RPC disconnected"
-        await _wait_for_block(node_id, node.w3, snapshot_block)
         heights[node_id] = node.w3.eth.block_number
+
+    minimum_height = min(heights.values())
+    assert minimum_height >= SNAPSHOT_CONFIRMATION_BLOCKS, (
+        "Gravity chain is too young for a confirmed Oracle snapshot"
+    )
+    snapshot_block = minimum_height - SNAPSHOT_CONFIRMATION_BLOCKS
+    snapshot_hash = None
+    for node_id, node in cluster.nodes.items():
+        block = node.w3.eth.get_block(snapshot_block)
+        assert int(block["number"]) == snapshot_block
+        block_hash = Web3.to_hex(block["hash"]).lower()
+        if snapshot_hash is None:
+            snapshot_hash = block_hash
+        assert block_hash == snapshot_hash, (
+            f"{node_id} block hash diverged at Gravity block {snapshot_block}"
+        )
+
+    node1 = cluster.get_node("node1")
 
     native_oracle = node1.w3.eth.contract(
         address=support.NATIVE_ORACLE_ADDRESS, abi=native_artifact["abi"]
@@ -490,6 +506,7 @@ async def _replicated_snapshot(
 
     return {
         "block": snapshot_block,
+        "blockHash": snapshot_hash,
         "heights": heights,
         "priceProgress": price_progress,
         "latestPrice": latest_price,
@@ -515,7 +532,7 @@ async def _restart_validator(
         raise AssertionError(f"unknown restart node {node_id}")
     started = time.monotonic()
     assert await node.restart(), f"failed to restart {node_id}"
-    await _wait_for_block(node.w3, target_block, timeout=180)
+    await _wait_for_block(node_id, node.w3, target_block, timeout=180)
     assert await cluster.check_block_increasing(timeout=60)
     await _wait_for_relayer_node(cluster, node_id, uri, target_nonce)
     return time.monotonic() - started
@@ -538,6 +555,17 @@ async def _run_soak(
     condition_id = bytes.fromhex(polymarket["conditionId"].removeprefix("0x"))
     heartbeat_path = SUITE_DIR / "artifacts" / _HEARTBEAT_FILE
     heartbeat_path.unlink(missing_ok=True)
+
+    initial_tip = max(
+        node.w3.eth.block_number for node in cluster.nodes.values()
+    )
+    confirmation_target = (
+        initial_tip + SNAPSHOT_CONFIRMATION_BLOCKS + 1
+    )
+    for node_id, node in cluster.nodes.items():
+        await _wait_for_block(
+            node_id, node.w3, confirmation_target, timeout=90
+        )
 
     initial = await _replicated_snapshot(
         cluster,
@@ -574,7 +602,7 @@ async def _run_soak(
             restart_recovery_seconds = await _restart_validator(
                 cluster,
                 settings.restart_node,
-                int(final["block"]),
+                max(int(height) for height in final["heights"].values()),
                 binance["taskUri"],
                 int(final["priceProgress"][0]),
             )
@@ -630,6 +658,7 @@ async def _run_soak(
         heartbeat = {
             "elapsedSeconds": round(now - started, 3),
             "gravityBlock": int(final["block"]),
+            "gravityBlockHash": final["blockHash"],
             "nodeHeights": final["heights"],
             "nvdaNonce": nonce,
             "nvdaPosition": int(final["priceProgress"][1]),
@@ -691,6 +720,7 @@ async def _run_soak(
         "minimumAdvances": settings.minimum_advances,
         "maxObservedPriceGapSeconds": round(max_price_gap, 3),
         "finalGravityBlock": int(final["block"]),
+        "finalGravityBlockHash": final["blockHash"],
         "restartNode": (
             settings.restart_node if settings.restart_after_seconds else None
         ),
