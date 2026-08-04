@@ -26,7 +26,8 @@ and Polymarket suites remain the reproducible CI coverage.
 - all four Gravity RPC replicas expose the same block hash at the common
   confirmed height `min(latest node heights) - 16`;
 - each replica returns the same NativeOracle progress and resolver state at
-  that historical block, outside the latest-block execution window;
+  that exact EIP-1898 canonical block hash, outside number-to-state view
+  transitions near the execution head;
 - Binance delivery nonce, source position, and resolver round never regress;
 - the latest resolver value maps to the exact closed one-minute bucket;
 - the Binance feed and every Gravity node stay within the configured stall

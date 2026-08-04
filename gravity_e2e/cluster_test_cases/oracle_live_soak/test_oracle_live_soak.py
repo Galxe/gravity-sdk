@@ -3,6 +3,8 @@
 import asyncio
 from dataclasses import dataclass
 from decimal import Decimal
+from eth_utils.abi import get_abi_output_types
+from hexbytes import HexBytes
 import json
 import logging
 import os
@@ -13,6 +15,8 @@ from urllib.request import urlopen
 
 import pytest
 from web3 import Web3
+from web3._utils.abi import map_abi_data
+from web3._utils.normalizers import BASE_RETURN_NORMALIZERS
 
 from gravity_e2e.cluster.manager import Cluster
 from gravity_e2e.utils import oracle_test_support as support
@@ -276,6 +280,30 @@ async def _wait_for_settlement(
     raise TimeoutError(f"Polymarket mirror {mirror_id} was not settled")
 
 
+def _call_at_block_hash(function, block_hash: str):
+    response = function.w3.provider.make_request(
+        "eth_call",
+        [
+            {
+                "to": function.address,
+                "data": function._encode_transaction_data(),
+            },
+            {"blockHash": block_hash, "requireCanonical": True},
+        ],
+    )
+    assert "error" not in response, (
+        f"EIP-1898 eth_call failed at {block_hash}: {response['error']}"
+    )
+    output_types = get_abi_output_types(function.abi)
+    decoded = function.w3.codec.decode(
+        output_types, HexBytes(response["result"])
+    )
+    normalized = map_abi_data(
+        BASE_RETURN_NORMALIZERS, output_types, decoded
+    )
+    return normalized[0] if len(normalized) == 1 else normalized
+
+
 def _topic(value: int) -> str:
     return "0x" + value.to_bytes(32, "big").hex()
 
@@ -441,24 +469,33 @@ async def _replicated_snapshot(
         address=polymarket_resolver_address, abi=polymarket_artifact["abi"]
     )
     price_progress = tuple(
-        native_oracle.functions.getSourceProgress(
-            support.SOURCE_TYPE_PRICE_FEED, feed_id
-        ).call(block_identifier=snapshot_block)
+        _call_at_block_hash(
+            native_oracle.functions.getSourceProgress(
+                support.SOURCE_TYPE_PRICE_FEED, feed_id
+            ),
+            snapshot_hash,
+        )
     )
     latest_price = tuple(
-        price_resolver.functions.latestPrice(feed_id).call(
-            block_identifier=snapshot_block
+        _call_at_block_hash(
+            price_resolver.functions.latestPrice(feed_id), snapshot_hash
         )
     )
     polymarket_progress = tuple(
-        native_oracle.functions.getSourceProgress(
-            SOURCE_TYPE_POLYMARKET, mirror_id
-        ).call(block_identifier=snapshot_block)
+        _call_at_block_hash(
+            native_oracle.functions.getSourceProgress(
+                SOURCE_TYPE_POLYMARKET, mirror_id
+            ),
+            snapshot_hash,
+        )
     )
     settlement = tuple(
-        polymarket_resolver.functions.getSettlement(
-            mirror_id, condition_id
-        ).call(block_identifier=snapshot_block)
+        _call_at_block_hash(
+            polymarket_resolver.functions.getSettlement(
+                mirror_id, condition_id
+            ),
+            snapshot_hash,
+        )
     )
 
     assert price_progress[0] >= 1
@@ -484,24 +521,33 @@ async def _replicated_snapshot(
             abi=polymarket_artifact["abi"],
         )
         assert tuple(
-            replica_native.functions.getSourceProgress(
-                support.SOURCE_TYPE_PRICE_FEED, feed_id
-            ).call(block_identifier=snapshot_block)
+            _call_at_block_hash(
+                replica_native.functions.getSourceProgress(
+                    support.SOURCE_TYPE_PRICE_FEED, feed_id
+                ),
+                snapshot_hash,
+            )
         ) == price_progress, f"{node_id} price progress diverged"
         assert tuple(
-            replica_price.functions.latestPrice(feed_id).call(
-                block_identifier=snapshot_block
+            _call_at_block_hash(
+                replica_price.functions.latestPrice(feed_id), snapshot_hash
             )
         ) == latest_price, f"{node_id} latest price diverged"
         assert tuple(
-            replica_native.functions.getSourceProgress(
-                SOURCE_TYPE_POLYMARKET, mirror_id
-            ).call(block_identifier=snapshot_block)
+            _call_at_block_hash(
+                replica_native.functions.getSourceProgress(
+                    SOURCE_TYPE_POLYMARKET, mirror_id
+                ),
+                snapshot_hash,
+            )
         ) == polymarket_progress, f"{node_id} Polymarket progress diverged"
         assert tuple(
-            replica_polymarket.functions.getSettlement(
-                mirror_id, condition_id
-            ).call(block_identifier=snapshot_block)
+            _call_at_block_hash(
+                replica_polymarket.functions.getSettlement(
+                    mirror_id, condition_id
+                ),
+                snapshot_hash,
+            )
         ) == settlement, f"{node_id} Polymarket settlement diverged"
 
     return {
