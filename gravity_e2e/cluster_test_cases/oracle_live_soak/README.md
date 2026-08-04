@@ -2,7 +2,8 @@
 
 This manual, non-gating suite runs four equal-power Gravity validators against:
 
-- one continuous Binance `NVDAUSDT` closed index-price kline feed (`sourceType=3`);
+- three continuous Binance `NVDAUSDT`, `BTCUSDT`, and `ETHUSDT` closed
+  index-price kline feeds (`sourceType=3`, feed IDs `1001` through `1003`);
 - one recently closed binary Polymarket market whose CTF resolution is already
   finalized on Polygon (`sourceType=6`).
 
@@ -28,18 +29,26 @@ and Polymarket suites remain the reproducible CI coverage.
 - each replica returns the same NativeOracle progress and resolver state at
   that exact EIP-1898 canonical block hash, outside number-to-state view
   transitions near the execution head;
-- Binance delivery nonce, source position, and resolver round never regress;
-- the latest resolver value maps to the exact closed one-minute bucket;
-- the Binance feed and every Gravity node stay within the configured stall
-  budget;
-- at least three relayers have checkpointed the committed Binance nonce;
+- each price snapshot uses a progress/resolver/progress seqlock read so an RPC
+  view transition between cross-contract calls is retried, not mistaken for
+  inconsistent Oracle state;
+- every Binance feed's delivery nonce, source position, and resolver round never
+  regress independently;
+- every latest resolver value maps to that pair's exact closed one-minute
+  bucket;
+- all three Binance feeds and every Gravity node stay within the configured
+  stall budget;
+- at least three relayers have checkpointed each committed Binance nonce;
 - the finalized Polymarket settlement remains immutable at nonce `1`.
 - the governance-pending two-hour epoch interval is active before timing starts.
 
-At completion, the suite fetches the exact final Binance bucket again and
-compares its close with the onchain value. It also counts NativeOracle callback
-successes: the Binance count must equal its final delivery nonce, while the
-Polymarket settlement must have exactly one successful delivery.
+At completion, the suite fetches each exact final Binance bucket again and
+compares its close with the corresponding onchain value. It also counts
+NativeOracle callback successes: each pair's count must equal its independent
+final delivery nonce, while the Polymarket settlement must have exactly one
+successful delivery. Heartbeats and the final summary report observed price
+changes per pair; price changes are informational because timely identical
+index closes are valid Oracle updates.
 
 For runs of at least one hour, `node4` restarts halfway through by default. The
 suite requires its chain and relayer checkpoints to catch up without nonce
@@ -54,11 +63,12 @@ regression or a duplicate Polymarket delivery.
 - `POLYGON_RPC_URL` or `POLYGON_QUICKNONE_HTTP_URL` set to an HTTPS Polygon RPC.
 
 The Binance Futures testnet `indexPriceKlines` endpoint used here is public and
-does not require an API key. It exercises a live HTTP source and the complete
-validator consensus path, but its values are testnet index data and must be
-labeled that way in a demo. Do not put RPC credentials in committed files. The
-generated relayer mapping and source metadata live under the ignored suite
-`artifacts/` directory and are removed during normal teardown.
+does not require an API key. Each validator independently fetches all three
+pairs. This exercises multiple live HTTP tasks and the complete validator
+consensus path, but the values are testnet index data and must be labeled that
+way in a demo. Do not put RPC credentials in committed files. The generated
+relayer mapping and source metadata live under the ignored suite `artifacts/`
+directory and are removed during normal teardown.
 
 The runner performs a global local `gravity_node` cleanup before and after the
 suite. Do not run this beside another local Gravity cluster you need to keep.
@@ -126,7 +136,7 @@ cluster. Do not terminate it after merely seeing the first onchain update.
 | `ORACLE_SOAK_DURATION_SECONDS` | `86400` | Monitored soak duration |
 | `ORACLE_SOAK_POLL_SECONDS` | `15` | Onchain heartbeat interval |
 | `ORACLE_SOAK_STALL_TIMEOUT_SECONDS` | `360` | Maximum feed or chain stall |
-| `ORACLE_SOAK_MIN_ADVANCES` | 80% of expected minutes | Required Binance nonce advances |
+| `ORACLE_SOAK_MIN_ADVANCES` | 80% of expected minutes | Required nonce advances for each Binance feed |
 | `ORACLE_SOAK_RESTART_AFTER_SECONDS` | Halfway for runs >= 1 hour | Restart time; `0` disables |
 | `ORACLE_SOAK_RESTART_NODE` | `node4` | Validator selected for restart |
 | `BINANCE_PRICE_FEED_BASE_URL` | `https://testnet.binancefuture.com` | Binance Futures testnet base URL |
