@@ -19,7 +19,7 @@ use crate::{
     payload_manager::TPayloadManager,
     persistent_liveness_storage::PersistentLivenessStorage,
 };
-use anyhow::{anyhow, bail};
+use anyhow::{anyhow, bail, ensure};
 use aptos_consensus_types::{
     block::Block,
     block_retrieval::{
@@ -408,7 +408,16 @@ impl BlockStore {
         }
 
         for (i, (block, _, _)) in blocks.iter().enumerate() {
-            assert_eq!(block.id(), quorum_certs[i].certified_block().id());
+            let qc = quorum_certs.get(i).ok_or_else(|| {
+                anyhow!("Missing quorum cert for retrieved block {} at index {}", block.id(), i,)
+            })?;
+            ensure!(
+                block.id() == qc.certified_block().id(),
+                "Retrieved block and quorum cert mismatch at index {}: block {}, qc certifies {}",
+                i,
+                block.id(),
+                qc.certified_block().id(),
+            );
             if let Some(payload) = block.payload() {
                 payload_manager.prefetch_payload_data(payload, block.timestamp_usecs());
             }
@@ -513,24 +522,37 @@ impl BlockStore {
             )
             .await?;
 
-        assert_eq!(
-            blocks.first().expect("blocks are empty").0.id(),
-            highest_quorum_cert.certified_block().id(),
+        let first_block = blocks
+            .first()
+            .ok_or_else(|| anyhow!("Empty block retrieval response during fast-forward sync"))?;
+        ensure!(
+            first_block.0.id() == highest_quorum_cert.certified_block().id(),
             "Expecting in the retrieval response, first block should be {}, but got {}",
             highest_quorum_cert.certified_block().id(),
-            blocks.first().expect("blocks are empty").0.id(),
+            first_block.0.id(),
         );
 
         let mut quorum_certs = vec![highest_quorum_cert.clone()];
         quorum_certs.extend(
             blocks.iter().take(blocks.len() - 1).map(|(block, _, _)| block.quorum_cert().clone()),
         );
-        assert_eq!(blocks.len(), quorum_certs.len());
+        ensure!(
+            blocks.len() == quorum_certs.len(),
+            "Retrieved block/quorum cert length mismatch: blocks {}, quorum_certs {}",
+            blocks.len(),
+            quorum_certs.len(),
+        );
         info!("[FastForwardSync] Fetched {} blocks. Requested num_blocks {}. Initial block hash {:?}, target block hash {:?}",
             blocks.len(), num_blocks, highest_quorum_cert.certified_block().id(), highest_commit_cert.commit_info().id()
         );
-        for (i, (block, _, _)) in blocks.iter().enumerate() {
-            assert_eq!(block.id(), quorum_certs[i].certified_block().id());
+        for (i, ((block, _, _), qc)) in blocks.iter().zip(quorum_certs.iter()).enumerate() {
+            ensure!(
+                block.id() == qc.certified_block().id(),
+                "Retrieved block and quorum cert mismatch at index {}: block {}, qc certifies {}",
+                i,
+                block.id(),
+                qc.certified_block().id(),
+            );
         }
         let block_numbers = blocks
             .iter()
@@ -1145,7 +1167,13 @@ impl BlockRetriever {
                         }
                     }
                     progress += batch.len() as u64;
-                    last_block_id = batch.last().expect("Batch should not be empty").0.parent_id();
+                    let last_block = batch.last().ok_or_else(|| {
+                        anyhow!(
+                            "Empty successful block retrieval batch starting from {}",
+                            last_block_id
+                        )
+                    })?;
+                    last_block_id = last_block.0.parent_id();
                     CUR_BLOCK_SYNC_BLOCK_SUM_GAUGE.with_label_values(&[]).add(batch.len() as i64);
                     result_blocks.extend(batch);
                     ledger_infos.extend(result.ledger_infos().clone());
@@ -1227,7 +1255,13 @@ impl BlockRetriever {
                         payload_manager.prefetch_payload_data(payload, block.timestamp_usecs());
                     }
                 }
-                let last_block_id = batch.last().expect("Batch should not be empty").0.parent_id();
+                let last_block_id = batch
+                    .last()
+                    .ok_or_else(|| {
+                        anyhow!("Empty successful epoch block retrieval batch for epoch {}", epoch)
+                    })?
+                    .0
+                    .parent_id();
                 result_blocks.extend(batch);
                 ledger_infos.extend(result.ledger_infos().clone());
                 quorum_certs.extend(result.quorum_certs().clone());
