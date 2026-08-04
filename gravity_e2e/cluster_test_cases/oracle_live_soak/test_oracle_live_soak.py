@@ -54,6 +54,7 @@ MIN_PROPOSAL_WINDOW_SECONDS = 40
 QUORUM_VALIDATORS = 3
 BOOTSTRAP_EPOCH_INTERVAL_MICROS = 60 * 1_000_000
 SOAK_EPOCH_INTERVAL_MICROS = 2 * 60 * 60 * 1_000_000
+RESTART_EPOCH_GUARD_SECONDS = 5 * 60
 SNAPSHOT_CONFIRMATION_BLOCKS = 16
 SNAPSHOT_READ_RETRIES = 20
 
@@ -137,6 +138,15 @@ def _remaining_epoch_seconds(w3: Web3) -> int:
             {"to": RECONFIGURATION_ADDRESS, "data": SEL_REMAINING_TIME}
         ),
         "big",
+    )
+
+
+def _restart_window_is_safe(w3: Web3) -> bool:
+    remaining = _remaining_epoch_seconds(w3)
+    interval = SOAK_EPOCH_INTERVAL_MICROS // 1_000_000
+    return (
+        RESTART_EPOCH_GUARD_SECONDS < remaining
+        < interval - RESTART_EPOCH_GUARD_SECONDS
     )
 
 
@@ -693,6 +703,7 @@ async def _run_soak(
     previous_heights = dict(initial["heights"])
     restart_done = False
     restart_recovery_seconds = None
+    restart_epoch_guard_deferrals = 0
     samples = 0
     final = initial
 
@@ -703,19 +714,32 @@ async def _run_soak(
             and not restart_done
             and now - started >= settings.restart_after_seconds
         ):
-            restart_recovery_seconds = await _restart_validator(
-                cluster,
-                settings.restart_node,
-                max(int(height) for height in final["heights"].values()),
-                [
-                    (
-                        feed["taskUri"],
-                        int(final["priceFeeds"][feed["pair"]]["progress"][0]),
+            epoch_rpc = next(iter(cluster.nodes.values())).w3
+            if _restart_window_is_safe(epoch_rpc):
+                restart_recovery_seconds = await _restart_validator(
+                    cluster,
+                    settings.restart_node,
+                    max(int(height) for height in final["heights"].values()),
+                    [
+                        (
+                            feed["taskUri"],
+                            int(
+                                final["priceFeeds"][feed["pair"]][
+                                    "progress"
+                                ][0]
+                            ),
+                        )
+                        for feed in binance_feeds
+                    ],
+                )
+                restart_done = True
+            else:
+                restart_epoch_guard_deferrals += 1
+                if restart_epoch_guard_deferrals == 1:
+                    LOG.info(
+                        "deferring validator restart outside the epoch "
+                        "transition guard"
                     )
-                    for feed in binance_feeds
-                ],
-            )
-            restart_done = True
 
         final = await _replicated_snapshot(
             cluster,
@@ -794,6 +818,7 @@ async def _run_soak(
             "priceFeeds": price_heartbeats,
             "polymarketNonce": int(final["polymarketProgress"][0]),
             "restartCompleted": restart_done,
+            "restartEpochGuardDeferrals": restart_epoch_guard_deferrals,
         }
         _append_json_line(heartbeat_path, heartbeat)
         LOG.info("Oracle soak heartbeat: %s", heartbeat)
@@ -865,6 +890,7 @@ async def _run_soak(
             settings.restart_node if settings.restart_after_seconds else None
         ),
         "restartRecoverySeconds": restart_recovery_seconds,
+        "restartEpochGuardDeferrals": restart_epoch_guard_deferrals,
         "polymarketMirrorId": mirror_id,
         "polymarketNonce": int(final["polymarketProgress"][0]),
     }
