@@ -50,9 +50,12 @@ successful delivery. Heartbeats and the final summary report observed price
 changes per pair; price changes are informational because timely identical
 index closes are valid Oracle updates.
 
-For runs of at least one hour, `node4` restarts halfway through by default. The
-suite requires its chain and relayer checkpoints to catch up without nonce
-regression or a duplicate Polymarket delivery.
+For runs of at least one hour, `node4` becomes eligible to restart halfway
+through by default. The runner defers the restart while the chain is within
+five minutes of an epoch boundary, then requires the node's chain and relayer
+checkpoints to catch up without nonce regression or a duplicate Polymarket
+delivery. This keeps the Oracle restart check independent from a simultaneous
+epoch reconfiguration.
 
 ## Prerequisites
 
@@ -125,9 +128,11 @@ ORACLE_SOAK_STALL_TIMEOUT_SECONDS=360 \
     --log-cli-level=INFO
 ```
 
-With the defaults, `node4` restarts after 12 hours. The pytest process is the
-monitor, performs final assertions, writes the report, and tears down the
-cluster. Do not terminate it after merely seeing the first onchain update.
+With the defaults, `node4` becomes eligible to restart after 12 hours and runs
+as soon as it is outside the five-minute epoch-transition guard. The pytest
+process is the monitor, performs final assertions, writes the report, and tears
+down the cluster. Do not terminate it after merely seeing the first onchain
+update.
 
 ## Controls
 
@@ -137,7 +142,7 @@ cluster. Do not terminate it after merely seeing the first onchain update.
 | `ORACLE_SOAK_POLL_SECONDS` | `15` | Onchain heartbeat interval |
 | `ORACLE_SOAK_STALL_TIMEOUT_SECONDS` | `360` | Maximum feed or chain stall |
 | `ORACLE_SOAK_MIN_ADVANCES` | 80% of expected minutes | Required nonce advances for each Binance feed |
-| `ORACLE_SOAK_RESTART_AFTER_SECONDS` | Halfway for runs >= 1 hour | Restart time; `0` disables |
+| `ORACLE_SOAK_RESTART_AFTER_SECONDS` | Halfway for runs >= 1 hour | Earliest restart time; `0` disables |
 | `ORACLE_SOAK_RESTART_NODE` | `node4` | Validator selected for restart |
 | `BINANCE_PRICE_FEED_BASE_URL` | `https://testnet.binancefuture.com` | Binance Futures testnet base URL |
 | `BINANCE_PRICE_FEED_GRACE_MS` | `120000` | Closed-bucket safety delay |
