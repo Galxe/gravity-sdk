@@ -55,6 +55,7 @@ QUORUM_VALIDATORS = 3
 BOOTSTRAP_EPOCH_INTERVAL_MICROS = 60 * 1_000_000
 SOAK_EPOCH_INTERVAL_MICROS = 2 * 60 * 60 * 1_000_000
 SNAPSHOT_CONFIRMATION_BLOCKS = 16
+SNAPSHOT_READ_RETRIES = 20
 
 _HEARTBEAT_FILE = "oracle_live_soak_heartbeat.jsonl"
 _SUMMARY_FILE = "oracle_live_soak_summary.json"
@@ -304,6 +305,49 @@ def _call_at_block_hash(function, block_hash: str):
     return normalized[0] if len(normalized) == 1 else normalized
 
 
+def _price_state_at_block_hash(
+    native_oracle,
+    price_resolver,
+    feed_id: int,
+    pair: str,
+    block_hash: str,
+) -> tuple[tuple, tuple]:
+    for _ in range(SNAPSHOT_READ_RETRIES):
+        progress_before = tuple(
+            _call_at_block_hash(
+                native_oracle.functions.getSourceProgress(
+                    support.SOURCE_TYPE_PRICE_FEED, feed_id
+                ),
+                block_hash,
+            )
+        )
+        latest = tuple(
+            _call_at_block_hash(
+                price_resolver.functions.latestPrice(feed_id), block_hash
+            )
+        )
+        progress_after = tuple(
+            _call_at_block_hash(
+                native_oracle.functions.getSourceProgress(
+                    support.SOURCE_TYPE_PRICE_FEED, feed_id
+                ),
+                block_hash,
+            )
+        )
+        if (
+            progress_before == progress_after
+            and latest[0]
+            and progress_after[1] == latest[2]
+        ):
+            return progress_after, latest
+        time.sleep(0.05)
+    raise AssertionError(
+        f"could not obtain an atomic {pair} Oracle snapshot at {block_hash}: "
+        f"progress_before={progress_before}, latest={latest}, "
+        f"progress_after={progress_after}"
+    )
+
+
 def _topic(value: int) -> str:
     return "0x" + value.to_bytes(32, "big").hex()
 
@@ -431,8 +475,7 @@ async def _replicated_snapshot(
     polymarket_artifact: dict,
     price_resolver_address: str,
     polymarket_resolver_address: str,
-    feed_id: int,
-    bucket_start_ms: int,
+    binance_feeds: list[dict],
     mirror_id: int,
     condition_id: bytes,
 ) -> dict:
@@ -468,19 +511,32 @@ async def _replicated_snapshot(
     polymarket_resolver = node1.w3.eth.contract(
         address=polymarket_resolver_address, abi=polymarket_artifact["abi"]
     )
-    price_progress = tuple(
-        _call_at_block_hash(
-            native_oracle.functions.getSourceProgress(
-                support.SOURCE_TYPE_PRICE_FEED, feed_id
-            ),
+    price_feeds = {}
+    for feed in binance_feeds:
+        feed_id = int(feed["feedId"])
+        pair = feed["pair"]
+        progress, latest = _price_state_at_block_hash(
+            native_oracle,
+            price_resolver,
+            feed_id,
+            pair,
             snapshot_hash,
         )
-    )
-    latest_price = tuple(
-        _call_at_block_hash(
-            price_resolver.functions.latestPrice(feed_id), snapshot_hash
+        assert progress[0] >= 1
+        round_start = _round_start_ms(
+            int(feed["bucketStartMs"]), progress[0]
         )
-    )
+        assert latest[0]
+        assert latest[1] == round_start // INTERVAL_MS
+        assert latest[2] == round_start + INTERVAL_MS - 1
+        assert progress[1] == latest[2]
+        assert latest[3] == DECIMALS
+        assert latest[4] > 0
+        price_feeds[pair] = {
+            "feedId": feed_id,
+            "progress": progress,
+            "latestPrice": latest,
+        }
     polymarket_progress = tuple(
         _call_at_block_hash(
             native_oracle.functions.getSourceProgress(
@@ -498,14 +554,6 @@ async def _replicated_snapshot(
         )
     )
 
-    assert price_progress[0] >= 1
-    price_round_start = _round_start_ms(bucket_start_ms, price_progress[0])
-    assert latest_price[0]
-    assert latest_price[1] == price_round_start // INTERVAL_MS
-    assert latest_price[2] == price_round_start + INTERVAL_MS - 1
-    assert price_progress[1] == latest_price[2]
-    assert latest_price[3] == DECIMALS
-    assert latest_price[4] > 0
     assert polymarket_progress[0] == 1
     assert settlement[0]
 
@@ -520,19 +568,22 @@ async def _replicated_snapshot(
             address=polymarket_resolver_address,
             abi=polymarket_artifact["abi"],
         )
-        assert tuple(
-            _call_at_block_hash(
-                replica_native.functions.getSourceProgress(
-                    support.SOURCE_TYPE_PRICE_FEED, feed_id
-                ),
+        for feed in binance_feeds:
+            feed_id = int(feed["feedId"])
+            pair = feed["pair"]
+            replica_progress, replica_latest = _price_state_at_block_hash(
+                replica_native,
+                replica_price,
+                feed_id,
+                pair,
                 snapshot_hash,
             )
-        ) == price_progress, f"{node_id} price progress diverged"
-        assert tuple(
-            _call_at_block_hash(
-                replica_price.functions.latestPrice(feed_id), snapshot_hash
+            assert replica_progress == price_feeds[pair]["progress"], (
+                f"{node_id} {pair} progress diverged"
             )
-        ) == latest_price, f"{node_id} latest price diverged"
+            assert replica_latest == price_feeds[pair]["latestPrice"], (
+                f"{node_id} {pair} latest price diverged"
+            )
         assert tuple(
             _call_at_block_hash(
                 replica_native.functions.getSourceProgress(
@@ -554,8 +605,7 @@ async def _replicated_snapshot(
         "block": snapshot_block,
         "blockHash": snapshot_hash,
         "heights": heights,
-        "priceProgress": price_progress,
-        "latestPrice": latest_price,
+        "priceFeeds": price_feeds,
         "polymarketProgress": polymarket_progress,
         "settlement": settlement,
     }
@@ -570,8 +620,7 @@ async def _restart_validator(
     cluster: Cluster,
     node_id: str,
     target_block: int,
-    uri: str,
-    target_nonce: int,
+    price_targets: list[tuple[str, int]],
 ) -> float:
     node = cluster.get_node(node_id)
     if node is None:
@@ -580,7 +629,10 @@ async def _restart_validator(
     assert await node.restart(), f"failed to restart {node_id}"
     await _wait_for_block(node_id, node.w3, target_block, timeout=180)
     assert await cluster.check_block_increasing(timeout=60)
-    await _wait_for_relayer_node(cluster, node_id, uri, target_nonce)
+    for uri, target_nonce in price_targets:
+        await _wait_for_relayer_node(
+            cluster, node_id, uri, target_nonce
+        )
     return time.monotonic() - started
 
 
@@ -592,11 +644,10 @@ async def _run_soak(
     polymarket_artifact: dict,
     price_resolver_address: str,
     polymarket_resolver_address: str,
-    binance: dict,
+    binance_feeds: list[dict],
     polymarket: dict,
     expected_settlement: tuple,
 ) -> dict:
-    feed_id = int(binance["feedId"])
     mirror_id = int(polymarket["mirrorId"])
     condition_id = bytes.fromhex(polymarket["conditionId"].removeprefix("0x"))
     heartbeat_path = SUITE_DIR / "artifacts" / _HEARTBEAT_FILE
@@ -620,17 +671,24 @@ async def _run_soak(
         polymarket_artifact,
         price_resolver_address,
         polymarket_resolver_address,
-        feed_id,
-        int(binance["bucketStartMs"]),
+        binance_feeds,
         mirror_id,
         condition_id,
     )
-    initial_nonce = int(initial["priceProgress"][0])
-    last_nonce = initial_nonce
+    initial_nonces = {
+        pair: int(state["progress"][0])
+        for pair, state in initial["priceFeeds"].items()
+    }
+    last_nonces = dict(initial_nonces)
+    last_prices = {
+        pair: int(state["latestPrice"][4])
+        for pair, state in initial["priceFeeds"].items()
+    }
+    observed_price_changes = {pair: 0 for pair in initial_nonces}
     started = time.monotonic()
     deadline = started + settings.duration_seconds
-    last_price_advance = started
-    max_price_gap = 0.0
+    last_price_advances = {pair: started for pair in initial_nonces}
+    max_price_gaps = {pair: 0.0 for pair in initial_nonces}
     last_height_change = {node_id: started for node_id in cluster.nodes}
     previous_heights = dict(initial["heights"])
     restart_done = False
@@ -649,8 +707,13 @@ async def _run_soak(
                 cluster,
                 settings.restart_node,
                 max(int(height) for height in final["heights"].values()),
-                binance["taskUri"],
-                int(final["priceProgress"][0]),
+                [
+                    (
+                        feed["taskUri"],
+                        int(final["priceFeeds"][feed["pair"]]["progress"][0]),
+                    )
+                    for feed in binance_feeds
+                ],
             )
             restart_done = True
 
@@ -661,22 +724,48 @@ async def _run_soak(
             polymarket_artifact,
             price_resolver_address,
             polymarket_resolver_address,
-            feed_id,
-            int(binance["bucketStartMs"]),
+            binance_feeds,
             mirror_id,
             condition_id,
         )
         now = time.monotonic()
-        nonce = int(final["priceProgress"][0])
-        assert nonce >= last_nonce, "Binance source nonce regressed"
-        if nonce > last_nonce:
-            max_price_gap = max(max_price_gap, now - last_price_advance)
-            last_price_advance = now
-            last_nonce = nonce
-        assert now - last_price_advance <= settings.stall_seconds, (
-            f"NVDA price feed stalled at nonce {nonce} for "
-            f"{now - last_price_advance:.1f}s"
-        )
+        price_heartbeats = {}
+        for feed in binance_feeds:
+            pair = feed["pair"]
+            state = final["priceFeeds"][pair]
+            nonce = int(state["progress"][0])
+            price = int(state["latestPrice"][4])
+            assert nonce >= last_nonces[pair], (
+                f"{pair} source nonce regressed"
+            )
+            if nonce > last_nonces[pair]:
+                max_price_gaps[pair] = max(
+                    max_price_gaps[pair], now - last_price_advances[pair]
+                )
+                last_price_advances[pair] = now
+                last_nonces[pair] = nonce
+            if price != last_prices[pair]:
+                observed_price_changes[pair] += 1
+                last_prices[pair] = price
+            assert now - last_price_advances[pair] <= settings.stall_seconds, (
+                f"{pair} price feed stalled at nonce {nonce} for "
+                f"{now - last_price_advances[pair]:.1f}s"
+            )
+            relayer_nodes = _relayer_quorum(
+                cluster, feed["taskUri"], nonce
+            )
+            assert len(relayer_nodes) >= QUORUM_VALIDATORS, (
+                f"only {relayer_nodes} persisted {pair} nonce {nonce}"
+            )
+            price_heartbeats[pair] = {
+                "feedId": int(feed["feedId"]),
+                "nonce": nonce,
+                "position": int(state["progress"][1]),
+                "round": int(state["latestPrice"][1]),
+                "price": str(price),
+                "observedPriceChanges": observed_price_changes[pair],
+                "relayerQuorumNodes": relayer_nodes,
+            }
 
         for node_id, height in final["heights"].items():
             assert height >= previous_heights[node_id], (
@@ -695,10 +784,6 @@ async def _run_soak(
             int(polymarket["blockNumber"]),
         )
         assert tuple(final["settlement"]) == expected_settlement
-        relayer_nodes = _relayer_quorum(cluster, binance["taskUri"], nonce)
-        assert len(relayer_nodes) >= QUORUM_VALIDATORS, (
-            f"only {relayer_nodes} persisted NVDA nonce {nonce}"
-        )
 
         samples += 1
         heartbeat = {
@@ -706,11 +791,7 @@ async def _run_soak(
             "gravityBlock": int(final["block"]),
             "gravityBlockHash": final["blockHash"],
             "nodeHeights": final["heights"],
-            "nvdaNonce": nonce,
-            "nvdaPosition": int(final["priceProgress"][1]),
-            "nvdaRound": int(final["latestPrice"][1]),
-            "nvdaPrice": str(final["latestPrice"][4]),
-            "relayerQuorumNodes": relayer_nodes,
+            "priceFeeds": price_heartbeats,
             "polymarketNonce": int(final["polymarketProgress"][0]),
             "restartCompleted": restart_done,
         }
@@ -727,44 +808,57 @@ async def _run_soak(
         polymarket_artifact,
         price_resolver_address,
         polymarket_resolver_address,
-        feed_id,
-        int(binance["bucketStartMs"]),
+        binance_feeds,
         mirror_id,
         condition_id,
     )
-    final_nonce = int(final["priceProgress"][0])
-    advances = final_nonce - initial_nonce
-    assert advances >= settings.minimum_advances, (
-        f"NVDA advanced {advances} rounds; expected at least "
-        f"{settings.minimum_advances}"
-    )
     if settings.restart_after_seconds:
         assert restart_done, "configured validator restart did not run"
-        await _wait_for_relayer_node(
-            cluster,
-            settings.restart_node,
-            binance["taskUri"],
-            final_nonce,
-        )
 
-    final_bucket = _round_start_ms(
-        int(binance["bucketStartMs"]), final_nonce
-    )
-    max_price_gap = max(max_price_gap, time.monotonic() - last_price_advance)
-    expected_price = await _fetch_binance_price_with_retry(
-        binance["baseUrl"], binance["pair"], final_bucket
-    )
-    assert int(final["latestPrice"][4]) == expected_price
+    price_summaries = {}
+    for feed in binance_feeds:
+        pair = feed["pair"]
+        state = final["priceFeeds"][pair]
+        final_nonce = int(state["progress"][0])
+        advances = final_nonce - initial_nonces[pair]
+        assert advances >= settings.minimum_advances, (
+            f"{pair} advanced {advances} rounds; expected at least "
+            f"{settings.minimum_advances}"
+        )
+        if settings.restart_after_seconds:
+            await _wait_for_relayer_node(
+                cluster,
+                settings.restart_node,
+                feed["taskUri"],
+                final_nonce,
+            )
+        final_bucket = _round_start_ms(
+            int(feed["bucketStartMs"]), final_nonce
+        )
+        max_price_gaps[pair] = max(
+            max_price_gaps[pair],
+            time.monotonic() - last_price_advances[pair],
+        )
+        expected_price = await _fetch_binance_price_with_retry(
+            feed["baseUrl"], pair, final_bucket
+        )
+        assert int(state["latestPrice"][4]) == expected_price
+        price_summaries[pair] = {
+            "feedId": int(feed["feedId"]),
+            "initialNonce": initial_nonces[pair],
+            "finalNonce": final_nonce,
+            "advances": advances,
+            "minimumAdvances": settings.minimum_advances,
+            "finalPrice": str(state["latestPrice"][4]),
+            "observedPriceChanges": observed_price_changes[pair],
+            "maxObservedGapSeconds": round(max_price_gaps[pair], 3),
+        }
     return {
         "status": "passed",
         "configuredDurationSeconds": settings.duration_seconds,
         "actualDurationSeconds": round(time.monotonic() - started, 3),
         "samples": samples,
-        "initialNonce": initial_nonce,
-        "finalNonce": final_nonce,
-        "advances": advances,
-        "minimumAdvances": settings.minimum_advances,
-        "maxObservedPriceGapSeconds": round(max_price_gap, 3),
+        "priceFeeds": price_summaries,
         "finalGravityBlock": int(final["block"]),
         "finalGravityBlockHash": final["blockHash"],
         "restartNode": (
@@ -787,9 +881,16 @@ async def test_governance_activated_oracles_soak_for_configured_duration(
 ):
     settings = _soak_settings()
     metadata = _metadata()
-    binance = metadata["binance"]
+    binance_feeds = metadata["binanceFeeds"]
     polymarket = metadata["polymarket"]
-    feed_id = int(binance["feedId"])
+    assert [feed["pair"] for feed in binance_feeds] == [
+        "NVDAUSDT",
+        "BTCUSDT",
+        "ETHUSDT",
+    ]
+    assert len({int(feed["feedId"]) for feed in binance_feeds}) == len(
+        binance_feeds
+    )
     mirror_id = int(polymarket["mirrorId"])
     condition_id = bytes.fromhex(polymarket["conditionId"].removeprefix("0x"))
 
@@ -846,44 +947,51 @@ async def test_governance_activated_oracles_soak_for_configured_duration(
     )
     assert tuple(epoch_config.functions.getPendingConfig().call()) == (False, 0)
 
-    assert not task_config.functions.hasTask(
-        support.SOURCE_TYPE_PRICE_FEED, feed_id, support.TASK_PRICE_FEED
-    ).call()
+    for feed in binance_feeds:
+        assert not task_config.functions.hasTask(
+            support.SOURCE_TYPE_PRICE_FEED,
+            int(feed["feedId"]),
+            support.TASK_PRICE_FEED,
+        ).call()
     assert not task_config.functions.hasTask(
         SOURCE_TYPE_POLYMARKET, mirror_id, POLYMARKET_TASK
     ).call()
 
     setup_epoch = await _wait_for_proposal_window(cluster)
-    receipt = await support.execute_governance_proposal(
-        w3,
-        support.faucet_voting_pool(w3),
-        [
-            EPOCH_CONFIG_ADDRESS,
-            support.NATIVE_ORACLE_ADDRESS,
-            support.ORACLE_TASK_CONFIG_ADDRESS,
-            support.ORACLE_TASK_CONFIG_ADDRESS,
-            support.NATIVE_ORACLE_ADDRESS,
-            polymarket_resolver.address,
-        ],
-        [
-            support.function_calldata(
-                epoch_config.functions.setForNextEpoch(
-                    SOAK_EPOCH_INTERVAL_MICROS
-                )
-            ),
-            support.function_calldata(
-                native_oracle.functions.setDefaultCallback(
-                    support.SOURCE_TYPE_PRICE_FEED, price_resolver.address
-                )
-            ),
+    targets = [EPOCH_CONFIG_ADDRESS, support.NATIVE_ORACLE_ADDRESS]
+    datas = [
+        support.function_calldata(
+            epoch_config.functions.setForNextEpoch(
+                SOAK_EPOCH_INTERVAL_MICROS
+            )
+        ),
+        support.function_calldata(
+            native_oracle.functions.setDefaultCallback(
+                support.SOURCE_TYPE_PRICE_FEED, price_resolver.address
+            )
+        ),
+    ]
+    for feed in binance_feeds:
+        targets.append(support.ORACLE_TASK_CONFIG_ADDRESS)
+        datas.append(
             support.function_calldata(
                 task_config.functions.setTask(
                     support.SOURCE_TYPE_PRICE_FEED,
-                    feed_id,
+                    int(feed["feedId"]),
                     support.TASK_PRICE_FEED,
-                    binance["taskUri"].encode(),
+                    feed["taskUri"].encode(),
                 )
-            ),
+            )
+        )
+    targets.extend(
+        [
+            support.ORACLE_TASK_CONFIG_ADDRESS,
+            support.NATIVE_ORACLE_ADDRESS,
+            polymarket_resolver.address,
+        ]
+    )
+    datas.extend(
+        [
             support.function_calldata(
                 task_config.functions.setTask(
                     SOURCE_TYPE_POLYMARKET,
@@ -908,7 +1016,13 @@ async def test_governance_activated_oracles_soak_for_configured_duration(
                     int(polymarket["outcomeSlotCount"]),
                 )
             ),
-        ],
+        ]
+    )
+    receipt = await support.execute_governance_proposal(
+        w3,
+        support.faucet_voting_pool(w3),
+        targets,
+        datas,
         "activate-live-binance-and-polymarket-soak",
         gas=8_000_000,
     )
@@ -921,20 +1035,24 @@ async def test_governance_activated_oracles_soak_for_configured_duration(
         True,
         SOAK_EPOCH_INTERVAL_MICROS,
     )
-    for source_type, source_id, task_name, expected_uri in (
+    configured_tasks = [
         (
             support.SOURCE_TYPE_PRICE_FEED,
-            feed_id,
+            int(feed["feedId"]),
             support.TASK_PRICE_FEED,
-            binance["taskUri"],
-        ),
+            feed["taskUri"],
+        )
+        for feed in binance_feeds
+    ]
+    configured_tasks.append(
         (
             SOURCE_TYPE_POLYMARKET,
             mirror_id,
             POLYMARKET_TASK,
             polymarket["taskUri"],
-        ),
-    ):
+        )
+    )
+    for source_type, source_id, task_name, expected_uri in configured_tasks:
         assert task_config.functions.hasTask(
             source_type, source_id, task_name
         ).call()
@@ -946,7 +1064,10 @@ async def test_governance_activated_oracles_soak_for_configured_duration(
             source_type, source_id
         ).call() == 0
 
-    issuers = [f"gravity://3/{feed_id}", f"gravity://6/{mirror_id}"]
+    issuers = [
+        *(f"gravity://3/{int(feed['feedId'])}" for feed in binance_feeds),
+        f"gravity://6/{mirror_id}",
+    ]
     for node_id in cluster.nodes:
         for issuer in issuers:
             assert not _log_contains(
@@ -963,13 +1084,15 @@ async def test_governance_activated_oracles_soak_for_configured_duration(
     assert _remaining_epoch_seconds(w3) > (
         SOAK_EPOCH_INTERVAL_MICROS // 1_000_000 - 300
     )
-    price_progress, initial_price = await support.wait_for_latest_price(
-        native_oracle,
-        price_resolver,
-        feed_id,
-        1,
-        timeout=ORACLE_TIMEOUT_SECONDS,
-    )
+    initial_prices = {}
+    for feed in binance_feeds:
+        initial_prices[feed["pair"]] = await support.wait_for_latest_price(
+            native_oracle,
+            price_resolver,
+            int(feed["feedId"]),
+            1,
+            timeout=ORACLE_TIMEOUT_SECONDS,
+        )
     deadline = time.monotonic() + ORACLE_TIMEOUT_SECONDS
     while time.monotonic() < deadline:
         polymarket_progress = tuple(
@@ -1031,17 +1154,23 @@ async def test_governance_activated_oracles_soak_for_configured_duration(
         "payoutNumerators"
     ]
 
-    first_bucket = _round_start_ms(
-        int(binance["bucketStartMs"]), int(price_progress[0])
-    )
-    expected_initial_price = await _fetch_binance_price_with_retry(
-        binance["baseUrl"], binance["pair"], first_bucket
-    )
-    assert int(initial_price[4]) == expected_initial_price
+    for feed in binance_feeds:
+        price_progress, initial_price = initial_prices[feed["pair"]]
+        first_bucket = _round_start_ms(
+            int(feed["bucketStartMs"]), int(price_progress[0])
+        )
+        expected_initial_price = await _fetch_binance_price_with_retry(
+            feed["baseUrl"], feed["pair"], first_bucket
+        )
+        assert int(initial_price[4]) == expected_initial_price
     await _wait_for_consensus_evidence(cluster, issuers)
-    assert len(
-        _relayer_quorum(cluster, binance["taskUri"], int(price_progress[0]))
-    ) >= QUORUM_VALIDATORS
+    for feed in binance_feeds:
+        price_progress, _ = initial_prices[feed["pair"]]
+        assert len(
+            _relayer_quorum(
+                cluster, feed["taskUri"], int(price_progress[0])
+            )
+        ) >= QUORUM_VALIDATORS
 
     try:
         summary = await _run_soak(
@@ -1052,7 +1181,7 @@ async def test_governance_activated_oracles_soak_for_configured_duration(
             polymarket_artifact,
             price_resolver.address,
             polymarket_resolver.address,
-            binance,
+            binance_feeds,
             polymarket,
             settlement,
         )
@@ -1069,24 +1198,31 @@ async def test_governance_activated_oracles_soak_for_configured_duration(
                 "errorType": type(error).__name__,
                 "error": str(error),
                 "configuredDurationSeconds": settings.duration_seconds,
+                "binancePairs": [
+                    feed["pair"] for feed in binance_feeds
+                ],
                 "polymarketMirrorId": mirror_id,
                 "lastHeartbeat": last_heartbeat,
             }
         )
         raise
 
-    price_delivery_count = len(
-        _callback_success_logs(
-            w3,
-            support.SOURCE_TYPE_PRICE_FEED,
-            feed_id,
-            receipt["blockNumber"],
-            summary["finalGravityBlock"],
+    price_delivery_counts = {}
+    for feed in binance_feeds:
+        pair = feed["pair"]
+        delivery_count = len(
+            _callback_success_logs(
+                w3,
+                support.SOURCE_TYPE_PRICE_FEED,
+                int(feed["feedId"]),
+                receipt["blockNumber"],
+                summary["finalGravityBlock"],
+            )
         )
-    )
-    assert price_delivery_count == summary["finalNonce"], (
-        "NVDA callback count does not match final source nonce"
-    )
+        assert delivery_count == summary["priceFeeds"][pair]["finalNonce"], (
+            f"{pair} callback count does not match final source nonce"
+        )
+        price_delivery_counts[pair] = delivery_count
     polymarket_delivery_count = len(
         _callback_success_logs(
             w3,
@@ -1103,7 +1239,7 @@ async def test_governance_activated_oracles_soak_for_configured_duration(
         {
             "activationEpoch": activation_epoch,
             "governanceBlock": receipt["blockNumber"],
-            "priceCallbackEvents": price_delivery_count,
+            "priceCallbackEvents": price_delivery_counts,
             "polymarketCallbackEvents": polymarket_delivery_count,
             "soakEpochIntervalSeconds": (
                 SOAK_EPOCH_INTERVAL_MICROS // 1_000_000

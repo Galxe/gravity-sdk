@@ -21,8 +21,11 @@ INTERVAL_MS = 60_000
 DEFAULT_GRACE_MS = 120_000
 DEFAULT_BINANCE_BASE_URL = "https://testnet.binancefuture.com"
 DEFAULT_GAMMA_URL = "https://gamma-api.polymarket.com"
-NVDA_FEED_ID = 1001
-NVDA_PAIR = "NVDAUSDT"
+BINANCE_FEEDS = (
+    {"feedId": 1001, "pair": "NVDAUSDT"},
+    {"feedId": 1002, "pair": "BTCUSDT"},
+    {"feedId": 1003, "pair": "ETHUSDT"},
+)
 
 POLYGON_CHAIN_ID = 137
 CTF_ADDRESS = "0x4D97DCd97eC945f40cF65F87097ACe5EA0476045"
@@ -256,10 +259,12 @@ def _bucket_start_ms(env: dict) -> int:
     return bucket_start_ms
 
 
-def _price_uri(bucket_start_ms: int, grace_ms: int) -> str:
+def _price_uri(
+    feed_id: int, pair: str, bucket_start_ms: int, grace_ms: int
+) -> str:
     return (
-        f"gravity://3/{NVDA_FEED_ID}/price_feed?"
-        f"provider=binance_index_kline_v1&pair={NVDA_PAIR}&interval=1m&"
+        f"gravity://3/{feed_id}/price_feed?"
+        f"provider=binance_index_kline_v1&pair={pair}&interval=1m&"
         f"bucketStartMs={bucket_start_ms}&decimals=8&graceMs={grace_ms}"
     )
 
@@ -288,7 +293,18 @@ def pre_deploy(test_dir: Path, env: dict, pytest_args: list[str]):
     if grace_ms < 0:
         raise RuntimeError("BINANCE_PRICE_FEED_GRACE_MS must be non-negative")
     bucket_start_ms = _bucket_start_ms(env)
-    price_uri = _price_uri(bucket_start_ms, grace_ms)
+    binance_feeds = [
+        {
+            "baseUrl": binance_base_url,
+            **feed,
+            "bucketStartMs": bucket_start_ms,
+            "graceMs": grace_ms,
+            "taskUri": _price_uri(
+                feed["feedId"], feed["pair"], bucket_start_ms, grace_ms
+            ),
+        }
+        for feed in BINANCE_FEEDS
+    ]
     market = _discover_market(polygon_rpc_url, gamma_url)
 
     artifacts = test_dir / "artifacts"
@@ -301,7 +317,10 @@ def pre_deploy(test_dir: Path, env: dict, pytest_args: list[str]):
         json.dumps(
             {
                 "uri_mappings": {
-                    price_uri: binance_base_url,
+                    **{
+                        feed["taskUri"]: binance_base_url
+                        for feed in binance_feeds
+                    },
                     market["taskUri"]: polygon_rpc_url,
                 }
             },
@@ -313,14 +332,7 @@ def pre_deploy(test_dir: Path, env: dict, pytest_args: list[str]):
     metadata_path.write_text(
         json.dumps(
             {
-                "binance": {
-                    "baseUrl": binance_base_url,
-                    "feedId": NVDA_FEED_ID,
-                    "pair": NVDA_PAIR,
-                    "bucketStartMs": bucket_start_ms,
-                    "graceMs": grace_ms,
-                    "taskUri": price_uri,
-                },
+                "binanceFeeds": binance_feeds,
                 "polymarket": market,
             },
             indent=2,
@@ -330,8 +342,9 @@ def pre_deploy(test_dir: Path, env: dict, pytest_args: list[str]):
     )
     env["RELAYER_CONFIG_TPL"] = str(relayer_path)
     LOG.info(
-        "Prepared live Oracle inputs: Binance anchor=%s; Polymarket "
+        "Prepared live Oracle inputs: Binance pairs=%s anchor=%s; Polymarket "
         "mirrorId=%s block=%s finalized=%s",
+        [feed["pair"] for feed in binance_feeds],
         bucket_start_ms,
         market["mirrorId"],
         market["blockNumber"],
