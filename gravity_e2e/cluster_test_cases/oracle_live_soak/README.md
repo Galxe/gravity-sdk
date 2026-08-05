@@ -29,6 +29,9 @@ and Polymarket suites remain the reproducible CI coverage.
 - each replica returns the same NativeOracle progress and resolver state at
   that exact EIP-1898 canonical block hash, outside number-to-state view
   transitions near the execution head;
+- a transient cross-replica execution-view lag retries the entire canonical
+  snapshot for up to five seconds; a state difference that persists across the
+  bounded retry window still fails the soak;
 - each price snapshot uses a progress/resolver/progress seqlock read so an RPC
   view transition between cross-contract calls is retried, not mistaken for
   inconsistent Oracle state;
