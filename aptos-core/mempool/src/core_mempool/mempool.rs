@@ -25,6 +25,7 @@ use gaptos::{
 };
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
+    ops::Bound::{Excluded, Unbounded},
     sync::Mutex,
     time::{Duration, Instant},
 };
@@ -85,7 +86,6 @@ pub struct Mempool {
     num_sender_buckets: u8,
     /// Fee/ranking bucket count for cursor length (`broadcast_buckets.len()`).
     /// Logic in v1 only uses fee slot 0; length must still match gaptos.
-    #[allow(dead_code)]
     num_fee_slots: usize,
 }
 
@@ -118,16 +118,42 @@ impl CoreMempoolTrait for Mempool {
 
     fn read_timeline(
         &self,
-        _sender_bucket: MempoolSenderBucket,
-        _timeline_id: &MultiBucketTimelineIndexIds,
-        _count: usize,
-        _before: Option<Instant>,
-        _priority_of_receiver: BroadcastPeerPriority,
+        sender_bucket: MempoolSenderBucket,
+        timeline_id: &MultiBucketTimelineIndexIds,
+        count: usize,
+        before: Option<Instant>,
+        _priority_of_receiver: BroadcastPeerPriority, // no content filter (upstream parity)
     ) -> (Vec<(SignedTransaction, u64)>, MultiBucketTimelineIndexIds) {
-        // Task 2 implements real cursor read; keep index reconciled.
         self.maybe_reconcile(false);
-        // Honest stub until Task 2: empty batch, empty cursor (no fake progress).
-        (vec![], MultiBucketTimelineIndexIds { id_per_bucket: vec![] })
+        let idx = self.index.lock().unwrap();
+
+        let cursor0 = timeline_id.id_per_bucket.first().copied().unwrap_or(0);
+        let mut out = Vec::new();
+        let mut last_included = None;
+
+        let Some(tl) = idx.timelines.get(&sender_bucket) else {
+            return (out, self.cursor_from(cursor0, last_included));
+        };
+
+        for (&id, (hash, admit_at)) in tl.entries.range((Excluded(cursor0), Unbounded)) {
+            // Failover before: stop when admit Instant is too new; later ids are newer.
+            if let Some(t) = before {
+                if *admit_at >= t {
+                    break;
+                }
+            }
+            // At most `count` successful body joins.
+            if out.len() >= count {
+                break;
+            }
+            let Some(txn) = idx.bodies.get(hash) else {
+                continue;
+            };
+            out.push((txn.clone(), 0)); // ready_time_ms = 0
+            last_included = Some(id);
+        }
+
+        (out, self.cursor_from(cursor0, last_included))
     }
 
     fn gc(&mut self) {
@@ -224,6 +250,14 @@ impl Mempool {
             num_sender_buckets,
             num_fee_slots,
         }
+    }
+
+    /// Build fee-slot-shaped cursor: progress only in slot 0; rest stay 0.
+    /// Empty batch keeps `cursor0` (does not advance).
+    fn cursor_from(&self, cursor0: u64, last: Option<u64>) -> MultiBucketTimelineIndexIds {
+        let mut id_per_bucket = vec![0u64; self.num_fee_slots];
+        id_per_bucket[0] = last.unwrap_or(cursor0);
+        MultiBucketTimelineIndexIds { id_per_bucket }
     }
 
     /// Throttled reconcile against `pool.get_broadcast_txns`.
@@ -398,6 +432,25 @@ impl Mempool {
     fn debug_bodies_len(&self) -> usize {
         self.index.lock().unwrap().bodies.len()
     }
+
+    /// Admit Instant for the broadcast body whose sequence number equals `nonce`.
+    /// Panics if no matching body is currently indexed (test helper only).
+    #[cfg(test)]
+    fn debug_admit_instant_for_nonce(&self, nonce: u64) -> Instant {
+        let idx = self.index.lock().unwrap();
+        for (hash, txn) in &idx.bodies {
+            if txn.sequence_number() == nonce {
+                let (bucket, id) = idx.hash_to_pos.get(hash).expect("hash_to_pos entry for body");
+                let (_h, admit_at) = idx
+                    .timelines
+                    .get(bucket)
+                    .and_then(|t| t.entries.get(id))
+                    .expect("timeline entry for body");
+                return *admit_at;
+            }
+        }
+        panic!("no indexed body with sequence_number={nonce}");
+    }
 }
 
 #[cfg(test)]
@@ -514,6 +567,98 @@ mod tests {
         m.force_reconcile_for_test();
         let id2 = m.debug_only_id(0);
         assert!(id2 > id1);
+    }
+
+    fn empty_cursor(fee_slots: usize) -> MultiBucketTimelineIndexIds {
+        MultiBucketTimelineIndexIds { id_per_bucket: vec![0; fee_slots] }
+    }
+
+    #[test]
+    fn read_timeline_returns_fee_slot_shaped_cursor() {
+        let m = mempool_with(Arc::new(StdMutex::new(vec![mk_txn(0, 0, 1)])), Duration::ZERO, 1, 10);
+        let (out, cur) =
+            m.read_timeline(0, &empty_cursor(10), 16, None, BroadcastPeerPriority::Primary);
+        assert_eq!(out.len(), 1);
+        assert_eq!(cur.id_per_bucket.len(), 10);
+        assert_eq!(cur.id_per_bucket[0], 1);
+        assert!(cur.id_per_bucket[1..].iter().all(|&x| x == 0));
+        assert_eq!(out[0].1, 0); // ready_time_ms
+    }
+
+    #[test]
+    fn read_timeline_respects_cursor_incremental() {
+        let txns = Arc::new(StdMutex::new(vec![mk_txn(0, 0, 1), mk_txn(0, 1, 2), mk_txn(0, 2, 3)]));
+        let m = mempool_with(txns, Duration::ZERO, 1, 10);
+        let (out1, c1) =
+            m.read_timeline(0, &empty_cursor(10), 2, None, BroadcastPeerPriority::Primary);
+        assert_eq!(out1.len(), 2);
+        assert_eq!(c1.id_per_bucket[0], 2);
+        let (out2, c2) = m.read_timeline(0, &c1, 16, None, BroadcastPeerPriority::Primary);
+        assert_eq!(out2.len(), 1);
+        assert_eq!(c2.id_per_bucket[0], 3);
+    }
+
+    #[test]
+    fn read_timeline_count_truncation() {
+        let txns = Arc::new(StdMutex::new((0..5).map(|n| mk_txn(0, n, 50 + n as u8)).collect()));
+        let m = mempool_with(txns, Duration::ZERO, 1, 10);
+        let (out, c) =
+            m.read_timeline(0, &empty_cursor(10), 3, None, BroadcastPeerPriority::Primary);
+        assert_eq!(out.len(), 3);
+        assert_eq!(c.id_per_bucket[0], 3);
+        let (rest, c2) = m.read_timeline(0, &c, 16, None, BroadcastPeerPriority::Primary);
+        assert_eq!(rest.len(), 2);
+        assert_eq!(c2.id_per_bucket[0], 5);
+    }
+
+    #[test]
+    fn read_timeline_empty_batch_does_not_advance() {
+        let m = mempool_with(Arc::new(StdMutex::new(vec![])), Duration::ZERO, 1, 10);
+        let old = MultiBucketTimelineIndexIds { id_per_bucket: vec![7, 0, 0, 0, 0, 0, 0, 0, 0, 0] };
+        let (out, cur) = m.read_timeline(0, &old, 16, None, BroadcastPeerPriority::Primary);
+        assert!(out.is_empty());
+        assert_eq!(cur.id_per_bucket[0], 7);
+        assert_eq!(cur.id_per_bucket.len(), 10);
+    }
+
+    #[test]
+    fn read_timeline_before_filters_new_admits() {
+        // 1) Admit A alone.
+        let txns = Arc::new(StdMutex::new(vec![mk_txn(0, 0, 1)]));
+        let m = mempool_with(txns.clone(), Duration::ZERO, 1, 10);
+        m.force_reconcile_for_test();
+        // 2) Sleep so B's admit Instant is strictly later than A's.
+        std::thread::sleep(Duration::from_millis(5));
+        // 3) Admit B.
+        txns.lock().unwrap().push(mk_txn(0, 1, 2));
+        m.force_reconcile_for_test();
+        // 4) before = B's admit Instant → range breaks on Instant >= before, so B excluded.
+        let b_instant = m.debug_admit_instant_for_nonce(1);
+        let (out, _) = m.read_timeline(
+            0,
+            &empty_cursor(10),
+            16,
+            Some(b_instant),
+            BroadcastPeerPriority::Primary,
+        );
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].0.sequence_number(), 0);
+    }
+
+    #[test]
+    fn read_timeline_bucket_isolation() {
+        let txns = Arc::new(StdMutex::new(vec![
+            mk_txn(0, 0, 10),
+            mk_txn(1, 0, 11),
+            mk_txn(2, 0, 12),
+            mk_txn(3, 0, 13),
+        ]));
+        let m = mempool_with(txns, Duration::ZERO, 4, 10);
+        for k in 0u8..4 {
+            let (out, _) =
+                m.read_timeline(k, &empty_cursor(10), 16, None, BroadcastPeerPriority::Primary);
+            assert_eq!(out.len(), 1, "bucket {k}");
+        }
     }
 
     // A TxPool that hands back a fixed set of txns, honoring the `limit` argument
