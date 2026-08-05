@@ -25,49 +25,12 @@ use gaptos::{
 };
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
-    sync::{Arc, Mutex},
+    sync::Mutex,
     time::{Duration, Instant},
 };
 
 use super::transaction::VerifiedTxn;
 use block_buffer_manager::TxPool;
-
-/// Per-entry age cache for `read_timeline` deduplication (mempool-broadcast
-/// impl-d §3). Replaces the previous "global wipe" `HashSet`: each entry now
-/// remembers when it was last dispatched and to which target slot, so TTL is
-/// scoped per-tx and TTL-triggered re-emits prefer a different slot (§6.4).
-pub struct TxnCache {
-    entries: HashMap<TxnHash, CacheEntry>,
-    size: usize,
-    ttl: Duration,
-}
-
-#[derive(Clone, Copy)]
-struct CacheEntry {
-    /// For dispatched entries: when the tx was last handed to a peer.
-    /// For placeholders (`dispatched == false`): the Failover first-sighting
-    /// time — i.e. when the TTL grace clock started ticking.
-    last_dispatched_at: Instant,
-    last_target: TargetSlot,
-    /// `false` ⇒ placeholder seeded by a Failover first-sighting awaiting
-    /// Primary claim within `cache.ttl`. `true` ⇒ tx has been dispatched
-    /// at least once (the normal in-TTL-suppress / TTL-re-emit regime).
-    dispatched: bool,
-}
-
-/// `(bucket, priority_discriminant)` — a zero-cost proxy for the destination
-/// peer at this moment in time. `priority.rs` keeps `(bucket, priority)`
-/// 1:1-mapped to a peer per prioritization window, so this pair fully
-/// identifies the slot we last handed the tx to without copying a
-/// `PeerNetworkId`.
-type TargetSlot = (MempoolSenderBucket, u8);
-
-fn priority_discriminant(p: &BroadcastPeerPriority) -> u8 {
-    match p {
-        BroadcastPeerPriority::Primary => 0,
-        BroadcastPeerPriority::Failover => 1,
-    }
-}
 
 fn sender_to_bucket(
     sender: &ExternalAccountAddress,
@@ -78,76 +41,52 @@ fn sender_to_bucket(
     bytes[31] % n
 }
 
-impl TxnCache {
-    fn new(size: usize, ttl: Duration) -> Self {
-        Self { entries: HashMap::new(), size, ttl }
+/// Per-`sender_bucket` monotonic timeline of broadcastable txn hashes.
+struct TimelineIndex {
+    /// Next id to allocate; starts at 1 and never rewinds.
+    next_id: u64,
+    entries: BTreeMap<u64, (TxnHash, Instant)>,
+}
+
+impl TimelineIndex {
+    fn new() -> Self {
+        Self { next_id: 1, entries: BTreeMap::new() }
     }
 }
 
-/// A per-round snapshot of `pool.pending_transactions()` sliced by sender
-/// bucket. Amortises N peer × M bucket × 2 priority `pool.pending_*` calls
-/// down to ≈ one per `max_age` window. See impl-d §5.
-struct Snapshot {
-    /// `Arc` so `read_timeline` can carry a shard out of the snapshot lock
-    /// with one refcount bump instead of deep-copying every `SignedTransaction`
-    /// in the bucket — the copy is paid only for the txns actually dispatched.
-    shards: HashMap<MempoolSenderBucket, Arc<Vec<SnapshotEntry>>>,
-    taken_at: Instant,
+/// Poll-reconcile broadcast index: `get_broadcast_txns` is ground truth;
+/// each pending hash is admitted once into a per-sender_bucket timeline.
+struct BroadcastIndex {
+    bodies: HashMap<TxnHash, SignedTransaction>,
+    timelines: HashMap<MempoolSenderBucket, TimelineIndex>,
+    hash_to_pos: HashMap<TxnHash, (MempoolSenderBucket, u64)>,
+    last_refresh: Instant,
     max_age: Duration,
-    /// False until the first refresh runs, so `read_timeline` can tell
-    /// "never snapshotted yet" apart from "snapshot is empty because reth
-    /// pool is empty".
     initialized: bool,
 }
 
-#[derive(Clone)]
-struct SnapshotEntry {
-    hash: TxnHash,
-    txn: SignedTransaction,
-}
-
-/// Mempool-local self-observation of which `(bucket, priority)` slots have
-/// been queried recently. impl-d §3.1 places the topology view inside gaptos;
-/// to keep this change zero-invasion on gaptos we instead infer the slot
-/// count from `read_timeline`'s own call pattern — every read_timeline call
-/// proves its `(bucket, priority)` slot is active right now. A slot is
-/// "active" as long as it was observed within `ttl`. This preserves the
-/// §6.4 single-peer auto-degrade semantics (count=1 ⇒ permit same-slot
-/// resend) without touching the gaptos crate.
-struct ObservedTopology {
-    last_seen: HashMap<TargetSlot, Instant>,
-    ttl: Duration,
-}
-
-impl ObservedTopology {
-    fn new(ttl: Duration) -> Self {
-        Self { last_seen: HashMap::new(), ttl }
-    }
-
-    fn observe(&mut self, slot: TargetSlot) {
-        self.last_seen.insert(slot, Instant::now());
-    }
-
-    fn priority_count_for_bucket(&self, bucket: MempoolSenderBucket) -> u8 {
-        let now = Instant::now();
-        let mut count = 0u8;
-        for prio_disc in 0u8..=1u8 {
-            if let Some(t) = self.last_seen.get(&(bucket, prio_disc)) {
-                if now.duration_since(*t) <= self.ttl {
-                    count += 1;
-                }
-            }
+impl BroadcastIndex {
+    fn new(max_age: Duration) -> Self {
+        Self {
+            bodies: HashMap::new(),
+            timelines: HashMap::new(),
+            hash_to_pos: HashMap::new(),
+            last_refresh: Instant::now(),
+            max_age,
+            initialized: false,
         }
-        count
     }
 }
 
 pub struct Mempool {
     pool: Box<dyn TxPool>,
-    txn_cache: Arc<Mutex<TxnCache>>,
-    snapshot: Arc<Mutex<Snapshot>>,
-    topology: Arc<Mutex<ObservedTopology>>,
+    /// Interior mutability for `&self` trait methods (read_timeline / range).
+    index: Mutex<BroadcastIndex>,
     num_sender_buckets: u8,
+    /// Fee/ranking bucket count for cursor length (`broadcast_buckets.len()`).
+    /// Logic in v1 only uses fee slot 0; length must still match gaptos.
+    #[allow(dead_code)]
+    num_fee_slots: usize,
 }
 
 impl CoreMempoolTrait for Mempool {
@@ -156,6 +95,8 @@ impl CoreMempoolTrait for Mempool {
         _sender_bucket: MempoolSenderBucket,
         _start_end_pairs: HashMap<TimelineIndexIdentifier, (u64, u64)>,
     ) -> Vec<(SignedTransaction, u64)> {
+        // Task 3 will implement real range; reconcile so index stays warm.
+        self.maybe_reconcile(false);
         vec![]
     }
 
@@ -166,6 +107,7 @@ impl CoreMempoolTrait for Mempool {
             HashMap<TimelineIndexIdentifier, (u64, u64)>,
         >,
     ) -> Vec<(SignedTransaction, u64)> {
+        self.maybe_reconcile(false);
         vec![]
     }
 
@@ -176,87 +118,16 @@ impl CoreMempoolTrait for Mempool {
 
     fn read_timeline(
         &self,
-        sender_bucket: MempoolSenderBucket,
+        _sender_bucket: MempoolSenderBucket,
         _timeline_id: &MultiBucketTimelineIndexIds,
-        count: usize,
+        _count: usize,
         _before: Option<Instant>,
-        priority_of_receiver: BroadcastPeerPriority,
+        _priority_of_receiver: BroadcastPeerPriority,
     ) -> (Vec<(SignedTransaction, u64)>, MultiBucketTimelineIndexIds) {
-        // Self-observe topology: this call IS proof that
-        // (sender_bucket, priority_of_receiver) is currently an active slot.
-        let target_slot: TargetSlot = (sender_bucket, priority_discriminant(&priority_of_receiver));
-        let priority_count = {
-            let mut topo = self.topology.lock().unwrap();
-            topo.observe(target_slot);
-            topo.priority_count_for_bucket(sender_bucket)
-        };
-
-        let shard: Arc<Vec<SnapshotEntry>> = {
-            let mut snap = self.snapshot.lock().unwrap();
-            if !snap.initialized || snap.taken_at.elapsed() >= snap.max_age {
-                self.refresh_snapshot_locked(&mut snap);
-            }
-            snap.shards.get(&sender_bucket).cloned().unwrap_or_default()
-        };
-
-        let now = Instant::now();
-        let mut out: Vec<(SignedTransaction, u64)> = Vec::with_capacity(count.min(shard.len()));
-        let mut cache = self.txn_cache.lock().unwrap();
-
-        for entry in shard.iter() {
-            if out.len() >= count {
-                break;
-            }
-            // PR #722 review point 3: the TTL cache is now self-sufficient
-            // for failover semantics. Primary first-sighting dispatches
-            // immediately. Failover first-sighting seeds a placeholder so
-            // the TTL clock starts here. Within the `cache.ttl` grace,
-            // Primary can still claim the placeholder (preserves the
-            // Primary-first invariant). After the grace elapses, Failover
-            // takes over — no dependency on `priority.rs` promotion.
-            let dispatch = match cache.entries.get(&entry.hash) {
-                None => matches!(priority_of_receiver, BroadcastPeerPriority::Primary),
-                Some(e) if !e.dispatched => match priority_of_receiver {
-                    BroadcastPeerPriority::Primary => true,
-                    BroadcastPeerPriority::Failover => {
-                        now.duration_since(e.last_dispatched_at) >= cache.ttl
-                    }
-                },
-                Some(e) if now.duration_since(e.last_dispatched_at) < cache.ttl => false,
-                Some(e) if e.last_target == target_slot && priority_count >= 2 => false,
-                Some(_) => true,
-            };
-            if !dispatch {
-                // Failover first-sighting seeds a placeholder so the TTL
-                // clock starts. `or_insert` (not `insert`) preserves the
-                // original first_seen_at across repeated Failover ticks
-                // during the grace window.
-                if matches!(priority_of_receiver, BroadcastPeerPriority::Failover) {
-                    cache.entries.entry(entry.hash).or_insert(CacheEntry {
-                        last_dispatched_at: now,
-                        last_target: target_slot,
-                        dispatched: false,
-                    });
-                }
-                continue;
-            }
-            // Second field is ready_time_ms (upstream aptos), not a timeline_id.
-            // We do not track insertion/ready time, so leave 0.
-            out.push((entry.txn.clone(), 0));
-            cache.entries.insert(
-                entry.hash,
-                CacheEntry { last_dispatched_at: now, last_target: target_slot, dispatched: true },
-            );
-        }
-        // Timeline is intentionally not implemented (architecture A: TxnCache +
-        // TTL broadcast progress). `MultiBucketTimelineIndexIds.id_per_bucket`
-        // must have length = fee/ranking bucket count (broadcast_buckets), not
-        // `out.len()`. Returning empty is an honest stub: no cursor progress,
-        // no fake fee-bucket shape, and no zip/update length mismatches from
-        // `vec![0; out.len()]`. See gravity-audit#1090.
-        // When timeline is re-enabled: return per-fee-bucket max timeline_ids
-        // with fixed length broadcast_buckets.len().
-        (out, MultiBucketTimelineIndexIds { id_per_bucket: vec![] })
+        // Task 2 implements real cursor read; keep index reconciled.
+        self.maybe_reconcile(false);
+        // Honest stub until Task 2: empty batch, empty cursor (no fake progress).
+        (vec![], MultiBucketTimelineIndexIds { id_per_bucket: vec![] })
     }
 
     fn gc(&mut self) {
@@ -338,63 +209,77 @@ impl CoreMempoolTrait for Mempool {
 
 impl Mempool {
     pub fn new(config: &NodeConfig, pool: Box<dyn TxPool>) -> Self {
-        let ttl_secs = std::env::var("MEMPOOL_BROADCAST_CACHE_TTL_SECS")
-            .ok()
-            .and_then(|s| s.parse::<u64>().ok())
-            .unwrap_or(5);
-        let snapshot_max_age_ms = std::env::var("MEMPOOL_SNAPSHOT_MAX_AGE_MS")
-            .ok()
-            .and_then(|s| s.parse::<u64>().ok())
-            .unwrap_or(20);
-        let topology_ttl_ms = std::env::var("MEMPOOL_TOPOLOGY_OBSERVATION_TTL_MS")
-            .ok()
-            .and_then(|s| s.parse::<u64>().ok())
-            .unwrap_or(1500);
+        let max_age = Duration::from_millis(
+            std::env::var("MEMPOOL_SNAPSHOT_MAX_AGE_MS")
+                .ok()
+                .and_then(|s| s.parse::<u64>().ok())
+                .unwrap_or(20),
+        );
         let num_sender_buckets = config.mempool.num_sender_buckets.max(1);
+        let num_fee_slots = config.mempool.broadcast_buckets.len().max(1);
 
         Self {
             pool,
-            txn_cache: Arc::new(Mutex::new(TxnCache::new(100_000, Duration::from_secs(ttl_secs)))),
-            snapshot: Arc::new(Mutex::new(Snapshot {
-                shards: HashMap::new(),
-                taken_at: Instant::now(),
-                max_age: Duration::from_millis(snapshot_max_age_ms),
-                initialized: false,
-            })),
-            topology: Arc::new(Mutex::new(ObservedTopology::new(Duration::from_millis(
-                topology_ttl_ms,
-            )))),
+            index: Mutex::new(BroadcastIndex::new(max_age)),
             num_sender_buckets,
+            num_fee_slots,
         }
     }
 
-    fn refresh_snapshot_locked(&self, snap: &mut Snapshot) {
-        let mut shards: HashMap<MempoolSenderBucket, Vec<SnapshotEntry>> = HashMap::new();
-        let mut alive: HashSet<TxnHash> = HashSet::new();
-        for txn in self.pool.get_broadcast_txns(None) {
-            let bucket = sender_to_bucket(txn.sender(), self.num_sender_buckets);
-            let hash = TxnHash::from_bytes(txn.committed_hash().as_slice());
-            alive.insert(hash);
-            let signed: SignedTransaction = VerifiedTxn::from(txn).into();
-            shards.entry(bucket).or_default().push(SnapshotEntry { hash, txn: signed });
+    /// Throttled reconcile against `pool.get_broadcast_txns`.
+    /// `force=true` ignores `max_age` (used by tests and any urgent refresh).
+    fn maybe_reconcile(&self, force: bool) {
+        let mut idx = self.index.lock().unwrap();
+        if !force && idx.initialized && idx.last_refresh.elapsed() < idx.max_age {
+            return;
         }
-        snap.shards = shards.into_iter().map(|(bucket, txns)| (bucket, Arc::new(txns))).collect();
-        snap.taken_at = Instant::now();
-        snap.initialized = true;
+        self.reconcile_locked(&mut idx);
+    }
 
-        // Lazy GC: drop cache entries whose hash is no longer alive in the
-        // reth pool (committed / replaced / evicted). Then cap by size.
-        let mut cache = self.txn_cache.lock().unwrap();
-        cache.entries.retain(|h, _| alive.contains(h));
-        if cache.entries.len() > cache.size {
-            let mut by_age: Vec<(TxnHash, Instant)> =
-                cache.entries.iter().map(|(h, e)| (*h, e.last_dispatched_at)).collect();
-            by_age.sort_by_key(|&(_, t)| t);
-            let to_drop = cache.entries.len() - cache.size;
-            for (h, _) in by_age.into_iter().take(to_drop) {
-                cache.entries.remove(&h);
-            }
+    /// Design §4: remove left hashes, admit new in `get_broadcast_txns` order.
+    fn reconcile_locked(&self, idx: &mut BroadcastIndex) {
+        let pending: Vec<_> = self.pool.get_broadcast_txns(None).collect();
+        let mut pending_hashes: HashSet<TxnHash> = HashSet::with_capacity(pending.len());
+        // Materialize (hash, bucket, signed) while preserving iteration order for admit.
+        let mut pending_pairs: Vec<(TxnHash, MempoolSenderBucket, SignedTransaction)> =
+            Vec::with_capacity(pending.len());
+        for txn in pending {
+            let hash = TxnHash::from_bytes(txn.committed_hash().as_slice());
+            let bucket = sender_to_bucket(txn.sender(), self.num_sender_buckets);
+            pending_hashes.insert(hash);
+            let signed: SignedTransaction = VerifiedTxn::from(txn).into();
+            pending_pairs.push((hash, bucket, signed));
         }
+
+        // --- remove hashes no longer in pending ---
+        let to_remove: Vec<TxnHash> =
+            idx.bodies.keys().filter(|h| !pending_hashes.contains(h)).copied().collect();
+        for h in to_remove {
+            if let Some((bucket, id)) = idx.hash_to_pos.remove(&h) {
+                if let Some(timeline) = idx.timelines.get_mut(&bucket) {
+                    timeline.entries.remove(&id);
+                }
+            }
+            idx.bodies.remove(&h);
+        }
+
+        // --- admit new hashes in iteration order ---
+        for (hash, bucket, signed) in pending_pairs {
+            if idx.bodies.contains_key(&hash) {
+                // Still present: optional body overwrite; timeline id/Instant stay.
+                idx.bodies.insert(hash, signed);
+                continue;
+            }
+            let timeline = idx.timelines.entry(bucket).or_insert_with(TimelineIndex::new);
+            let id = timeline.next_id;
+            timeline.next_id = timeline.next_id.saturating_add(1);
+            timeline.entries.insert(id, (hash, Instant::now()));
+            idx.hash_to_pos.insert(hash, (bucket, id));
+            idx.bodies.insert(hash, signed);
+        }
+
+        idx.initialized = true;
+        idx.last_refresh = Instant::now();
     }
 
     /// This function will be called once the transaction has been stored.
@@ -481,6 +366,38 @@ impl Mempool {
     pub fn gen_snapshot(&self) -> Vec<SignedTransaction> {
         panic!()
     }
+
+    // --- test-only helpers (Task 1 reconcile inspection) ---
+
+    #[cfg(test)]
+    fn force_reconcile_for_test(&self) {
+        self.maybe_reconcile(true);
+    }
+
+    #[cfg(test)]
+    fn debug_timeline_len(&self, bucket: MempoolSenderBucket) -> usize {
+        let idx = self.index.lock().unwrap();
+        idx.timelines.get(&bucket).map(|t| t.entries.len()).unwrap_or(0)
+    }
+
+    #[cfg(test)]
+    fn debug_next_id(&self, bucket: MempoolSenderBucket) -> u64 {
+        let idx = self.index.lock().unwrap();
+        idx.timelines.get(&bucket).map(|t| t.next_id).unwrap_or(1)
+    }
+
+    #[cfg(test)]
+    fn debug_only_id(&self, bucket: MempoolSenderBucket) -> u64 {
+        let idx = self.index.lock().unwrap();
+        let t = idx.timelines.get(&bucket).expect("timeline for bucket");
+        assert_eq!(t.entries.len(), 1, "debug_only_id requires exactly one entry");
+        *t.entries.keys().next().unwrap()
+    }
+
+    #[cfg(test)]
+    fn debug_bodies_len(&self) -> usize {
+        self.index.lock().unwrap().bodies.len()
+    }
 }
 
 #[cfg(test)]
@@ -489,7 +406,7 @@ mod tests {
     use gaptos::api_types::{
         account::ExternalChainId, VerifiedTxn as ApiVerifiedTxn, GLOBAL_CRYPTO_TXN_HASHER,
     };
-    use std::sync::Mutex as StdMutex;
+    use std::sync::{Arc, Mutex as StdMutex};
 
     fn install_hasher() {
         // Identity-ish hasher for tests: hash = first 32 bytes of payload,
@@ -515,11 +432,12 @@ mod tests {
         ApiVerifiedTxn::new(bytes, mk_addr(addr_last), seq, ExternalChainId::new(1))
     }
 
+    /// Test constructor: `(txns, max_age, num_sender_buckets, num_fee_slots)`.
     fn mempool_with(
         txns: Arc<StdMutex<Vec<ApiVerifiedTxn>>>,
-        ttl: Duration,
-        snapshot_max_age: Duration,
+        max_age: Duration,
         num_buckets: u8,
+        fee_slots: usize,
     ) -> Mempool {
         install_hasher();
         struct Shared(Arc<StdMutex<Vec<ApiVerifiedTxn>>>);
@@ -545,265 +463,57 @@ mod tests {
         }
         Mempool {
             pool: Box::new(Shared(txns)),
-            txn_cache: Arc::new(Mutex::new(TxnCache::new(100_000, ttl))),
-            snapshot: Arc::new(Mutex::new(Snapshot {
-                shards: HashMap::new(),
-                taken_at: Instant::now(),
-                max_age: snapshot_max_age,
-                initialized: false,
-            })),
-            topology: Arc::new(Mutex::new(ObservedTopology::new(Duration::from_secs(10)))),
-            num_sender_buckets: num_buckets,
+            index: Mutex::new(BroadcastIndex::new(max_age)),
+            num_sender_buckets: num_buckets.max(1),
+            num_fee_slots: fee_slots.max(1),
         }
     }
 
-    fn read(
-        m: &Mempool,
-        bucket: MempoolSenderBucket,
-        prio: BroadcastPeerPriority,
-        count: usize,
-    ) -> Vec<(SignedTransaction, u64)> {
-        m.read_timeline(
-            bucket,
-            &MultiBucketTimelineIndexIds { id_per_bucket: vec![] },
-            count,
-            None,
-            prio,
-        )
-        .0
+    #[test]
+    fn reconcile_admits_new_hashes_monotonic_ids() {
+        let txns = Arc::new(StdMutex::new(vec![mk_txn(0, 0, 1), mk_txn(0, 1, 2)]));
+        let m = mempool_with(txns, Duration::ZERO, 1, 10);
+        m.force_reconcile_for_test();
+        assert_eq!(m.debug_timeline_len(0), 2);
+        assert_eq!(m.debug_next_id(0), 3);
     }
 
     #[test]
-    fn first_dispatch_then_in_ttl_suppress() {
+    fn reconcile_removes_left_hashes() {
         let txns = Arc::new(StdMutex::new(vec![mk_txn(0, 0, 1)]));
-        let m = mempool_with(txns, Duration::from_secs(60), Duration::from_millis(20), 1);
-        assert_eq!(read(&m, 0, BroadcastPeerPriority::Primary, 16).len(), 1);
-        assert!(
-            read(&m, 0, BroadcastPeerPriority::Primary, 16).is_empty(),
-            "within TTL must suppress"
-        );
-    }
-
-    /// gravity-audit#1090: returned MultiBucketTimelineIndexIds must not use
-    /// `out.len()` as fee-bucket count. Architecture A leaves timeline unimplemented,
-    /// so the honest stub is an empty `id_per_bucket` regardless of batch size.
-    #[test]
-    fn read_timeline_cursor_is_empty_stub_not_out_len() {
-        let txns = Arc::new(StdMutex::new(vec![mk_txn(0, 0, 1), mk_txn(0, 1, 2), mk_txn(0, 2, 3)]));
-        let m = mempool_with(txns, Duration::from_secs(60), Duration::from_millis(20), 1);
-        let (out, cursor) = m.read_timeline(
-            0,
-            &MultiBucketTimelineIndexIds { id_per_bucket: vec![] },
-            16,
-            None,
-            BroadcastPeerPriority::Primary,
-        );
-        assert_eq!(out.len(), 3, "should dispatch all three txns");
-        assert!(
-            cursor.id_per_bucket.is_empty(),
-            "timeline stub must be empty, not vec![0; out.len()] (got len={})",
-            cursor.id_per_bucket.len()
-        );
-        // ready_time_ms field is not a timeline_id; leave 0 when untracked.
-        assert!(out.iter().all(|(_, ready_ms)| *ready_ms == 0));
-    }
-
-    #[test]
-    fn failover_cannot_steal_first_dispatch() {
-        // A Failover tick that lands before any Primary tick must NOT take the
-        // tx — first sighting is reserved for Primary. PR #722 review point 3:
-        // a placeholder is seeded so the TTL clock starts; Primary's subsequent
-        // tick claims the placeholder and dispatches.
-        let txns = Arc::new(StdMutex::new(vec![mk_txn(0, 0, 6)]));
-        let m = mempool_with(txns, Duration::from_secs(60), Duration::from_millis(20), 1);
-        assert!(
-            read(&m, 0, BroadcastPeerPriority::Failover, 16).is_empty(),
-            "Failover must not steal first-dispatch from Primary"
-        );
-        // A placeholder entry must exist (dispatched == false).
-        {
-            let cache = m.txn_cache.lock().unwrap();
-            assert_eq!(cache.entries.len(), 1);
-            let e = cache.entries.values().next().unwrap();
-            assert!(!e.dispatched, "Failover first-sighting must seed a placeholder");
-        }
-        // Primary then queries — claims the placeholder and dispatches.
-        assert_eq!(read(&m, 0, BroadcastPeerPriority::Primary, 16).len(), 1);
-    }
-
-    #[test]
-    fn ttl_expired_single_priority_dispatches() {
-        // priority_count = 1 (only Primary ever observed) ⇒ TTL-expired
-        // same-slot resend is allowed (otherwise X is blackholed forever).
-        let txns = Arc::new(StdMutex::new(vec![mk_txn(0, 0, 2)]));
-        let m = mempool_with(txns, Duration::from_millis(10), Duration::from_millis(0), 1);
-        assert_eq!(read(&m, 0, BroadcastPeerPriority::Primary, 16).len(), 1);
-        std::thread::sleep(Duration::from_millis(20));
-        assert_eq!(
-            read(&m, 0, BroadcastPeerPriority::Primary, 16).len(),
-            1,
-            "single-peer must re-dispatch after TTL"
-        );
-    }
-
-    #[test]
-    fn ttl_expired_same_slot_suppressed_when_two_priorities() {
-        // After both priorities have been observed, TTL-expired same-slot
-        // resend yields the slot so the alt priority can pick it up.
-        let txns = Arc::new(StdMutex::new(vec![mk_txn(0, 0, 3)]));
-        let m = mempool_with(txns, Duration::from_millis(10), Duration::from_millis(0), 1);
-        assert_eq!(read(&m, 0, BroadcastPeerPriority::Primary, 16).len(), 1);
-        // Failover queries to register the observation (in-TTL ⇒ no dispatch).
-        assert!(read(&m, 0, BroadcastPeerPriority::Failover, 16).is_empty());
-        std::thread::sleep(Duration::from_millis(20));
-        assert!(
-            read(&m, 0, BroadcastPeerPriority::Primary, 16).is_empty(),
-            "multi-peer same-slot resend must suppress"
-        );
-    }
-
-    #[test]
-    fn ttl_expired_alt_slot_dispatches() {
-        let txns = Arc::new(StdMutex::new(vec![mk_txn(0, 0, 4)]));
-        let m = mempool_with(txns, Duration::from_millis(10), Duration::from_millis(0), 1);
-        assert_eq!(read(&m, 0, BroadcastPeerPriority::Primary, 16).len(), 1);
-        std::thread::sleep(Duration::from_millis(20));
-        assert_eq!(
-            read(&m, 0, BroadcastPeerPriority::Failover, 16).len(),
-            1,
-            "alt slot must dispatch after TTL"
-        );
-    }
-
-    #[test]
-    fn bucket_shard_isolation() {
-        let txns = Arc::new(StdMutex::new(vec![
-            mk_txn(0, 0, 10),
-            mk_txn(1, 0, 11),
-            mk_txn(2, 0, 12),
-            mk_txn(3, 0, 13),
-        ]));
-        let m = mempool_with(txns, Duration::from_secs(60), Duration::from_millis(20), 4);
-        for k in 0u8..4u8 {
-            assert_eq!(
-                read(&m, k, BroadcastPeerPriority::Primary, 16).len(),
-                1,
-                "bucket {k} should see exactly its own txn"
-            );
-        }
-    }
-
-    #[test]
-    fn count_truncation_leaves_remainder_untouched() {
-        // Locks the `count` cutoff invariant: once `out.len() == count` the loop
-        // breaks, and every entry past the break point must stay *completely*
-        // untouched — not dispatched, and crucially not written into the cache.
-        // A stray cache write there would suppress those txns for a full TTL
-        // even though they were never broadcast.
-        //
-        // The other tests all run with shards[0].len() < count, so this is the
-        // only one that executes the `if out.len() >= count { break; }` branch.
-        let txns = Arc::new(StdMutex::new(vec![
-            mk_txn(0, 0, 50),
-            mk_txn(0, 1, 51),
-            mk_txn(0, 2, 52),
-            mk_txn(0, 3, 53),
-            mk_txn(0, 4, 54),
-        ]));
-        let m = mempool_with(txns, Duration::from_secs(60), Duration::from_millis(20), 1);
-
-        // First read is capped at count=3 even though shards[0].len() == 5.
-        assert_eq!(
-            read(&m, 0, BroadcastPeerPriority::Primary, 3).len(),
-            3,
-            "count must cap the batch"
-        );
-        assert_eq!(
-            m.txn_cache.lock().unwrap().entries.len(),
-            3,
-            "entries skipped by the count cutoff must not enter the cache"
-        );
-
-        // Second read: the first 3 are suppressed in-TTL, so the 2 that the
-        // cutoff skipped are still eligible and come back now.
-        assert_eq!(
-            read(&m, 0, BroadcastPeerPriority::Primary, 3).len(),
-            2,
-            "the truncated remainder must be dispatched on the next call"
-        );
-        assert_eq!(m.txn_cache.lock().unwrap().entries.len(), 5);
-    }
-
-    #[test]
-    fn failover_first_sighting_creates_placeholder_no_dispatch() {
-        // PR #722 review point 3: Failover first-sighting seeds a placeholder.
-        let txns = Arc::new(StdMutex::new(vec![mk_txn(0, 0, 30)]));
-        let m = mempool_with(txns, Duration::from_secs(60), Duration::from_millis(20), 1);
-        assert!(read(&m, 0, BroadcastPeerPriority::Failover, 16).is_empty());
-        let cache = m.txn_cache.lock().unwrap();
-        assert_eq!(cache.entries.len(), 1);
-        let e = cache.entries.values().next().unwrap();
-        assert!(!e.dispatched, "placeholder must have dispatched == false");
-    }
-
-    #[test]
-    fn primary_claims_placeholder_within_grace() {
-        // PR #722 review point 3: within TTL grace, Primary claims the
-        // placeholder Failover left behind.
-        let txns = Arc::new(StdMutex::new(vec![mk_txn(0, 0, 31)]));
-        let m = mempool_with(txns, Duration::from_secs(60), Duration::from_millis(20), 1);
-        assert!(read(&m, 0, BroadcastPeerPriority::Failover, 16).is_empty());
-        assert_eq!(read(&m, 0, BroadcastPeerPriority::Primary, 16).len(), 1);
-        let cache = m.txn_cache.lock().unwrap();
-        let e = cache.entries.values().next().unwrap();
-        assert!(e.dispatched, "placeholder must flip to dispatched after Primary claim");
-        assert_eq!(
-            e.last_target,
-            (0, priority_discriminant(&BroadcastPeerPriority::Primary)),
-            "last_target must reflect Primary's slot"
-        );
-    }
-
-    #[test]
-    fn failover_takes_over_after_grace() {
-        // PR #722 review point 3: after TTL grace elapses, Failover takes
-        // over without depending on priority.rs promotion.
-        let txns = Arc::new(StdMutex::new(vec![mk_txn(0, 0, 32)]));
-        let m = mempool_with(txns, Duration::from_millis(10), Duration::from_millis(0), 1);
-        assert!(read(&m, 0, BroadcastPeerPriority::Failover, 16).is_empty());
-        std::thread::sleep(Duration::from_millis(20));
-        assert_eq!(read(&m, 0, BroadcastPeerPriority::Failover, 16).len(), 1);
-        let cache = m.txn_cache.lock().unwrap();
-        let e = cache.entries.values().next().unwrap();
-        assert!(e.dispatched, "entry must flip to dispatched after Failover takeover");
-        assert_eq!(
-            e.last_target,
-            (0, priority_discriminant(&BroadcastPeerPriority::Failover)),
-            "last_target must reflect Failover's slot"
-        );
-    }
-
-    #[test]
-    fn lazy_gc_drops_committed_hashes() {
-        let txns = Arc::new(StdMutex::new(vec![mk_txn(0, 0, 20)]));
-        let m = mempool_with(
-            txns.clone(),
-            Duration::from_secs(60),
-            Duration::from_millis(0), // every read refreshes
-            1,
-        );
-        assert_eq!(read(&m, 0, BroadcastPeerPriority::Primary, 16).len(), 1);
-        assert_eq!(m.txn_cache.lock().unwrap().entries.len(), 1);
-
-        // Simulate commit: tx leaves the reth pool.
+        let m = mempool_with(txns.clone(), Duration::ZERO, 1, 10);
+        m.force_reconcile_for_test();
+        assert_eq!(m.debug_timeline_len(0), 1);
         txns.lock().unwrap().clear();
-        std::thread::sleep(Duration::from_millis(1));
-        let _ = read(&m, 0, BroadcastPeerPriority::Primary, 16);
-        assert_eq!(
-            m.txn_cache.lock().unwrap().entries.len(),
-            0,
-            "lazy GC should drop entries whose hashes are no longer in the pool"
-        );
+        m.force_reconcile_for_test();
+        assert_eq!(m.debug_timeline_len(0), 0);
+        assert_eq!(m.debug_bodies_len(), 0);
+    }
+
+    #[test]
+    fn reconcile_stable_id_while_hash_stays() {
+        let txns = Arc::new(StdMutex::new(vec![mk_txn(0, 0, 1)]));
+        let m = mempool_with(txns, Duration::ZERO, 1, 10);
+        m.force_reconcile_for_test();
+        let id1 = m.debug_only_id(0);
+        m.force_reconcile_for_test();
+        assert_eq!(m.debug_only_id(0), id1);
+        assert_eq!(m.debug_next_id(0), id1 + 1);
+    }
+
+    #[test]
+    fn reconcile_reenter_gets_new_id() {
+        let t = mk_txn(0, 0, 1);
+        let txns = Arc::new(StdMutex::new(vec![t.clone()]));
+        let m = mempool_with(txns.clone(), Duration::ZERO, 1, 10);
+        m.force_reconcile_for_test();
+        let id1 = m.debug_only_id(0);
+        txns.lock().unwrap().clear();
+        m.force_reconcile_for_test();
+        txns.lock().unwrap().push(t);
+        m.force_reconcile_for_test();
+        let id2 = m.debug_only_id(0);
+        assert!(id2 > id1);
     }
 
     // A TxPool that hands back a fixed set of txns, honoring the `limit` argument
@@ -835,15 +545,9 @@ mod tests {
         }
         Mempool {
             pool: Box::new(BatchPool(txns)),
-            txn_cache: Arc::new(Mutex::new(TxnCache::new(100_000, Duration::from_secs(60)))),
-            snapshot: Arc::new(Mutex::new(Snapshot {
-                shards: HashMap::new(),
-                taken_at: Instant::now(),
-                max_age: Duration::from_millis(20),
-                initialized: false,
-            })),
-            topology: Arc::new(Mutex::new(ObservedTopology::new(Duration::from_secs(10)))),
+            index: Mutex::new(BroadcastIndex::new(Duration::from_millis(20))),
             num_sender_buckets: 1,
+            num_fee_slots: 10,
         }
     }
 
