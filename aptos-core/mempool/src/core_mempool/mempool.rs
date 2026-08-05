@@ -42,50 +42,108 @@ fn sender_to_bucket(
     bytes[31] % n
 }
 
-/// Per-`sender_bucket` monotonic timeline of broadcastable txn hashes.
+/// Ordered log of broadcast-ready transactions for **one** `sender_bucket`.
+///
+/// Mirrors aptos `core_mempool::index::TimelineIndex`:
+/// - aptos value: `(AccountAddress, seq, Instant)` pointing into the main table
+/// - gravity value: `(TxnHash, Instant)` — body is looked up in [`TransactionStore::transactions`]
+///   by hash (reth has no (addr, seq) main table)
+///
+/// `timeline_id` is a per-index monotonic counter starting at 1 (peer cursors start at 0).
+/// The `Instant` is admit time into this log (Failover `before` filter only).
 struct TimelineIndex {
-    /// Next id to allocate; starts at 1 and never rewinds.
-    next_id: u64,
-    entries: BTreeMap<u64, (TxnHash, Instant)>,
+    /// Next `timeline_id` to allocate on insert. Aptos field name: `timeline_id`.
+    /// Starts at 1; never rewinds. Not the peer cursor (cursors are exclusive lower bounds).
+    timeline_id: u64,
+    /// Ordered log: `timeline_id` → `(txn hash, admit Instant)`.
+    /// Aptos field name: `timeline`. Range reads use
+    /// `(Excluded(cursor), Unbounded)` / `(Excluded(start), Included(end))`.
+    timeline: BTreeMap<u64, (TxnHash, Instant)>,
 }
 
 impl TimelineIndex {
     fn new() -> Self {
-        Self { next_id: 1, entries: BTreeMap::new() }
+        Self { timeline_id: 1, timeline: BTreeMap::new() }
     }
 }
 
-/// Poll-reconcile broadcast index: `get_broadcast_txns` is ground truth;
-/// each pending hash is admitted once into a per-sender_bucket timeline.
-struct BroadcastIndex {
-    bodies: HashMap<TxnHash, SignedTransaction>,
-    timelines: HashMap<MempoolSenderBucket, TimelineIndex>,
-    hash_to_pos: HashMap<TxnHash, (MempoolSenderBucket, u64)>,
-    last_refresh: Instant,
-    max_age: Duration,
-    initialized: bool,
+/// In-memory broadcast store: body table + timeline indexes + reverse hash index.
+///
+/// Mirrors the **broadcast-relevant** parts of aptos `TransactionStore`
+/// (`transactions`, `timeline_index`, `hash_index`). Gravity does **not** host
+/// parking-lot / priority / system-TTL indexes here — those live in reth pool.
+///
+/// Ground truth for membership is still `TxPool::get_broadcast_txns`; this store
+/// is a poll-reconciled projection used by `read_timeline` / `timeline_range*`.
+struct TransactionStore {
+    /// Main body table keyed by committed txn hash.
+    ///
+    /// Aptos: `transactions: HashMap<AccountAddress, BTreeMap<seq, MempoolTransaction>>`
+    /// (body + metadata under (sender, seq)).
+    /// Gravity: reth owns canonical pool state; we only cache `SignedTransaction`
+    /// by hash so range/read can materialize without another pool lookup.
+    /// After each reconcile, the key set equals the current broadcastable set.
+    transactions: HashMap<TxnHash, SignedTransaction>,
+
+    /// Per-`sender_bucket` broadcast timelines.
+    ///
+    /// Aptos: `timeline_index: HashMap<MempoolSenderBucket, MultiBucketTimelineIndex>`
+    /// (each sender bucket holds fee/ranking sub-timelines).
+    /// Gravity v1: one [`TimelineIndex`] per sender bucket (no fee MultiBucket);
+    /// returned peer cursors still have length `broadcast_buckets.len()` with
+    /// real progress only in fee slot 0 (gaptos MessageId / PeerSyncState contract).
+    timeline_index: HashMap<MempoolSenderBucket, TimelineIndex>,
+
+    /// Reverse index: committed hash → `(sender_bucket, timeline_id)`.
+    ///
+    /// Aptos: `hash_index: HashMap<HashValue, (AccountAddress, seq)>` for main-table
+    /// lookup; timeline id lives on `MempoolTransaction.timeline_state = Ready(id)`.
+    /// Gravity: timeline entries are pointer-only `(TxnHash, Instant)`, so GC on
+    /// leave needs this map for O(1) `timeline.remove(id)` without scanning the log.
+    hash_index: HashMap<TxnHash, (MempoolSenderBucket, u64)>,
+
+    /// Time of the last successful reconcile (poll against `get_broadcast_txns`).
+    /// No aptos twin — aptos admits on insert/commit; we throttle full-pool polls.
+    last_reconcile: Instant,
+
+    /// Max age of a reconcile before `maybe_reconcile(false)` refreshes.
+    /// Driven by `MEMPOOL_SNAPSHOT_MAX_AGE_MS` (default 20ms). Aptos has no
+    /// equivalent poll interval on the timeline path.
+    reconcile_max_age: Duration,
+
+    /// `false` until the first reconcile completes.
+    /// Distinguishes "never projected" from "projected empty pool".
+    reconciled: bool,
 }
 
-impl BroadcastIndex {
-    fn new(max_age: Duration) -> Self {
+impl TransactionStore {
+    fn new(reconcile_max_age: Duration) -> Self {
         Self {
-            bodies: HashMap::new(),
-            timelines: HashMap::new(),
-            hash_to_pos: HashMap::new(),
-            last_refresh: Instant::now(),
-            max_age,
-            initialized: false,
+            transactions: HashMap::new(),
+            timeline_index: HashMap::new(),
+            hash_index: HashMap::new(),
+            last_reconcile: Instant::now(),
+            reconcile_max_age,
+            reconciled: false,
         }
     }
 }
 
 pub struct Mempool {
+    /// Reth-backed pool: packing (`best_txns`) and broadcast ground truth
+    /// (`get_broadcast_txns`). Aptos has no separate trait — body lives in store.
     pool: Box<dyn TxPool>,
-    /// Interior mutability for `&self` trait methods (read_timeline / range).
-    index: Mutex<BroadcastIndex>,
+    /// Broadcast projection (`TransactionStore`), under mutex because
+    /// `CoreMempoolTrait::{read_timeline,timeline_range*}` take `&self` and must
+    /// mutate. Aptos: `transactions: TransactionStore` with `&mut self` APIs.
+    transactions: Mutex<TransactionStore>,
+    /// Number of sender-address buckets (`addr last byte % n`). Aptos: same
+    /// field on `TransactionStore` / mempool config `num_sender_buckets`.
     num_sender_buckets: u8,
-    /// Fee/ranking bucket count for cursor length (`broadcast_buckets.len()`).
-    /// Logic in v1 only uses fee slot 0; length must still match gaptos.
+    /// Length of returned `MultiBucketTimelineIndexIds.id_per_bucket`.
+    /// Equals `config.mempool.broadcast_buckets.len()` (default 10). Aptos uses
+    /// this many fee sub-timelines; Gravity v1 only advances fee slot 0 but must
+    /// still emit this length so gaptos `PeerSyncState::update` is not a no-op.
     num_fee_slots: usize,
 }
 
@@ -96,8 +154,8 @@ impl CoreMempoolTrait for Mempool {
         start_end_pairs: HashMap<TimelineIndexIdentifier, (u64, u64)>,
     ) -> Vec<(SignedTransaction, u64)> {
         self.maybe_reconcile(false);
-        let idx = self.index.lock().unwrap();
-        Self::timeline_range_with_index(&idx, sender_bucket, start_end_pairs)
+        let store = self.transactions.lock().unwrap();
+        Self::timeline_range_with_store(&store, sender_bucket, start_end_pairs)
     }
 
     fn timeline_range_of_message(
@@ -109,10 +167,10 @@ impl CoreMempoolTrait for Mempool {
     ) -> Vec<(SignedTransaction, u64)> {
         // Lock once; do not call timeline_range (std Mutex is not reentrant).
         self.maybe_reconcile(false);
-        let idx = self.index.lock().unwrap();
+        let store = self.transactions.lock().unwrap();
         let mut out = Vec::new();
         for (bucket, pairs) in sender_start_end_pairs {
-            out.extend(Self::timeline_range_with_index(&idx, bucket, pairs));
+            out.extend(Self::timeline_range_with_store(&store, bucket, pairs));
         }
         out
     }
@@ -131,17 +189,17 @@ impl CoreMempoolTrait for Mempool {
         _priority_of_receiver: BroadcastPeerPriority, // no content filter (upstream parity)
     ) -> (Vec<(SignedTransaction, u64)>, MultiBucketTimelineIndexIds) {
         self.maybe_reconcile(false);
-        let idx = self.index.lock().unwrap();
+        let store = self.transactions.lock().unwrap();
 
         let cursor0 = timeline_id.id_per_bucket.first().copied().unwrap_or(0);
         let mut out = Vec::new();
         let mut last_included = None;
 
-        let Some(tl) = idx.timelines.get(&sender_bucket) else {
+        let Some(tl) = store.timeline_index.get(&sender_bucket) else {
             return (out, self.cursor_from(cursor0, last_included));
         };
 
-        for (&id, (hash, admit_at)) in tl.entries.range((Excluded(cursor0), Unbounded)) {
+        for (&id, (hash, admit_at)) in tl.timeline.range((Excluded(cursor0), Unbounded)) {
             // Failover before: stop when admit Instant is too new; later ids are newer.
             if let Some(t) = before {
                 if *admit_at >= t {
@@ -152,7 +210,7 @@ impl CoreMempoolTrait for Mempool {
             if out.len() >= count {
                 break;
             }
-            let Some(txn) = idx.bodies.get(hash) else {
+            let Some(txn) = store.transactions.get(hash) else {
                 continue;
             };
             out.push((txn.clone(), 0)); // ready_time_ms = 0
@@ -252,7 +310,7 @@ impl Mempool {
 
         Self {
             pool,
-            index: Mutex::new(BroadcastIndex::new(max_age)),
+            transactions: Mutex::new(TransactionStore::new(max_age)),
             num_sender_buckets,
             num_fee_slots,
         }
@@ -267,20 +325,20 @@ impl Mempool {
     }
 
     /// Materialize `(Excluded(start), Included(end))` for fee slot 0 only.
-    /// Takes `&BroadcastIndex` so callers can lock once (std `Mutex` is not reentrant).
-    fn timeline_range_with_index(
-        idx: &BroadcastIndex,
+    /// Takes `&TransactionStore` so callers can lock once (std `Mutex` is not reentrant).
+    fn timeline_range_with_store(
+        store: &TransactionStore,
         sender_bucket: MempoolSenderBucket,
         start_end_pairs: HashMap<TimelineIndexIdentifier, (u64, u64)>,
     ) -> Vec<(SignedTransaction, u64)> {
         // Only fee slot 0 is used in v1; ignore other keys. Missing key → empty window.
         let (start, end) = start_end_pairs.get(&0).copied().unwrap_or((0, 0));
-        let Some(tl) = idx.timelines.get(&sender_bucket) else {
+        let Some(tl) = store.timeline_index.get(&sender_bucket) else {
             return vec![];
         };
         let mut out = Vec::new();
-        for (_id, (hash, _)) in tl.entries.range((Excluded(start), Included(end))) {
-            if let Some(txn) = idx.bodies.get(hash) {
+        for (_id, (hash, _)) in tl.timeline.range((Excluded(start), Included(end))) {
+            if let Some(txn) = store.transactions.get(hash) {
                 out.push((txn.clone(), 0)); // ready_time_ms = 0
             }
         }
@@ -288,17 +346,17 @@ impl Mempool {
     }
 
     /// Throttled reconcile against `pool.get_broadcast_txns`.
-    /// `force=true` ignores `max_age` (used by tests and any urgent refresh).
+    /// `force=true` ignores `reconcile_max_age` (tests / urgent refresh).
     fn maybe_reconcile(&self, force: bool) {
-        let mut idx = self.index.lock().unwrap();
-        if !force && idx.initialized && idx.last_refresh.elapsed() < idx.max_age {
+        let mut store = self.transactions.lock().unwrap();
+        if !force && store.reconciled && store.last_reconcile.elapsed() < store.reconcile_max_age {
             return;
         }
-        self.reconcile_locked(&mut idx);
+        self.reconcile_locked(&mut store);
     }
 
-    /// Design §4: remove left hashes, admit new in `get_broadcast_txns` order.
-    fn reconcile_locked(&self, idx: &mut BroadcastIndex) {
+    /// Remove left hashes, admit new in `get_broadcast_txns` iteration order.
+    fn reconcile_locked(&self, store: &mut TransactionStore) {
         let pending: Vec<_> = self.pool.get_broadcast_txns(None).collect();
         let mut pending_hashes: HashSet<TxnHash> = HashSet::with_capacity(pending.len());
         // Materialize (hash, bucket, signed) while preserving iteration order for admit.
@@ -314,33 +372,33 @@ impl Mempool {
 
         // --- remove hashes no longer in pending ---
         let to_remove: Vec<TxnHash> =
-            idx.bodies.keys().filter(|h| !pending_hashes.contains(h)).copied().collect();
+            store.transactions.keys().filter(|h| !pending_hashes.contains(h)).copied().collect();
         for h in to_remove {
-            if let Some((bucket, id)) = idx.hash_to_pos.remove(&h) {
-                if let Some(timeline) = idx.timelines.get_mut(&bucket) {
-                    timeline.entries.remove(&id);
+            if let Some((bucket, id)) = store.hash_index.remove(&h) {
+                if let Some(tl) = store.timeline_index.get_mut(&bucket) {
+                    tl.timeline.remove(&id);
                 }
             }
-            idx.bodies.remove(&h);
+            store.transactions.remove(&h);
         }
 
         // --- admit new hashes in iteration order ---
         for (hash, bucket, signed) in pending_pairs {
-            if idx.bodies.contains_key(&hash) {
+            if store.transactions.contains_key(&hash) {
                 // Still present: optional body overwrite; timeline id/Instant stay.
-                idx.bodies.insert(hash, signed);
+                store.transactions.insert(hash, signed);
                 continue;
             }
-            let timeline = idx.timelines.entry(bucket).or_insert_with(TimelineIndex::new);
-            let id = timeline.next_id;
-            timeline.next_id = timeline.next_id.saturating_add(1);
-            timeline.entries.insert(id, (hash, Instant::now()));
-            idx.hash_to_pos.insert(hash, (bucket, id));
-            idx.bodies.insert(hash, signed);
+            let tl = store.timeline_index.entry(bucket).or_insert_with(TimelineIndex::new);
+            let id = tl.timeline_id;
+            tl.timeline_id = tl.timeline_id.saturating_add(1);
+            tl.timeline.insert(id, (hash, Instant::now()));
+            store.hash_index.insert(hash, (bucket, id));
+            store.transactions.insert(hash, signed);
         }
 
-        idx.initialized = true;
-        idx.last_refresh = Instant::now();
+        store.reconciled = true;
+        store.last_reconcile = Instant::now();
     }
 
     /// This function will be called once the transaction has been stored.
@@ -437,41 +495,41 @@ impl Mempool {
 
     #[cfg(test)]
     fn debug_timeline_len(&self, bucket: MempoolSenderBucket) -> usize {
-        let idx = self.index.lock().unwrap();
-        idx.timelines.get(&bucket).map(|t| t.entries.len()).unwrap_or(0)
+        let store = self.transactions.lock().unwrap();
+        store.timeline_index.get(&bucket).map(|t| t.timeline.len()).unwrap_or(0)
     }
 
     #[cfg(test)]
     fn debug_next_id(&self, bucket: MempoolSenderBucket) -> u64 {
-        let idx = self.index.lock().unwrap();
-        idx.timelines.get(&bucket).map(|t| t.next_id).unwrap_or(1)
+        let store = self.transactions.lock().unwrap();
+        store.timeline_index.get(&bucket).map(|t| t.timeline_id).unwrap_or(1)
     }
 
     #[cfg(test)]
     fn debug_only_id(&self, bucket: MempoolSenderBucket) -> u64 {
-        let idx = self.index.lock().unwrap();
-        let t = idx.timelines.get(&bucket).expect("timeline for bucket");
-        assert_eq!(t.entries.len(), 1, "debug_only_id requires exactly one entry");
-        *t.entries.keys().next().unwrap()
+        let store = self.transactions.lock().unwrap();
+        let t = store.timeline_index.get(&bucket).expect("timeline for bucket");
+        assert_eq!(t.timeline.len(), 1, "debug_only_id requires exactly one entry");
+        *t.timeline.keys().next().unwrap()
     }
 
     #[cfg(test)]
     fn debug_bodies_len(&self) -> usize {
-        self.index.lock().unwrap().bodies.len()
+        self.transactions.lock().unwrap().transactions.len()
     }
 
     /// Admit Instant for the broadcast body whose sequence number equals `nonce`.
     /// Panics if no matching body is currently indexed (test helper only).
     #[cfg(test)]
     fn debug_admit_instant_for_nonce(&self, nonce: u64) -> Instant {
-        let idx = self.index.lock().unwrap();
-        for (hash, txn) in &idx.bodies {
+        let store = self.transactions.lock().unwrap();
+        for (hash, txn) in &store.transactions {
             if txn.sequence_number() == nonce {
-                let (bucket, id) = idx.hash_to_pos.get(hash).expect("hash_to_pos entry for body");
-                let (_h, admit_at) = idx
-                    .timelines
+                let (bucket, id) = store.hash_index.get(hash).expect("hash_index entry for body");
+                let (_h, admit_at) = store
+                    .timeline_index
                     .get(bucket)
-                    .and_then(|t| t.entries.get(id))
+                    .and_then(|t| t.timeline.get(id))
                     .expect("timeline entry for body");
                 return *admit_at;
             }
@@ -543,7 +601,7 @@ mod tests {
         }
         Mempool {
             pool: Box::new(Shared(txns)),
-            index: Mutex::new(BroadcastIndex::new(max_age)),
+            transactions: Mutex::new(TransactionStore::new(max_age)),
             num_sender_buckets: num_buckets.max(1),
             num_fee_slots: fee_slots.max(1),
         }
@@ -760,7 +818,7 @@ mod tests {
         }
         Mempool {
             pool: Box::new(BatchPool(txns)),
-            index: Mutex::new(BroadcastIndex::new(Duration::from_millis(20))),
+            transactions: Mutex::new(TransactionStore::new(Duration::from_millis(20))),
             num_sender_buckets: 1,
             num_fee_slots: 10,
         }
