@@ -240,14 +240,23 @@ impl CoreMempoolTrait for Mempool {
                 }
                 continue;
             }
+            // Second field is ready_time_ms (upstream aptos), not a timeline_id.
+            // We do not track insertion/ready time, so leave 0.
             out.push((entry.txn.clone(), 0));
             cache.entries.insert(
                 entry.hash,
                 CacheEntry { last_dispatched_at: now, last_target: target_slot, dispatched: true },
             );
         }
-        let len = out.len();
-        (out, MultiBucketTimelineIndexIds { id_per_bucket: vec![0; len] })
+        // Timeline is intentionally not implemented (architecture A: TxnCache +
+        // TTL broadcast progress). `MultiBucketTimelineIndexIds.id_per_bucket`
+        // must have length = fee/ranking bucket count (broadcast_buckets), not
+        // `out.len()`. Returning empty is an honest stub: no cursor progress,
+        // no fake fee-bucket shape, and no zip/update length mismatches from
+        // `vec![0; out.len()]`. See gravity-audit#1090.
+        // When timeline is re-enabled: return per-fee-bucket max timeline_ids
+        // with fixed length broadcast_buckets.len().
+        (out, MultiBucketTimelineIndexIds { id_per_bucket: vec![] })
     }
 
     fn gc(&mut self) {
@@ -573,6 +582,30 @@ mod tests {
             read(&m, 0, BroadcastPeerPriority::Primary, 16).is_empty(),
             "within TTL must suppress"
         );
+    }
+
+    /// gravity-audit#1090: returned MultiBucketTimelineIndexIds must not use
+    /// `out.len()` as fee-bucket count. Architecture A leaves timeline unimplemented,
+    /// so the honest stub is an empty `id_per_bucket` regardless of batch size.
+    #[test]
+    fn read_timeline_cursor_is_empty_stub_not_out_len() {
+        let txns = Arc::new(StdMutex::new(vec![mk_txn(0, 0, 1), mk_txn(0, 1, 2), mk_txn(0, 2, 3)]));
+        let m = mempool_with(txns, Duration::from_secs(60), Duration::from_millis(20), 1);
+        let (out, cursor) = m.read_timeline(
+            0,
+            &MultiBucketTimelineIndexIds { id_per_bucket: vec![] },
+            16,
+            None,
+            BroadcastPeerPriority::Primary,
+        );
+        assert_eq!(out.len(), 3, "should dispatch all three txns");
+        assert!(
+            cursor.id_per_bucket.is_empty(),
+            "timeline stub must be empty, not vec![0; out.len()] (got len={})",
+            cursor.id_per_bucket.len()
+        );
+        // ready_time_ms field is not a timeline_id; leave 0 when untracked.
+        assert!(out.iter().all(|(_, ready_ms)| *ready_ms == 0));
     }
 
     #[test]
