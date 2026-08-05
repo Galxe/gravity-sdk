@@ -25,7 +25,7 @@ use gaptos::{
 };
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
-    ops::Bound::{Excluded, Unbounded},
+    ops::Bound::{Excluded, Included, Unbounded},
     sync::Mutex,
     time::{Duration, Instant},
 };
@@ -92,23 +92,29 @@ pub struct Mempool {
 impl CoreMempoolTrait for Mempool {
     fn timeline_range(
         &self,
-        _sender_bucket: MempoolSenderBucket,
-        _start_end_pairs: HashMap<TimelineIndexIdentifier, (u64, u64)>,
+        sender_bucket: MempoolSenderBucket,
+        start_end_pairs: HashMap<TimelineIndexIdentifier, (u64, u64)>,
     ) -> Vec<(SignedTransaction, u64)> {
-        // Task 3 will implement real range; reconcile so index stays warm.
         self.maybe_reconcile(false);
-        vec![]
+        let idx = self.index.lock().unwrap();
+        Self::timeline_range_with_index(&idx, sender_bucket, start_end_pairs)
     }
 
     fn timeline_range_of_message(
         &self,
-        _sender_start_end_pairs: HashMap<
+        sender_start_end_pairs: HashMap<
             MempoolSenderBucket,
             HashMap<TimelineIndexIdentifier, (u64, u64)>,
         >,
     ) -> Vec<(SignedTransaction, u64)> {
+        // Lock once; do not call timeline_range (std Mutex is not reentrant).
         self.maybe_reconcile(false);
-        vec![]
+        let idx = self.index.lock().unwrap();
+        let mut out = Vec::new();
+        for (bucket, pairs) in sender_start_end_pairs {
+            out.extend(Self::timeline_range_with_index(&idx, bucket, pairs));
+        }
+        out
     }
 
     fn get_parking_lot_addresses(&self) -> Vec<(AccountAddress, u64)> {
@@ -258,6 +264,27 @@ impl Mempool {
         let mut id_per_bucket = vec![0u64; self.num_fee_slots];
         id_per_bucket[0] = last.unwrap_or(cursor0);
         MultiBucketTimelineIndexIds { id_per_bucket }
+    }
+
+    /// Materialize `(Excluded(start), Included(end))` for fee slot 0 only.
+    /// Takes `&BroadcastIndex` so callers can lock once (std `Mutex` is not reentrant).
+    fn timeline_range_with_index(
+        idx: &BroadcastIndex,
+        sender_bucket: MempoolSenderBucket,
+        start_end_pairs: HashMap<TimelineIndexIdentifier, (u64, u64)>,
+    ) -> Vec<(SignedTransaction, u64)> {
+        // Only fee slot 0 is used in v1; ignore other keys. Missing key → empty window.
+        let (start, end) = start_end_pairs.get(&0).copied().unwrap_or((0, 0));
+        let Some(tl) = idx.timelines.get(&sender_bucket) else {
+            return vec![];
+        };
+        let mut out = Vec::new();
+        for (_id, (hash, _)) in tl.entries.range((Excluded(start), Included(end))) {
+            if let Some(txn) = idx.bodies.get(hash) {
+                out.push((txn.clone(), 0)); // ready_time_ms = 0
+            }
+        }
+        out
     }
 
     /// Throttled reconcile against `pool.get_broadcast_txns`.
@@ -659,6 +686,49 @@ mod tests {
                 m.read_timeline(k, &empty_cursor(10), 16, None, BroadcastPeerPriority::Primary);
             assert_eq!(out.len(), 1, "bucket {k}");
         }
+    }
+
+    #[test]
+    fn timeline_range_returns_window() {
+        let txns = Arc::new(StdMutex::new(vec![mk_txn(0, 0, 1), mk_txn(0, 1, 2), mk_txn(0, 2, 3)]));
+        let m = mempool_with(txns, Duration::ZERO, 1, 10);
+        m.force_reconcile_for_test();
+        // ids 1..=3 in bucket 0
+        let mut pairs = HashMap::new();
+        pairs.insert(0u8, (0u64, 2u64)); // (Excluded(0), Included(2)) → id 1,2
+        let out = m.timeline_range(0, pairs);
+        assert_eq!(out.len(), 2);
+        assert_eq!(out[0].1, 0); // ready_time_ms
+        assert_eq!(out[1].1, 0);
+    }
+
+    #[test]
+    fn timeline_range_skips_removed_bodies() {
+        let t = mk_txn(0, 0, 1);
+        let txns = Arc::new(StdMutex::new(vec![t, mk_txn(0, 1, 2)]));
+        let m = mempool_with(txns.clone(), Duration::ZERO, 1, 10);
+        m.force_reconcile_for_test();
+        txns.lock().unwrap().remove(0); // drop first
+        m.force_reconcile_for_test();
+        let mut pairs = HashMap::new();
+        pairs.insert(0u8, (0u64, 10u64));
+        let out = m.timeline_range(0, pairs);
+        assert_eq!(out.len(), 1);
+    }
+
+    #[test]
+    fn timeline_range_of_message_flattens_buckets() {
+        let txns = Arc::new(StdMutex::new(vec![mk_txn(0, 0, 1), mk_txn(1, 0, 2)]));
+        let m = mempool_with(txns, Duration::ZERO, 2, 10);
+        m.force_reconcile_for_test();
+        let mut outer = HashMap::new();
+        for b in 0u8..2 {
+            let mut inner = HashMap::new();
+            inner.insert(0u8, (0u64, 100u64));
+            outer.insert(b, inner);
+        }
+        let out = m.timeline_range_of_message(outer);
+        assert_eq!(out.len(), 2);
     }
 
     // A TxPool that hands back a fixed set of txns, honoring the `limit` argument
