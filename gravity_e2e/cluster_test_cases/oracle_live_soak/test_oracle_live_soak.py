@@ -57,6 +57,12 @@ SOAK_EPOCH_INTERVAL_MICROS = 2 * 60 * 60 * 1_000_000
 RESTART_EPOCH_GUARD_SECONDS = 5 * 60
 SNAPSHOT_CONFIRMATION_BLOCKS = 16
 SNAPSHOT_READ_RETRIES = 20
+SNAPSHOT_CONVERGENCE_RETRIES = 20
+SNAPSHOT_CONVERGENCE_DELAY_SECONDS = 0.25
+
+
+class SnapshotNotConverged(AssertionError):
+    """A canonical snapshot is not yet readable consistently by every RPC."""
 
 _HEARTBEAT_FILE = "oracle_live_soak_heartbeat.jsonl"
 _SUMMARY_FILE = "oracle_live_soak_summary.json"
@@ -302,9 +308,10 @@ def _call_at_block_hash(function, block_hash: str):
             {"blockHash": block_hash, "requireCanonical": True},
         ],
     )
-    assert "error" not in response, (
-        f"EIP-1898 eth_call failed at {block_hash}: {response['error']}"
-    )
+    if "error" in response:
+        raise SnapshotNotConverged(
+            f"EIP-1898 eth_call failed at {block_hash}: {response['error']}"
+        )
     output_types = get_abi_output_types(function.abi)
     decoded = function.w3.codec.decode(
         output_types, HexBytes(response["result"])
@@ -351,7 +358,7 @@ def _price_state_at_block_hash(
         ):
             return progress_after, latest
         time.sleep(0.05)
-    raise AssertionError(
+    raise SnapshotNotConverged(
         f"could not obtain an atomic {pair} Oracle snapshot at {block_hash}: "
         f"progress_before={progress_before}, latest={latest}, "
         f"progress_after={progress_after}"
@@ -478,7 +485,7 @@ async def _wait_for_relayer_node(
     )
 
 
-async def _replicated_snapshot(
+async def _replicated_snapshot_once(
     cluster: Cluster,
     native_artifact: dict,
     price_artifact: dict,
@@ -506,9 +513,11 @@ async def _replicated_snapshot(
         block_hash = Web3.to_hex(block["hash"]).lower()
         if snapshot_hash is None:
             snapshot_hash = block_hash
-        assert block_hash == snapshot_hash, (
-            f"{node_id} block hash diverged at Gravity block {snapshot_block}"
-        )
+        if block_hash != snapshot_hash:
+            raise SnapshotNotConverged(
+                f"{node_id} block hash diverged at Gravity block "
+                f"{snapshot_block}: {block_hash} != {snapshot_hash}"
+            )
 
     node1 = cluster.get_node("node1")
 
@@ -588,28 +597,44 @@ async def _replicated_snapshot(
                 pair,
                 snapshot_hash,
             )
-            assert replica_progress == price_feeds[pair]["progress"], (
-                f"{node_id} {pair} progress diverged"
-            )
-            assert replica_latest == price_feeds[pair]["latestPrice"], (
-                f"{node_id} {pair} latest price diverged"
-            )
-        assert tuple(
+            if replica_progress != price_feeds[pair]["progress"]:
+                raise SnapshotNotConverged(
+                    f"{node_id} {pair} progress diverged: "
+                    f"{replica_progress} != "
+                    f"{price_feeds[pair]['progress']}"
+                )
+            if replica_latest != price_feeds[pair]["latestPrice"]:
+                raise SnapshotNotConverged(
+                    f"{node_id} {pair} latest price diverged: "
+                    f"{replica_latest} != "
+                    f"{price_feeds[pair]['latestPrice']}"
+                )
+        replica_polymarket_progress = tuple(
             _call_at_block_hash(
                 replica_native.functions.getSourceProgress(
                     SOURCE_TYPE_POLYMARKET, mirror_id
                 ),
                 snapshot_hash,
             )
-        ) == polymarket_progress, f"{node_id} Polymarket progress diverged"
-        assert tuple(
+        )
+        if replica_polymarket_progress != polymarket_progress:
+            raise SnapshotNotConverged(
+                f"{node_id} Polymarket progress diverged: "
+                f"{replica_polymarket_progress} != {polymarket_progress}"
+            )
+        replica_settlement = tuple(
             _call_at_block_hash(
                 replica_polymarket.functions.getSettlement(
                     mirror_id, condition_id
                 ),
                 snapshot_hash,
             )
-        ) == settlement, f"{node_id} Polymarket settlement diverged"
+        )
+        if replica_settlement != settlement:
+            raise SnapshotNotConverged(
+                f"{node_id} Polymarket settlement diverged: "
+                f"{replica_settlement} != {settlement}"
+            )
 
     return {
         "block": snapshot_block,
@@ -619,6 +644,53 @@ async def _replicated_snapshot(
         "polymarketProgress": polymarket_progress,
         "settlement": settlement,
     }
+
+
+async def _replicated_snapshot(
+    cluster: Cluster,
+    native_artifact: dict,
+    price_artifact: dict,
+    polymarket_artifact: dict,
+    price_resolver_address: str,
+    polymarket_resolver_address: str,
+    binance_feeds: list[dict],
+    mirror_id: int,
+    condition_id: bytes,
+) -> dict:
+    first_error = None
+    for attempt in range(1, SNAPSHOT_CONVERGENCE_RETRIES + 1):
+        try:
+            snapshot = await _replicated_snapshot_once(
+                cluster,
+                native_artifact,
+                price_artifact,
+                polymarket_artifact,
+                price_resolver_address,
+                polymarket_resolver_address,
+                binance_feeds,
+                mirror_id,
+                condition_id,
+            )
+            if attempt > 1:
+                LOG.info(
+                    "canonical replica snapshot converged after %d attempts",
+                    attempt,
+                )
+            return snapshot
+        except SnapshotNotConverged as exc:
+            if first_error is None:
+                first_error = str(exc)
+                LOG.warning(
+                    "canonical replica snapshot not yet converged: %s", exc
+                )
+            if attempt == SNAPSHOT_CONVERGENCE_RETRIES:
+                raise AssertionError(
+                    "canonical replica snapshot did not converge after "
+                    f"{attempt} attempts; first={first_error}; last={exc}"
+                ) from exc
+            await asyncio.sleep(SNAPSHOT_CONVERGENCE_DELAY_SECONDS)
+
+    raise AssertionError("unreachable replica snapshot retry state")
 
 
 def _append_json_line(path: Path, payload: dict) -> None:
