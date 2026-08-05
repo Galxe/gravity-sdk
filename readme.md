@@ -215,6 +215,10 @@ For step-by-step instructions on how to deploy a network of multiple nodes, refe
 
 This guide provides a comprehensive walkthrough of setting up a four-node network
 
+## RPC Latency Benchmark
+
+- [OpenChainBench](https://openchainbench.com/benchmarks/gravity-rpc) — live p50/p90/p99 latency leaderboard for free Gravity RPC endpoints, updated every 60 s
+
 ## Contributing
 
 We encourage contributions to the Gravity-SDK project. Whether you want to report an issue, suggest a new feature, or
