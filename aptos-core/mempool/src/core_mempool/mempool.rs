@@ -851,4 +851,530 @@ mod tests {
         let tiny = m.get_batch_inner(100, 1, true, BTreeMap::new());
         assert!(tiny.is_empty(), "a txn exceeding the budget must not be admitted");
     }
+
+    // =========================================================================
+    // Risk coverage: R-alt (T1/T2), R6 (T3), Failover before (T5 unit)
+    // Design: _local/wiki/mempool-broadcast/test-design-r-alt-r6-wan-failover.md
+    // Does NOT drive gaptos network.rs; simulates filter/pending/expired against
+    // Gravity CoreMempoolTrait (timeline_range* / read_timeline).
+    // =========================================================================
+
+    /// Production-shaped MessageId window for fee-slot cursors (slot 0 carries
+    /// progress; other slots zip as (0,0) and are ignored by v1 range).
+    /// Mirrors gaptos `MempoolMessageId::from_timeline_ids` + `decode` shape for
+    /// a single sender_bucket without depending on `pub(crate)` gaptos APIs.
+    fn message_window_from_cursors(
+        sender_bucket: MempoolSenderBucket,
+        old: &MultiBucketTimelineIndexIds,
+        new: &MultiBucketTimelineIndexIds,
+    ) -> HashMap<MempoolSenderBucket, HashMap<TimelineIndexIdentifier, (u64, u64)>> {
+        assert_eq!(old.id_per_bucket.len(), new.id_per_bucket.len());
+        let mut inner = HashMap::new();
+        for (i, (&o, &n)) in old.id_per_bucket.iter().zip(new.id_per_bucket.iter()).enumerate() {
+            inner.insert(i as TimelineIndexIdentifier, (o, n));
+        }
+        let mut outer = HashMap::new();
+        outer.insert(sender_bucket, inner);
+        outer
+    }
+
+    /// Slot-0 only id for tracking sent_messages in the filter simulation.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    struct SimMessageId {
+        sender_bucket: MempoolSenderBucket,
+        /// Exclusive lower bound (cursor before Fresh).
+        start: u64,
+        /// Inclusive upper bound (cursor after Fresh).
+        end: u64,
+    }
+
+    impl SimMessageId {
+        fn from_cursors(
+            bucket: MempoolSenderBucket,
+            old: &MultiBucketTimelineIndexIds,
+            new: &MultiBucketTimelineIndexIds,
+        ) -> Self {
+            Self {
+                sender_bucket: bucket,
+                start: old.id_per_bucket.first().copied().unwrap_or(0),
+                end: new.id_per_bucket.first().copied().unwrap_or(0),
+            }
+        }
+
+        fn to_range_args(
+            &self,
+        ) -> HashMap<MempoolSenderBucket, HashMap<TimelineIndexIdentifier, (u64, u64)>> {
+            let mut inner = HashMap::new();
+            inner.insert(0, (self.start, self.end));
+            let mut outer = HashMap::new();
+            outer.insert(self.sender_bucket, inner);
+            outer
+        }
+    }
+
+    /// Outcome of one simulated `determine_broadcast_batch` tick (filter + pending
+    /// + Expired/Fresh). See gaptos `network.rs` determine_broadcast_batch.
+    #[derive(Debug)]
+    enum SimBatchOutcome {
+        TooManyPendingBroadcasts {
+            pending: usize,
+        },
+        Expired {
+            id: SimMessageId,
+            bodies: Vec<SignedTransaction>,
+        },
+        Fresh {
+            id: SimMessageId,
+            bodies: Vec<SignedTransaction>,
+            new_cursor: MultiBucketTimelineIndexIds,
+        },
+        NoTransactions,
+    }
+
+    /// Filter `sent` the way gaptos does: drop MessageIds whose
+    /// `timeline_range_of_message` is empty (bodies committed / left pool).
+    fn filter_sent_keepalive(
+        m: &Mempool,
+        sent: BTreeMap<SimMessageId, Instant>,
+    ) -> BTreeMap<SimMessageId, Instant> {
+        sent.into_iter()
+            .filter(|(id, _)| !m.timeline_range_of_message(id.to_range_args()).is_empty())
+            .collect()
+    }
+
+    /// Minimal reimplementation of determine_broadcast_batch branches used by T1-B/C.
+    fn sim_determine_broadcast_batch(
+        m: &Mempool,
+        sent: &mut BTreeMap<SimMessageId, Instant>,
+        peer_cursor: &MultiBucketTimelineIndexIds,
+        sender_bucket: MempoolSenderBucket,
+        max_broadcasts_per_peer: usize,
+        ack_timeout: Duration,
+        now: Instant,
+        batch_size: usize,
+    ) -> SimBatchOutcome {
+        *sent = filter_sent_keepalive(m, std::mem::take(sent));
+
+        let mut pending = 0usize;
+        let mut expired_id: Option<SimMessageId> = None;
+        for (id, sent_at) in sent.iter() {
+            if now.duration_since(*sent_at) > ack_timeout {
+                // Keep earliest expired by iteration order; any expired is enough.
+                if expired_id.is_none() {
+                    expired_id = Some(*id);
+                }
+            } else {
+                pending += 1;
+            }
+            if pending >= max_broadcasts_per_peer {
+                return SimBatchOutcome::TooManyPendingBroadcasts { pending };
+            }
+        }
+
+        if let Some(id) = expired_id {
+            let bodies: Vec<_> = m
+                .timeline_range_of_message(id.to_range_args())
+                .into_iter()
+                .map(|(t, _)| t)
+                .collect();
+            return SimBatchOutcome::Expired { id, bodies };
+        }
+
+        let (out, new_cursor) = m.read_timeline(
+            sender_bucket,
+            peer_cursor,
+            batch_size,
+            None,
+            BroadcastPeerPriority::Primary,
+        );
+        if out.is_empty() {
+            return SimBatchOutcome::NoTransactions;
+        }
+        let id = SimMessageId::from_cursors(sender_bucket, peer_cursor, &new_cursor);
+        let bodies: Vec<_> = out.into_iter().map(|(t, _)| t).collect();
+        SimBatchOutcome::Fresh { id, bodies, new_cursor }
+    }
+
+    /// T1-A: After Fresh, MessageId window yields non-empty `timeline_range_of_message`
+    /// so the gaptos sent_messages filter would **not** drop the in-flight id.
+    /// (Architecture A stub range always empty → cleared every tick → permanent Fresh.)
+    #[test]
+    fn t1a_timeline_range_of_message_keeps_sent_window_nonempty() {
+        let fee_slots = 10usize;
+        let txns = Arc::new(StdMutex::new(vec![mk_txn(0, 0, 1), mk_txn(0, 1, 2)]));
+        let m = mempool_with(txns, Duration::ZERO, 1, fee_slots);
+        m.force_reconcile_for_test();
+
+        let old = empty_cursor(fee_slots);
+        let (batch, new_ids) = m.read_timeline(0, &old, 16, None, BroadcastPeerPriority::Primary);
+        assert!(!batch.is_empty(), "need ≥1 broadcastable txn");
+        assert_eq!(new_ids.id_per_bucket.len(), fee_slots);
+        assert!(new_ids.id_per_bucket[0] > 0);
+
+        // Production-shaped window: zip(old, new) fee slots for sender_bucket 0.
+        let window = message_window_from_cursors(0, &old, &new_ids);
+        let range_bodies = m.timeline_range_of_message(window);
+        assert!(
+            !range_bodies.is_empty(),
+            "non-empty range proves sent_messages filter keeps this MessageId \
+             (empty range would clear sent every tick — Arch A failure mode)"
+        );
+        assert_eq!(range_bodies.len(), batch.len());
+
+        // Slot-0 pair alone is sufficient for v1 (same pass criterion).
+        let sim = SimMessageId::from_cursors(0, &old, &new_ids);
+        let again = m.timeline_range_of_message(sim.to_range_args());
+        assert!(!again.is_empty());
+        assert_eq!(again.len(), batch.len());
+    }
+
+    /// T1-B: Withheld ACKs → pending grows; at max_broadcasts_per_peer refuse Fresh.
+    #[test]
+    fn t1b_max_broadcasts_per_peer_backpressure() {
+        let fee_slots = 10usize;
+        let max_broadcasts = 2usize;
+        let ack_timeout = Duration::from_secs(60); // do not expire
+        let batch_size = 2usize;
+        // Enough txns for several Fresh batches without draining early.
+        let txns =
+            Arc::new(StdMutex::new((0..12u8).map(|i| mk_txn(0, i as u64, 100 + i)).collect()));
+        let m = mempool_with(txns, Duration::ZERO, 1, fee_slots);
+        m.force_reconcile_for_test();
+
+        let mut sent: BTreeMap<SimMessageId, Instant> = BTreeMap::new();
+        let mut cursor = empty_cursor(fee_slots);
+        let t0 = Instant::now();
+
+        // Two successful Fresh sends (no ACK) → pending = 2.
+        for tick in 0..max_broadcasts {
+            match sim_determine_broadcast_batch(
+                &m,
+                &mut sent,
+                &cursor,
+                0,
+                max_broadcasts,
+                ack_timeout,
+                t0,
+                batch_size,
+            ) {
+                SimBatchOutcome::Fresh { id, bodies, new_cursor } => {
+                    assert!(!bodies.is_empty(), "tick {tick} Fresh empty");
+                    sent.insert(id, t0);
+                    cursor = new_cursor;
+                }
+                other => panic!("tick {tick}: expected Fresh, got {other:?}"),
+            }
+        }
+        assert_eq!(sent.len(), max_broadcasts);
+
+        // Third tick: both still pending → TooManyPendingBroadcasts (no Fresh).
+        match sim_determine_broadcast_batch(
+            &m,
+            &mut sent,
+            &cursor,
+            0,
+            max_broadcasts,
+            ack_timeout,
+            t0,
+            batch_size,
+        ) {
+            SimBatchOutcome::TooManyPendingBroadcasts { pending } => {
+                assert!(pending >= max_broadcasts);
+            }
+            other => panic!("expected TooManyPendingBroadcasts, got {other:?}"),
+        }
+        // In-flight windows still keepalive (bodies still in pool).
+        assert_eq!(filter_sent_keepalive(&m, sent.clone()).len(), max_broadcasts);
+
+        // Inject one ACK (remove one sent id) → Fresh allowed again.
+        let ack_id = *sent.keys().next().expect("sent non-empty");
+        sent.remove(&ack_id);
+        match sim_determine_broadcast_batch(
+            &m,
+            &mut sent,
+            &cursor,
+            0,
+            max_broadcasts,
+            ack_timeout,
+            t0,
+            batch_size,
+        ) {
+            SimBatchOutcome::Fresh { .. } => {}
+            other => panic!("after ACK expected Fresh, got {other:?}"),
+        }
+    }
+
+    /// T1-C: ACK timeout → Expired branch re-fetches body via timeline_range (not Fresh).
+    #[test]
+    fn t1c_ack_timeout_expired_uses_timeline_range() {
+        let fee_slots = 10usize;
+        let max_broadcasts = 20usize;
+        let ack_timeout = Duration::from_millis(50);
+        let batch_size = 4usize;
+        let txns = Arc::new(StdMutex::new((0..6u8).map(|i| mk_txn(0, i as u64, 50 + i)).collect()));
+        let m = mempool_with(txns.clone(), Duration::ZERO, 1, fee_slots);
+        m.force_reconcile_for_test();
+
+        let mut sent: BTreeMap<SimMessageId, Instant> = BTreeMap::new();
+        let mut cursor = empty_cursor(fee_slots);
+        let send_at = Instant::now();
+
+        let (fresh_id, fresh_hashes) = match sim_determine_broadcast_batch(
+            &m,
+            &mut sent,
+            &cursor,
+            0,
+            max_broadcasts,
+            ack_timeout,
+            send_at,
+            batch_size,
+        ) {
+            SimBatchOutcome::Fresh { id, bodies, new_cursor } => {
+                let hashes: HashSet<u64> = bodies.iter().map(|t| t.sequence_number()).collect();
+                sent.insert(id, send_at);
+                cursor = new_cursor;
+                (id, hashes)
+            }
+            other => panic!("expected Fresh, got {other:?}"),
+        };
+        assert!(!fresh_hashes.is_empty());
+
+        // Advance past ack_timeout without ACK.
+        let later = send_at + ack_timeout + Duration::from_millis(1);
+        match sim_determine_broadcast_batch(
+            &m,
+            &mut sent,
+            &cursor,
+            0,
+            max_broadcasts,
+            ack_timeout,
+            later,
+            batch_size,
+        ) {
+            SimBatchOutcome::Expired { id, bodies } => {
+                assert_eq!(id, fresh_id, "Expired must retransmit the same MessageId window");
+                let expired_hashes: HashSet<u64> =
+                    bodies.iter().map(|t| t.sequence_number()).collect();
+                assert_eq!(
+                    expired_hashes, fresh_hashes,
+                    "Expired body set must match original Fresh window (via timeline_range)"
+                );
+                // Cursor must NOT advance on Expired path (Fresh would change cursor).
+                // peer_cursor is unchanged in our sim when Expired is selected.
+            }
+            other => panic!("expected Expired after ack_timeout, got {other:?}"),
+        }
+
+        // Remove all bodies from pool → range empty → filter drops tracking (GC).
+        txns.lock().unwrap().clear();
+        m.force_reconcile_for_test();
+        let kept = filter_sent_keepalive(&m, sent.clone());
+        assert!(
+            kept.is_empty(),
+            "empty timeline_range_of_message must drop sent_messages entry (correct GC)"
+        );
+    }
+
+    /// T2 (lite): After cursor drain, further Fresh with same cursor is empty —
+    /// no periodic re-emission of already-scanned ids without leave/re-admit.
+    #[test]
+    fn t2_no_periodic_fresh_rebroadcast_after_drain() {
+        let fee_slots = 10usize;
+        let n = 20usize;
+        let count = 5usize;
+        let txns =
+            Arc::new(StdMutex::new((0..n as u8).map(|i| mk_txn(0, i as u64, 40 + i)).collect()));
+        let m = mempool_with(txns.clone(), Duration::ZERO, 1, fee_slots);
+        m.force_reconcile_for_test();
+
+        let mut cursor = empty_cursor(fee_slots);
+        let mut fresh_count: HashMap<u64, usize> = HashMap::new(); // seq → inclusions
+        let mut ticks = 0usize;
+        loop {
+            let (batch, new_cur) =
+                m.read_timeline(0, &cursor, count, None, BroadcastPeerPriority::Primary);
+            ticks += 1;
+            if batch.is_empty() {
+                break;
+            }
+            for (txn, _) in &batch {
+                *fresh_count.entry(txn.sequence_number()).or_insert(0) += 1;
+            }
+            // Cursor must advance while draining.
+            assert!(
+                new_cur.id_per_bucket[0] > cursor.id_per_bucket[0],
+                "cursor must monotonically advance during drain"
+            );
+            cursor = new_cur;
+            assert!(ticks <= n + 2, "drain should finish in O(n/count) ticks");
+        }
+
+        // Each admitted seq appeared exactly once in Fresh during drain.
+        assert_eq!(fresh_count.len(), n);
+        for seq in 0..n as u64 {
+            assert_eq!(
+                fresh_count.get(&seq).copied().unwrap_or(0),
+                1,
+                "seq {seq} must appear exactly once in Fresh during drain"
+            );
+        }
+
+        // Many more ticks with fixed pool + same cursor: no re-emission.
+        let drained_cursor = cursor.clone();
+        for _ in 0..30 {
+            let (batch, cur) =
+                m.read_timeline(0, &drained_cursor, count, None, BroadcastPeerPriority::Primary);
+            assert!(batch.is_empty(), "post-drain Fresh must stay empty (no TTL rebroadcast)");
+            assert_eq!(
+                cur.id_per_bucket[0], drained_cursor.id_per_bucket[0],
+                "empty batch must not advance cursor"
+            );
+        }
+
+        // Leave one hash and re-admit: new timeline id, can appear again in Fresh.
+        let reenter = mk_txn(0, 0, 40); // same body as first
+        {
+            let mut guard = txns.lock().unwrap();
+            guard.retain(|t| t.seq_number() != 0);
+        }
+        m.force_reconcile_for_test();
+        txns.lock().unwrap().push(reenter);
+        m.force_reconcile_for_test();
+        // From drained cursor: only re-admitted id (new, > old max) should show.
+        let (batch, _) =
+            m.read_timeline(0, &drained_cursor, count, None, BroadcastPeerPriority::Primary);
+        assert_eq!(batch.len(), 1, "re-admitted hash gets new id past drained cursor");
+        assert_eq!(batch[0].0.sequence_number(), 0);
+    }
+
+    /// T3 / R6: same sender_bucket, many senders, small count — cursor drain covers
+    /// every sender in ≤ ceil(S/count)+1 ticks (no permanent table-head starvation).
+    #[test]
+    fn t3_multi_sender_same_bucket_cover_in_ceil_s_over_count_ticks() {
+        let fee_slots = 10usize;
+        let s = 30usize;
+        let count = 5usize;
+        // num_sender_buckets=1 → all addresses share bucket 0 regardless of last byte.
+        // Distinct last bytes = distinct senders for inclusion accounting.
+        let txns = Arc::new(StdMutex::new((0..s as u8).map(|i| mk_txn(i, 0, 200 + i)).collect()));
+        let m = mempool_with(txns, Duration::ZERO, 1, fee_slots);
+        m.force_reconcile_for_test();
+
+        let mut cursor = empty_cursor(fee_slots);
+        let mut inclusion: HashMap<u8, usize> = HashMap::new(); // last byte of sender
+        let mut ticks = 0usize;
+        let mut first_batch_len = None;
+
+        loop {
+            let (batch, new_cur) =
+                m.read_timeline(0, &cursor, count, None, BroadcastPeerPriority::Primary);
+            if batch.is_empty() {
+                break;
+            }
+            if first_batch_len.is_none() {
+                first_batch_len = Some(batch.len());
+            }
+            // No duplicate seq/sender within one tick for single-cursor peer.
+            let mut seen_this_tick = HashSet::new();
+            for (txn, _) in &batch {
+                let last = txn.sender().into_bytes()[31];
+                assert!(seen_this_tick.insert(last), "duplicate sender {last} in same Fresh batch");
+                *inclusion.entry(last).or_insert(0) += 1;
+            }
+            assert!(
+                new_cur.id_per_bucket[0] > cursor.id_per_bucket[0],
+                "cursor must step each non-empty tick"
+            );
+            cursor = new_cur;
+            ticks += 1;
+            // Safety: avoid infinite loop on broken cursor.
+            assert!(ticks <= s + 2);
+        }
+
+        assert_eq!(first_batch_len, Some(count), "first batch must be full when S > count");
+
+        let max_ticks = (s + count - 1) / count + 1; // ceil(S/count)+1
+        assert!(ticks <= max_ticks, "full cover ticks {ticks} > ceil(S/count)+1 = {max_ticks}");
+
+        for i in 0..s as u8 {
+            assert!(
+                inclusion.get(&i).copied().unwrap_or(0) >= 1,
+                "sender last_byte={i} never appeared (table-head starvation / no cursor)"
+            );
+        }
+        // Weak fairness: after cover, each sender once (1 txn each).
+        for i in 0..s as u8 {
+            assert_eq!(inclusion[&i], 1, "sender {i} inclusion count");
+        }
+    }
+
+    /// T5 unit strengthen: Failover-style `before = now - 500ms` suppresses freshly
+    /// admitted txns; Primary (before=None) still returns them. Documents alignment
+    /// with `shared_mempool_failover_delay_ms` default 500 (wall-clock first-alt SLA
+    /// remains e2e — this is Instant filter semantics only).
+    #[test]
+    fn t5_failover_before_500ms_filters_fresh_admits() {
+        const FAILOVER_DELAY_MS: u64 = 500; // shared_mempool_failover_delay_ms default
+
+        let txns = Arc::new(StdMutex::new(vec![mk_txn(0, 0, 1)]));
+        let m = mempool_with(txns.clone(), Duration::ZERO, 1, 10);
+        m.force_reconcile_for_test();
+        // Separate admit Instant for B (existing filter boundary).
+        std::thread::sleep(Duration::from_millis(5));
+        txns.lock().unwrap().push(mk_txn(0, 1, 2));
+        m.force_reconcile_for_test();
+
+        let a_admit = m.debug_admit_instant_for_nonce(0);
+        let b_admit = m.debug_admit_instant_for_nonce(1);
+        assert!(b_admit > a_admit, "B must admit strictly after A");
+
+        // Primary: no before → both A and B.
+        let (primary, _) =
+            m.read_timeline(0, &empty_cursor(10), 16, None, BroadcastPeerPriority::Primary);
+        assert_eq!(primary.len(), 2, "Primary sees all admits");
+
+        // Boundary: before = B's admit Instant → only A (admit_at < before).
+        let (only_a, _) = m.read_timeline(
+            0,
+            &empty_cursor(10),
+            16,
+            Some(b_admit),
+            BroadcastPeerPriority::Primary,
+        );
+        assert_eq!(only_a.len(), 1);
+        assert_eq!(only_a[0].0.sequence_number(), 0);
+
+        // before = A's admit → empty (A also excluded as >=).
+        let (none, _) = m.read_timeline(
+            0,
+            &empty_cursor(10),
+            16,
+            Some(a_admit),
+            BroadcastPeerPriority::Primary,
+        );
+        assert!(none.is_empty(), "before at A's admit excludes A and later");
+
+        // Failover production formula: before = now - failover_delay_ms.
+        // Both A and B were admitted within the last few ms ≪ 500ms, so both
+        // are "too new" for Failover — batch empty. Proves delay gate without a
+        // flaky 500ms sleep (deterministic relative to Instant::now()).
+        let failover_before = Instant::now() - Duration::from_millis(FAILOVER_DELAY_MS);
+        assert!(
+            a_admit > failover_before && b_admit > failover_before,
+            "test assumption: admits are younger than failover delay window"
+        );
+        let (failover_out, failover_cur) = m.read_timeline(
+            0,
+            &empty_cursor(10),
+            16,
+            Some(failover_before),
+            BroadcastPeerPriority::Failover,
+        );
+        assert!(
+            failover_out.is_empty(),
+            "Failover before=now-{FAILOVER_DELAY_MS}ms must not emit sub-delay admits"
+        );
+        // Empty batch does not advance cursor (same invariant as Primary).
+        assert_eq!(failover_cur.id_per_bucket[0], 0);
+    }
 }
