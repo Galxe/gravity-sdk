@@ -24,7 +24,7 @@ use gaptos::{
     },
 };
 use std::{
-    collections::{BTreeMap, HashMap, HashSet},
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     ops::Bound::{Excluded, Included, Unbounded},
     sync::Mutex,
     time::{Duration, Instant},
@@ -913,13 +913,20 @@ mod tests {
     }
 
     /// Outcome of one simulated `determine_broadcast_batch` tick (filter + pending
-    /// + Expired/Fresh). See gaptos `network.rs` determine_broadcast_batch.
+    /// + Expired/Retry/Fresh + optional backoff). See gaptos `network.rs`
+    /// determine_broadcast_batch / process_broadcast_ack.
     #[derive(Debug)]
     enum SimBatchOutcome {
         TooManyPendingBroadcasts {
             pending: usize,
         },
+        /// ACK timeout retransmit via timeline_range (does not advance cursor).
         Expired {
+            id: SimMessageId,
+            bodies: Vec<SignedTransaction>,
+        },
+        /// Peer-full / retry=true path: re-fetch via timeline_range, no cursor advance.
+        Retry {
             id: SimMessageId,
             bodies: Vec<SignedTransaction>,
         },
@@ -929,6 +936,8 @@ mod tests {
             new_cursor: MultiBucketTimelineIndexIds,
         },
         NoTransactions,
+        /// backoff_mode set and this tick is not a scheduled_backoff tick.
+        PeerNotScheduled,
     }
 
     /// Filter `sent` the way gaptos does: drop MessageIds whose
@@ -942,6 +951,16 @@ mod tests {
             .collect()
     }
 
+    /// Optional inputs for the extended determine_broadcast_batch sim.
+    #[derive(Default)]
+    struct SimBatchOpts<'a> {
+        /// MessageIds awaiting retry retransmit (peer full / retry=true ACK path).
+        retry: Option<&'a mut BTreeSet<SimMessageId>>,
+        /// After backoff=true ACK, non-scheduled ticks must not broadcast.
+        backoff_mode: bool,
+        scheduled_backoff: bool,
+    }
+
     /// Minimal reimplementation of determine_broadcast_batch branches used by T1-B/C.
     fn sim_determine_broadcast_batch(
         m: &Mempool,
@@ -953,7 +972,44 @@ mod tests {
         now: Instant,
         batch_size: usize,
     ) -> SimBatchOutcome {
+        sim_determine_broadcast_batch_ex(
+            m,
+            sent,
+            peer_cursor,
+            sender_bucket,
+            max_broadcasts_per_peer,
+            ack_timeout,
+            now,
+            batch_size,
+            SimBatchOpts::default(),
+        )
+    }
+
+    /// Extended sim: backoff gate + optional retry set (gaptos order approximated).
+    fn sim_determine_broadcast_batch_ex(
+        m: &Mempool,
+        sent: &mut BTreeMap<SimMessageId, Instant>,
+        peer_cursor: &MultiBucketTimelineIndexIds,
+        sender_bucket: MempoolSenderBucket,
+        max_broadcasts_per_peer: usize,
+        ack_timeout: Duration,
+        now: Instant,
+        batch_size: usize,
+        mut opts: SimBatchOpts<'_>,
+    ) -> SimBatchOutcome {
+        // gaptos: backoff_mode without scheduled_backoff → PeerNotScheduled.
+        if opts.backoff_mode && !opts.scheduled_backoff {
+            return SimBatchOutcome::PeerNotScheduled;
+        }
+
         *sent = filter_sent_keepalive(m, std::mem::take(sent));
+        // Drop retry ids whose range is empty (same GC rule as sent).
+        if let Some(retry) = opts.retry.as_mut() {
+            **retry = std::mem::take(*retry)
+                .into_iter()
+                .filter(|id| !m.timeline_range_of_message(id.to_range_args()).is_empty())
+                .collect();
+        }
 
         let mut pending = 0usize;
         let mut expired_id: Option<SimMessageId> = None;
@@ -978,6 +1034,19 @@ mod tests {
                 .map(|(t, _)| t)
                 .collect();
             return SimBatchOutcome::Expired { id, bodies };
+        }
+
+        // Prefer Retry over Fresh when a retry MessageId is tracked.
+        if let Some(retry) = opts.retry.as_mut() {
+            if let Some(&id) = retry.iter().next() {
+                let bodies: Vec<_> = m
+                    .timeline_range_of_message(id.to_range_args())
+                    .into_iter()
+                    .map(|(t, _)| t)
+                    .collect();
+                retry.remove(&id);
+                return SimBatchOutcome::Retry { id, bodies };
+            }
         }
 
         let (out, new_cursor) = m.read_timeline(
@@ -1376,5 +1445,647 @@ mod tests {
         );
         // Empty batch does not advance cursor (same invariant as Primary).
         assert_eq!(failover_cur.id_per_bucket[0], 0);
+    }
+
+    // -------------------------------------------------------------------------
+    // T4 — delayed-ACK inject (app-layer Instant clock, no netem / wall sleep)
+    // -------------------------------------------------------------------------
+
+    /// T4-A: RTT D < ack_timeout → no Expired storm; delayed ACKs free pending;
+    /// each seq appears exactly once in Fresh over the drain.
+    #[test]
+    fn t4a_delayed_ack_rtt_under_timeout_no_expired_storm() {
+        let fee_slots = 10usize;
+        let max_broadcasts = 2usize;
+        let ack_timeout = Duration::from_millis(200);
+        let batch_size = 2usize;
+        let n = 8usize;
+        let d = Duration::from_millis(50); // D < ack_timeout
+        let tick_step = Duration::from_millis(20);
+
+        let txns =
+            Arc::new(StdMutex::new((0..n as u8).map(|i| mk_txn(0, i as u64, 10 + i)).collect()));
+        let m = mempool_with(txns, Duration::ZERO, 1, fee_slots);
+        m.force_reconcile_for_test();
+
+        let mut sent: BTreeMap<SimMessageId, Instant> = BTreeMap::new();
+        // Queued ACKs: (due_time, message_id)
+        let mut pending_acks: Vec<(Instant, SimMessageId)> = Vec::new();
+        let mut cursor = empty_cursor(fee_slots);
+        let mut now = Instant::now();
+        let mut expired_count = 0usize;
+        let mut too_many_seen = 0usize;
+        let mut fresh_count: HashMap<u64, usize> = HashMap::new();
+        let mut max_cursor = 0u64;
+
+        // Enough ticks to drain with delayed ACKs (backpressure stalls expected).
+        for _ in 0..200 {
+            // Apply ACKs whose due_time ≤ now.
+            let mut still = Vec::new();
+            for (due, id) in pending_acks.drain(..) {
+                if due <= now {
+                    sent.remove(&id);
+                } else {
+                    still.push((due, id));
+                }
+            }
+            pending_acks = still;
+
+            match sim_determine_broadcast_batch(
+                &m,
+                &mut sent,
+                &cursor,
+                0,
+                max_broadcasts,
+                ack_timeout,
+                now,
+                batch_size,
+            ) {
+                SimBatchOutcome::Fresh { id, bodies, new_cursor } => {
+                    for t in &bodies {
+                        *fresh_count.entry(t.sequence_number()).or_insert(0) += 1;
+                    }
+                    sent.insert(id, now);
+                    pending_acks.push((now + d, id));
+                    assert!(
+                        new_cursor.id_per_bucket[0] >= cursor.id_per_bucket[0],
+                        "cursor must not rewind on Fresh"
+                    );
+                    cursor = new_cursor;
+                    max_cursor = max_cursor.max(cursor.id_per_bucket[0]);
+                }
+                SimBatchOutcome::Expired { .. } => {
+                    expired_count += 1;
+                }
+                SimBatchOutcome::TooManyPendingBroadcasts { .. } => {
+                    too_many_seen += 1;
+                }
+                SimBatchOutcome::NoTransactions => {
+                    // Drain complete once ACKs catch up and cursor is past all ids.
+                    if fresh_count.len() >= n {
+                        break;
+                    }
+                }
+                other => panic!("unexpected outcome under delayed-ACK model: {other:?}"),
+            }
+            now += tick_step;
+        }
+
+        assert_eq!(
+            expired_count, 0,
+            "D={d:?} < ack_timeout={ack_timeout:?}: must not see Expired storm"
+        );
+        assert!(
+            max_cursor > 0,
+            "cursor must advance overall under delayed ACK (max_cursor={max_cursor})"
+        );
+        // With max_broadcasts=2 and D spanning multiple ticks, backpressure is expected.
+        assert!(
+            too_many_seen > 0 || fresh_count.len() == n,
+            "either hit TooManyPending or finished drain without stall"
+        );
+        assert_eq!(fresh_count.len(), n, "all seqs must appear in Fresh");
+        for seq in 0..n as u64 {
+            assert_eq!(
+                fresh_count.get(&seq).copied().unwrap_or(0),
+                1,
+                "seq {seq} must appear exactly once in Fresh (no re-emit as Fresh)"
+            );
+        }
+    }
+
+    /// T4-B: D > ack_timeout → Expired retransmit with same MessageId window;
+    /// late ACK is fine; peer cursor never rewinds; post-ACK Fresh does not
+    /// re-emit already-cursor-passed ids.
+    #[test]
+    fn t4b_rtt_over_ack_timeout_triggers_expired_not_cursor_rewind() {
+        let fee_slots = 10usize;
+        let max_broadcasts = 20usize;
+        let ack_timeout = Duration::from_millis(50);
+        let batch_size = 2usize;
+        // Enough for Fresh after Expired path is cleared.
+        let txns = Arc::new(StdMutex::new((0..8u8).map(|i| mk_txn(0, i as u64, 30 + i)).collect()));
+        let m = mempool_with(txns, Duration::ZERO, 1, fee_slots);
+        m.force_reconcile_for_test();
+
+        let mut sent: BTreeMap<SimMessageId, Instant> = BTreeMap::new();
+        let mut cursor = empty_cursor(fee_slots);
+        let send_at = Instant::now();
+        let cursor_at_start = cursor.id_per_bucket[0];
+
+        let (fresh_id, fresh_hashes, cursor_after_fresh) = match sim_determine_broadcast_batch(
+            &m,
+            &mut sent,
+            &cursor,
+            0,
+            max_broadcasts,
+            ack_timeout,
+            send_at,
+            batch_size,
+        ) {
+            SimBatchOutcome::Fresh { id, bodies, new_cursor } => {
+                let hashes: HashSet<u64> = bodies.iter().map(|t| t.sequence_number()).collect();
+                sent.insert(id, send_at);
+                cursor = new_cursor.clone();
+                (id, hashes, new_cursor)
+            }
+            other => panic!("expected Fresh, got {other:?}"),
+        };
+        assert!(!fresh_hashes.is_empty());
+        assert!(cursor_after_fresh.id_per_bucket[0] > cursor_at_start);
+
+        // Advance past timeout without ACK (simulates D > ack_timeout).
+        let after_timeout = send_at + ack_timeout + Duration::from_millis(1);
+        match sim_determine_broadcast_batch(
+            &m,
+            &mut sent,
+            &cursor,
+            0,
+            max_broadcasts,
+            ack_timeout,
+            after_timeout,
+            batch_size,
+        ) {
+            SimBatchOutcome::Expired { id, bodies } => {
+                assert_eq!(id, fresh_id, "Expired retransmit must use same MessageId window");
+                let expired_hashes: HashSet<u64> =
+                    bodies.iter().map(|t| t.sequence_number()).collect();
+                assert_eq!(expired_hashes, fresh_hashes);
+                // Cursor unchanged on Expired path.
+                assert_eq!(cursor.id_per_bucket[0], cursor_after_fresh.id_per_bucket[0]);
+            }
+            other => panic!("expected Expired when D > ack_timeout, got {other:?}"),
+        }
+
+        // Late ACK for the expired id (remove from sent) — still OK.
+        sent.remove(&fresh_id);
+        assert!(cursor.id_per_bucket[0] >= cursor_after_fresh.id_per_bucket[0]);
+
+        // Fresh continues past already-scanned window; no re-emission of fresh_hashes.
+        match sim_determine_broadcast_batch(
+            &m,
+            &mut sent,
+            &cursor,
+            0,
+            max_broadcasts,
+            ack_timeout,
+            after_timeout + Duration::from_millis(1),
+            batch_size,
+        ) {
+            SimBatchOutcome::Fresh { bodies, new_cursor, .. } => {
+                let next_hashes: HashSet<u64> =
+                    bodies.iter().map(|t| t.sequence_number()).collect();
+                assert!(
+                    next_hashes.is_disjoint(&fresh_hashes),
+                    "post-Expired Fresh must not re-emit already-cursor-passed ids: {next_hashes:?} vs {fresh_hashes:?}"
+                );
+                assert!(
+                    new_cursor.id_per_bucket[0] >= cursor.id_per_bucket[0],
+                    "cursor must not rewind after late ACK + Fresh"
+                );
+            }
+            other => panic!("expected Fresh after late ACK, got {other:?}"),
+        }
+    }
+
+    /// T4-C: WAN-like delayed ACK + small max_broadcasts → backpressure then recover.
+    #[test]
+    fn t4c_backpressure_under_delay_then_recover() {
+        let fee_slots = 10usize;
+        let max_broadcasts = 2usize;
+        let ack_timeout = Duration::from_secs(60); // no expire
+        let batch_size = 2usize;
+        let txns =
+            Arc::new(StdMutex::new((0..10u8).map(|i| mk_txn(0, i as u64, 70 + i)).collect()));
+        let m = mempool_with(txns, Duration::ZERO, 1, fee_slots);
+        m.force_reconcile_for_test();
+
+        let mut sent: BTreeMap<SimMessageId, Instant> = BTreeMap::new();
+        let mut cursor = empty_cursor(fee_slots);
+        // Simulated send clock; ACKs deliberately not applied yet (large D).
+        let t0 = Instant::now();
+        let mut delayed_ack_ids: Vec<SimMessageId> = Vec::new();
+
+        for tick in 0..max_broadcasts {
+            match sim_determine_broadcast_batch(
+                &m,
+                &mut sent,
+                &cursor,
+                0,
+                max_broadcasts,
+                ack_timeout,
+                t0,
+                batch_size,
+            ) {
+                SimBatchOutcome::Fresh { id, new_cursor, .. } => {
+                    sent.insert(id, t0);
+                    delayed_ack_ids.push(id);
+                    cursor = new_cursor;
+                }
+                other => panic!("tick {tick}: expected Fresh, got {other:?}"),
+            }
+        }
+
+        // Without applying ACKs: next tick must backpressure.
+        match sim_determine_broadcast_batch(
+            &m,
+            &mut sent,
+            &cursor,
+            0,
+            max_broadcasts,
+            ack_timeout,
+            t0 + Duration::from_millis(100), // still ≪ ack_timeout
+            batch_size,
+        ) {
+            SimBatchOutcome::TooManyPendingBroadcasts { pending } => {
+                assert!(pending >= max_broadcasts);
+            }
+            other => panic!("expected TooManyPendingBroadcasts, got {other:?}"),
+        }
+
+        // Apply one delayed ACK → room for Fresh again.
+        let one = delayed_ack_ids.remove(0);
+        sent.remove(&one);
+        match sim_determine_broadcast_batch(
+            &m,
+            &mut sent,
+            &cursor,
+            0,
+            max_broadcasts,
+            ack_timeout,
+            t0 + Duration::from_millis(200),
+            batch_size,
+        ) {
+            SimBatchOutcome::Fresh { .. } => {}
+            other => panic!("after delayed ACK expected Fresh recovery, got {other:?}"),
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // T2-B — immediate-ACK drain + multi-TTL Instant advance (no wall sleep)
+    // -------------------------------------------------------------------------
+
+    /// T2-B: Healthy peer (immediate ACK) drains pool; advancing Instant by
+    /// ≥ 3× old Arch-A TTL (15s) without pool change stays NoTransactions —
+    /// no periodic Fresh rebroadcast of already-scanned ids.
+    #[test]
+    fn t2b_immediate_ack_drain_then_no_fresh_rebroadcast() {
+        let fee_slots = 10usize;
+        let n = 12usize;
+        let batch_size = 3usize;
+        let max_broadcasts = 20usize;
+        let ack_timeout = Duration::from_secs(60);
+        let old_ttl = Duration::from_secs(5); // Arch-A MEMPOOL_BROADCAST_CACHE_TTL contrast
+
+        let txns =
+            Arc::new(StdMutex::new((0..n as u8).map(|i| mk_txn(0, i as u64, 80 + i)).collect()));
+        let m = mempool_with(txns, Duration::ZERO, 1, fee_slots);
+        m.force_reconcile_for_test();
+
+        let mut sent: BTreeMap<SimMessageId, Instant> = BTreeMap::new();
+        let mut cursor = empty_cursor(fee_slots);
+        let mut now = Instant::now();
+        let mut fresh_count: HashMap<u64, usize> = HashMap::new();
+
+        // Drain with immediate ACK so pending never blocks.
+        for _ in 0..n + 5 {
+            match sim_determine_broadcast_batch(
+                &m,
+                &mut sent,
+                &cursor,
+                0,
+                max_broadcasts,
+                ack_timeout,
+                now,
+                batch_size,
+            ) {
+                SimBatchOutcome::Fresh { id, bodies, new_cursor } => {
+                    for t in &bodies {
+                        *fresh_count.entry(t.sequence_number()).or_insert(0) += 1;
+                    }
+                    // Immediate ACK: do not leave id in sent.
+                    let _ = id;
+                    cursor = new_cursor;
+                }
+                SimBatchOutcome::NoTransactions => break,
+                other => panic!("during drain expected Fresh or empty, got {other:?}"),
+            }
+            now += Duration::from_millis(1);
+        }
+
+        assert_eq!(fresh_count.len(), n);
+        for seq in 0..n as u64 {
+            assert_eq!(fresh_count[&seq], 1, "seq {seq} Fresh count during drain");
+        }
+        let drained_cursor = cursor.clone();
+
+        // ≥ 3 × old TTL of simulated time without wall sleep; pool unchanged.
+        // Advance now by 1s per tick for 16 iterations (≥ 15s + epsilon).
+        for i in 0..16 {
+            now += Duration::from_secs(1);
+            match sim_determine_broadcast_batch(
+                &m,
+                &mut sent,
+                &drained_cursor,
+                0,
+                max_broadcasts,
+                ack_timeout,
+                now,
+                batch_size,
+            ) {
+                SimBatchOutcome::NoTransactions => {}
+                other => panic!(
+                    "post-drain tick {i} (now +{}s) must be NoTransactions, got {other:?}",
+                    i + 1
+                ),
+            }
+        }
+        // Simulated multi-TTL window: 16 × 1s ≥ 3 × old_ttl (15s).
+        assert!(Duration::from_secs(16) >= old_ttl * 3);
+        for seq in 0..n as u64 {
+            assert_eq!(
+                fresh_count[&seq], 1,
+                "seq {seq} must not gain Fresh rebroadcasts across multi-TTL Instant window"
+            );
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // T1-D / T1-E optional arms
+    // -------------------------------------------------------------------------
+
+    /// T1-D: ACK with backoff=true sets local backoff_mode; next non-scheduled
+    /// tick is PeerNotScheduled; scheduled_backoff tick may Fresh again.
+    #[test]
+    fn t1d_backoff_ack_suppresses_fresh_until_scheduled() {
+        let fee_slots = 10usize;
+        let max_broadcasts = 20usize;
+        let ack_timeout = Duration::from_secs(60);
+        let batch_size = 2usize;
+        let txns = Arc::new(StdMutex::new((0..6u8).map(|i| mk_txn(0, i as u64, 90 + i)).collect()));
+        let m = mempool_with(txns, Duration::ZERO, 1, fee_slots);
+        m.force_reconcile_for_test();
+
+        let mut sent: BTreeMap<SimMessageId, Instant> = BTreeMap::new();
+        let mut cursor = empty_cursor(fee_slots);
+        let t0 = Instant::now();
+
+        // Fresh then "ACK with backoff=true" (remove sent + set flag).
+        match sim_determine_broadcast_batch(
+            &m,
+            &mut sent,
+            &cursor,
+            0,
+            max_broadcasts,
+            ack_timeout,
+            t0,
+            batch_size,
+        ) {
+            SimBatchOutcome::Fresh { id, new_cursor, .. } => {
+                sent.insert(id, t0);
+                // Immediate ACK with backoff.
+                sent.remove(&id);
+                cursor = new_cursor;
+            }
+            other => panic!("expected Fresh, got {other:?}"),
+        }
+        let backoff_mode = true;
+
+        // Next tick without scheduled_backoff → PeerNotScheduled.
+        match sim_determine_broadcast_batch_ex(
+            &m,
+            &mut sent,
+            &cursor,
+            0,
+            max_broadcasts,
+            ack_timeout,
+            t0,
+            batch_size,
+            SimBatchOpts { retry: None, backoff_mode, scheduled_backoff: false },
+        ) {
+            SimBatchOutcome::PeerNotScheduled => {}
+            other => panic!("expected PeerNotScheduled, got {other:?}"),
+        }
+
+        // Scheduled backoff tick allows Fresh again.
+        match sim_determine_broadcast_batch_ex(
+            &m,
+            &mut sent,
+            &cursor,
+            0,
+            max_broadcasts,
+            ack_timeout,
+            t0,
+            batch_size,
+            SimBatchOpts { retry: None, backoff_mode, scheduled_backoff: true },
+        ) {
+            SimBatchOutcome::Fresh { .. } => {}
+            other => panic!("scheduled_backoff tick expected Fresh, got {other:?}"),
+        }
+    }
+
+    /// T1-E: Retry set (simulating peer-full / retry=true) prefers Retry over
+    /// Fresh; bodies come from timeline_range of that MessageId; cursor unchanged.
+    #[test]
+    fn t1e_retry_messages_use_timeline_range() {
+        let fee_slots = 10usize;
+        let max_broadcasts = 20usize;
+        let ack_timeout = Duration::from_secs(60);
+        let batch_size = 2usize;
+        let txns =
+            Arc::new(StdMutex::new((0..6u8).map(|i| mk_txn(0, i as u64, 110 + i)).collect()));
+        let m = mempool_with(txns, Duration::ZERO, 1, fee_slots);
+        m.force_reconcile_for_test();
+
+        let mut sent: BTreeMap<SimMessageId, Instant> = BTreeMap::new();
+        let mut retry: BTreeSet<SimMessageId> = BTreeSet::new();
+        let mut cursor = empty_cursor(fee_slots);
+        let t0 = Instant::now();
+
+        let (fresh_id, fresh_hashes, cursor_after) = match sim_determine_broadcast_batch(
+            &m,
+            &mut sent,
+            &cursor,
+            0,
+            max_broadcasts,
+            ack_timeout,
+            t0,
+            batch_size,
+        ) {
+            SimBatchOutcome::Fresh { id, bodies, new_cursor } => {
+                let hashes: HashSet<u64> = bodies.iter().map(|t| t.sequence_number()).collect();
+                // Simulate peer-full: track for Retry, do not advance as if send failed
+                // for cursor purposes — production still updates sent; here we put in retry.
+                sent.insert(id, t0);
+                retry.insert(id);
+                // Peer cursor already advanced on successful Fresh send in gaptos;
+                // keep that shape so we can prove Retry does not re-advance.
+                cursor = new_cursor.clone();
+                (id, hashes, new_cursor)
+            }
+            other => panic!("expected Fresh, got {other:?}"),
+        };
+
+        let cursor_before_retry = cursor.id_per_bucket[0];
+        match sim_determine_broadcast_batch_ex(
+            &m,
+            &mut sent,
+            &cursor,
+            0,
+            max_broadcasts,
+            ack_timeout,
+            t0,
+            batch_size,
+            SimBatchOpts { retry: Some(&mut retry), backoff_mode: false, scheduled_backoff: false },
+        ) {
+            SimBatchOutcome::Retry { id, bodies } => {
+                assert_eq!(id, fresh_id);
+                let retry_hashes: HashSet<u64> =
+                    bodies.iter().map(|t| t.sequence_number()).collect();
+                assert_eq!(
+                    retry_hashes, fresh_hashes,
+                    "Retry bodies must match original Fresh window via timeline_range"
+                );
+                assert_eq!(
+                    cursor.id_per_bucket[0], cursor_before_retry,
+                    "Retry path must not advance peer cursor"
+                );
+                assert_eq!(cursor.id_per_bucket[0], cursor_after.id_per_bucket[0]);
+            }
+            other => panic!("expected Retry, got {other:?}"),
+        }
+        assert!(retry.is_empty(), "retry id consumed after one Retry outcome");
+    }
+
+    // -------------------------------------------------------------------------
+    // T3-B — larger S cover
+    // -------------------------------------------------------------------------
+
+    /// T3-B: S=60, count=5, same pass criteria as T3 (ceil(S/count)+1 cover).
+    #[test]
+    fn t3b_larger_s_cover() {
+        let fee_slots = 10usize;
+        let s = 60usize;
+        let count = 5usize;
+        let txns = Arc::new(StdMutex::new((0..s as u8).map(|i| mk_txn(i, 0, 150 + i)).collect()));
+        let m = mempool_with(txns, Duration::ZERO, 1, fee_slots);
+        m.force_reconcile_for_test();
+
+        let mut cursor = empty_cursor(fee_slots);
+        let mut inclusion: HashMap<u8, usize> = HashMap::new();
+        let mut ticks = 0usize;
+        let mut first_batch_len = None;
+
+        loop {
+            let (batch, new_cur) =
+                m.read_timeline(0, &cursor, count, None, BroadcastPeerPriority::Primary);
+            if batch.is_empty() {
+                break;
+            }
+            if first_batch_len.is_none() {
+                first_batch_len = Some(batch.len());
+            }
+            let mut seen_this_tick = HashSet::new();
+            for (txn, _) in &batch {
+                let last = txn.sender().into_bytes()[31];
+                assert!(seen_this_tick.insert(last), "duplicate sender {last} in same tick");
+                *inclusion.entry(last).or_insert(0) += 1;
+            }
+            assert!(new_cur.id_per_bucket[0] > cursor.id_per_bucket[0]);
+            cursor = new_cur;
+            ticks += 1;
+            assert!(ticks <= s + 2);
+        }
+
+        assert_eq!(first_batch_len, Some(count));
+        let max_ticks = (s + count - 1) / count + 1;
+        assert!(ticks <= max_ticks, "ticks {ticks} > ceil(S/count)+1 = {max_ticks}");
+        for i in 0..s as u8 {
+            assert!(
+                inclusion.get(&i).copied().unwrap_or(0) >= 1,
+                "sender last_byte={i} never appeared"
+            );
+            assert_eq!(inclusion[&i], 1);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // T5-B — parameterized before mid(A,B) + delay=0 edge documentation
+    // -------------------------------------------------------------------------
+
+    /// T5-B: Primary sees both; Failover with before between A and B sees only A;
+    /// future before includes both; documents admit_at < before filter semantics
+    /// and that delay_ms=0 (before≈now) is not a substitute for the 500ms gate.
+    #[test]
+    fn t5b_failover_before_admits_older_than_delay() {
+        const FAILOVER_DELAY_MS: u64 = 500; // shared_mempool_failover_delay_ms default
+
+        let txns = Arc::new(StdMutex::new(vec![mk_txn(0, 0, 1)]));
+        let m = mempool_with(txns.clone(), Duration::ZERO, 1, 10);
+        m.force_reconcile_for_test();
+        std::thread::sleep(Duration::from_millis(5));
+        txns.lock().unwrap().push(mk_txn(0, 1, 2));
+        m.force_reconcile_for_test();
+
+        let a_admit = m.debug_admit_instant_for_nonce(0);
+        let b_admit = m.debug_admit_instant_for_nonce(1);
+        assert!(b_admit > a_admit);
+
+        // Primary before=None → both.
+        let (primary, _) =
+            m.read_timeline(0, &empty_cursor(10), 16, None, BroadcastPeerPriority::Primary);
+        assert_eq!(primary.len(), 2);
+
+        // mid(A,B): production filter is admit_at < before (exclude when >=).
+        let mid = a_admit + (b_admit.duration_since(a_admit) / 2);
+        assert!(mid > a_admit && mid < b_admit);
+        let (only_a, _) =
+            m.read_timeline(0, &empty_cursor(10), 16, Some(mid), BroadcastPeerPriority::Failover);
+        assert_eq!(only_a.len(), 1, "before=mid(A,B) must include only A");
+        assert_eq!(only_a[0].0.sequence_number(), 0);
+
+        // Future before: both admits are older than a far-future cutoff → both pass.
+        let future = Instant::now() + Duration::from_secs(1);
+        let (both, _) = m.read_timeline(
+            0,
+            &empty_cursor(10),
+            16,
+            Some(future),
+            BroadcastPeerPriority::Failover,
+        );
+        assert_eq!(both.len(), 2, "future before includes all current admits (admit_at < before)");
+
+        // delay_ms=0 edge: production formula before = now - 0 = now.
+        // Just-admitted entries have admit_at slightly in the past, so admit_at < now
+        // and they **pass** the filter — delay=0 is NOT "empty for just-admitted".
+        // Contrast: the real 500ms gate (before = now - 500ms) excludes sub-delay admits.
+        let before_now = Instant::now();
+        let (at_now, _) = m.read_timeline(
+            0,
+            &empty_cursor(10),
+            16,
+            Some(before_now),
+            BroadcastPeerPriority::Failover,
+        );
+        assert_eq!(
+            at_now.len(),
+            2,
+            "delay_ms=0 (before=now) still includes just-admitted (admit_at < now); \
+             only a positive failover delay creates the suppress window"
+        );
+
+        let failover_before = Instant::now() - Duration::from_millis(FAILOVER_DELAY_MS);
+        assert!(a_admit > failover_before && b_admit > failover_before);
+        let (suppressed, _) = m.read_timeline(
+            0,
+            &empty_cursor(10),
+            16,
+            Some(failover_before),
+            BroadcastPeerPriority::Failover,
+        );
+        assert!(
+            suppressed.is_empty(),
+            "before=now-{FAILOVER_DELAY_MS}ms excludes admits younger than the delay window"
+        );
     }
 }

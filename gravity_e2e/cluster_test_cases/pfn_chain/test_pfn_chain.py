@@ -908,25 +908,24 @@ async def _phase3_silent_blackhole(cluster: Cluster):
         cluster, "pfn2", bench_accounts, PHASE3_LOAD_SECS, label="b",
     )
 
-    # Per-half SLA asserts. The mempool broadcast cache TTL governs the
-    # worst-case slot-flip latency. Worst-case path stacks:
-    #   - TTL=5s wait for the cache entry to expire (Primary suppress window)
-    #   - one more TTL window of alt-slot retry queueing when priority.rs put
-    #     the blackhole peer as Primary on (nearly) every active sender
-    #     bucket — every in-flight tx funnels through the single Failover
-    #     slot and back-pressure stretches the next tick by up to a full TTL
-    #   - ~1s commit
-    #   - ~2s slack for snapshot refresh / tick jitter
-    # = 3 × TTL + 3s = 18s. Observed worst case in CI: p99 ≈ 15s when
-    # priority.rs degenerates to all-buckets-share-one-Primary.
+    # Per-half SLA asserts.
     #
-    # Direct path is ~1-2s, so this ceiling is loose for the
-    # well-distributed case and tight for the degenerate case. Replaces
-    # the prior bimodal split assertion which depended on Primary-stability
-    # across halves (PR #722 review point 1).
-    MEMPOOL_TTL_SECONDS = 5.0   # MEMPOOL_BROADCAST_CACHE_TTL_SECS in mempool.rs
+    # Historical (Arch-A): MEMPOOL_BROADCAST_CACHE_TTL_SECS = 5s governed the
+    # worst-case slot-flip / Primary suppress window; the ceiling stacked
+    #   3 × TTL + ~3s slack = 18s
+    # (TTL wait + alt-slot retry under priority degeneration + commit + jitter).
+    #
+    # poll-timeline v1: there is **no** broadcast-cache TTL rebroadcast cycle.
+    # Failover first-alt latency is gated by shared_mempool_failover_delay_ms
+    # (default **500ms**) via read_timeline `before`, not by a 5s cache flip.
+    # This P99_CEILING remains a **loose black-hole safety net** (still 18s)
+    # for degenerate priority / catch-up paths — it is **not** proof of the
+    # 500ms first-alt SLA (see unit T5 + design T5 e2e bands).
+    #
+    # Thresholds intentionally unchanged: comment-only alignment with v1.
+    MEMPOOL_TTL_SECONDS = 5.0   # historical Arch-A constant; not a v1 poll-timeline TTL
     EXPECTED_MIN_SENT = PHASE3_LOAD_SECS * 5
-    P99_CEILING = 3.0 * MEMPOOL_TTL_SECONDS + 3.0   # 18.0s
+    P99_CEILING = 3.0 * MEMPOOL_TTL_SECONDS + 3.0   # 18.0s safety net, not 500ms first-alt proof
     for half in (half_a, half_b):
         tag = f"phase 3{half['label']}/{half['target']}"
         assert half["sent"] >= EXPECTED_MIN_SENT, (
@@ -934,13 +933,13 @@ async def _phase3_silent_blackhole(cluster: Cluster):
             f"MultiAccountTxSender stalled?"
         )
         assert half["timeout"] == 0, (
-            f"[{tag}] {half['timeout']} timeouts — impl-d slot-flip is NOT "
-            f"catching in-flight txs within TTL window"
+            f"[{tag}] {half['timeout']} timeouts — failover path is NOT "
+            f"catching in-flight txs within the safety ceiling"
         )
         assert half["failed"] == 0, f"[{tag}] send failures: {half['failed']}"
         assert half["p99"] <= P99_CEILING, (
-            f"[{tag}] p99={half['p99']:.2f}s exceeds SLA ceiling "
-            f"{P99_CEILING:.1f}s (= 3 × TTL + 3s slack)"
+            f"[{tag}] p99={half['p99']:.2f}s exceeds safety ceiling "
+            f"{P99_CEILING:.1f}s (historical 3×Arch-A-TTL + 3s; not 500ms first-alt SLA)"
         )
 
     LOG.info(
