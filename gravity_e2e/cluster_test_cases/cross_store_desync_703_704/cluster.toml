@@ -1,0 +1,42 @@
+# Gravity Cluster Configuration - Cross-Store Desync Suite (gravity-audit #703/#704)
+#
+# Single node: the cross-store reth-ahead-of-consensus desync is a PER-NODE
+# crash-consistency bug between reth's execution rocksdb and the aptos consensus
+# DB, so a single validator is enough to reproduce it (no 4-validator quorum
+# needed; that only adds flakiness/time).
+#
+# UNIQUE base_dir + UNIQUE ports so this suite never collides with the existing
+# suites (single_node 8545, four_validator 8546-8549, vfn/pfn 8645-8654 /
+# 8745-8754, fuzzy 18545+). Everything here lives in its own 6480/6490, 89xx,
+# 9050, 10300, 1324, 12324 ranges.
+
+[cluster]
+name = "gravity-devnet-desync"
+base_dir = "/tmp/gravity-cluster-desync"
+
+
+[genesis_source]
+genesis_path = "./artifacts/genesis.json"
+waypoint_path = "./artifacts/waypoint.txt"
+
+[[nodes]]
+id = "node1"
+role = "genesis"
+# Same as every other suite: build/reuse the repo's quick-release gravity_node.
+# deploy.sh uses <project_path>/target/quick-release/gravity_node and only
+# builds if it is missing. (When running from a git worktree that has no
+# target/ of its own, point this at the shared checkout instead, e.g.
+# source = { bin_path = "/abs/path/to/target/quick-release/gravity_node" }.)
+source = { project_path = "../" }
+host = "127.0.0.1"
+validator_port = 6480
+vfn_port = 6490
+rpc_port = 8945
+metrics_port = 9050
+inspection_port = 10300
+https_port = 1324
+authrpc_port = 8953
+reth_p2p_port = 12324
+
+[faucet_init]
+num_accounts = 100
