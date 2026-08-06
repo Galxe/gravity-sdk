@@ -11,8 +11,13 @@ image tag — configuration and chain state persist across restarts.
 
 | File | Purpose |
 |---|---|
-| `Dockerfile` | Multi-stage build (`rust:1.93-slim` → `ubuntu:24.04`). Includes `gravity_node`, `gravity_cli`, and `curl`. Non-root (uid `10001`). `tini` as PID 1. |
+| `Dockerfile` | Multi-stage build (`rust:1.93-slim` → `ubuntu:24.04`). Includes normal runtime targets plus explicit storage and Byzantine test targets. Non-root (uid `10001`). `tini` as PID 1. |
 | `entrypoint.sh` | Reads `reth_config.json` (same schema as `cluster/templates/reth_config.json.tpl`) and `exec`s `gravity_node node` in the foreground. |
+| `bft-node-supervisor.sh` | Test-target-only child-process supervisor that keeps the container available while a corrupted node process is stopped. |
+| `bft-storage` | Test-target-only WAL/database backup, truncation, evidence, and restoration hook for bft-jepsen. |
+| `bft-byzantine` | Test-target-only protocol-aware equivocation control and evidence hook for bft-jepsen. |
+| `test-storage-fixture.sh` | Isolated image-level acceptance for storage corruption, container restart, exact restoration, and recovery. |
+| `test-byzantine-fixture.sh` | Isolated image-level acceptance for Byzantine hook authorization, capabilities, evidence, and recovery. |
 | `docker-compose.yaml` | Single-node deployment. Intended for one host running one validator. |
 | `docker-compose.cluster.yaml` | 4 validators + 1 VFN on one host. For end-to-end image verification against `cluster/` artifacts. |
 | `render-cluster-config.sh` | Renders the 5-node config set from `cluster/output/` + `cluster/templates/`. |
@@ -115,6 +120,123 @@ Default port range used by this topology: `6180–6183`, `6190–6195`,
 `8545–8554`, `8566`, `9001–9006`, `10000–10005`, `12024–12029`, `1024–1029`.
 Ensure nothing else on the host — including `cluster`'s host-mode deployment
 — is holding these ports before starting.
+
+## Disposable BFT storage-fault image
+
+The normal `runtime` and `runtime-host-binary` images do not contain the
+destructive storage hook. Build one of the explicit test targets for a cluster
+whose data volumes can be discarded:
+
+```bash
+# Build gravity_node from source.
+docker build --target runtime-storage-test \
+  -t gravity_node:storage-test \
+  -f docker/gravity_node/Dockerfile .
+
+# Or package binaries already built on the host.
+docker build --target runtime-host-binary-storage-test \
+  --build-arg HOST_BINARY=target/quick-release/gravity_node \
+  --build-arg HOST_CLI_BINARY=target/quick-release/gravity_cli \
+  -t gravity_node:storage-test \
+  -f docker/gravity_node/Dockerfile .
+```
+
+Each target container must use a fresh disposable data volume and receive all
+of these environment variables:
+
+```yaml
+environment:
+  BFT_STORAGE_FIXTURE_ENABLED: "1"
+  BFT_STORAGE_DISPOSABLE_DATA: I_UNDERSTAND_THIS_DATA_WILL_BE_DESTROYED
+  BFT_STORAGE_DATA_ROOT: /gravity/data
+  BFT_STORAGE_WAL_PATH: /gravity/data/data/consensus_db
+  BFT_STORAGE_DATABASE_PATH: /gravity/data/data/reth/db
+  BFT_STORAGE_DATABASE_MUTATION_FILE: state/CURRENT
+```
+
+For `wal`, the hook selects the newest non-empty `*.log` below the configured
+component path. For `database`, the mutation file is relative to the component
+path. Before truncation, the stopped component is archived in full and its
+SHA-256 is recorded. Healing verifies the archive, replaces the mutated
+component, checks the original file size and hash, and requires the node child
+process to remain stable. A successful heal removes the large backup archive
+but retains the small JSON evidence under `/gravity/data/.bft-storage/states`.
+An active fault also leaves `/gravity/data/.bft-storage-active`, so replacing
+or restarting the container cannot turn a corrupted child into a restart
+storm; the new supervisor waits for `heal` while keeping `docker exec` usable.
+
+The backup is stored on the same disposable volume. The hook refuses injection
+unless free space is at least the component size plus 256 MiB; adjust only with
+`BFT_STORAGE_BACKUP_RESERVE_MIB`. Never enable this target against an existing
+operator or long-running test volume.
+
+The bft-jepsen controller invokes the hook as root through `docker exec`:
+
+```text
+/usr/local/bin/bft-storage inject <wal|database> <fault-id> <node-id>
+/usr/local/bin/bft-storage heal <fault-id>
+/usr/local/bin/bft-storage read <fault-id> <wal|database> <node-id>
+```
+
+Run the isolated image-level acceptance test with fake node binaries and a
+temporary named volume:
+
+```bash
+bash docker/gravity_node/test-storage-fixture.sh
+```
+
+## Protocol-aware Byzantine test image
+
+The normal runtime images do not contain the Byzantine hook, and the normal
+binary does not compile the conflicting-message path. Build the explicit
+source target for a disposable BFT test cluster:
+
+```bash
+docker build --target runtime-byzantine-test \
+  -t gravity_node:byzantine-test \
+  -f docker/gravity_node/Dockerfile .
+```
+
+To package host binaries, compile `gravity_node` with the test feature first,
+then select the matching host-binary target:
+
+```bash
+RUSTFLAGS="--cfg tokio_unstable" \
+  cargo build --bin gravity_node --profile quick-release \
+    --features byzantine-test
+
+docker build --target runtime-host-binary-byzantine-test \
+  --build-arg HOST_BINARY=target/quick-release/gravity_node \
+  --build-arg HOST_CLI_BINARY=target/quick-release/gravity_cli \
+  -t gravity_node:byzantine-test \
+  -f docker/gravity_node/Dockerfile .
+```
+
+Each instrumented validator must opt in at runtime:
+
+```yaml
+environment:
+  BFT_BYZANTINE_FIXTURE_ENABLED: "1"
+```
+
+The current Gravity target advertises only `equivocation`. While the selected
+validator is proposer, it signs two different proposals for the same
+epoch/round and sends them to two non-overlapping validator groups. The node
+writes typed protocol evidence under `/run/bft-node`; the hook exposes only
+normalized counters to bft-jepsen:
+
+```text
+/usr/local/bin/bft-byzantine inject equivocation <fault-id> <node-id>
+/usr/local/bin/bft-byzantine read <fault-id>
+/usr/local/bin/bft-byzantine heal <fault-id>
+```
+
+`double-sign` and `twin` are rejected until they have independent, real
+protocol implementations. Run the isolated image/hook contract test with:
+
+```bash
+bash docker/gravity_node/test-byzantine-fixture.sh
+```
 
 ## Single-node deployment
 

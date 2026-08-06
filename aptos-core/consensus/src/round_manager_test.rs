@@ -123,6 +123,30 @@ pub struct NodeSetup {
     onchain_jwk_consensus_config: OnChainJWKConsensusConfig,
 }
 
+#[cfg(feature = "byzantine-test")]
+#[test]
+fn byzantine_conflicting_proposal_preserves_round_and_changes_block_id() {
+    let signer = ValidatorSigner::from_int(1);
+    let original = Block::new_proposal(
+        Payload::empty(false, true),
+        1,
+        10,
+        certificate_for_genesis(),
+        &signer,
+        Vec::new(),
+    )
+    .unwrap();
+
+    let conflicting_data = RoundManager::conflicting_proposal_data(original.block_data()).unwrap();
+    let conflicting = Block::new_proposal_from_block_data(conflicting_data, &signer).unwrap();
+
+    assert_eq!(original.epoch(), conflicting.epoch());
+    assert_eq!(original.round(), conflicting.round());
+    assert_eq!(original.parent_id(), conflicting.parent_id());
+    assert_eq!(original.timestamp_usecs() + 1, conflicting.timestamp_usecs());
+    assert_ne!(original.id(), conflicting.id());
+}
+
 impl NodeSetup {
     fn create_round_state(time_service: Arc<dyn TimeService>) -> RoundState {
         let base_timeout = Duration::new(60, 0);
