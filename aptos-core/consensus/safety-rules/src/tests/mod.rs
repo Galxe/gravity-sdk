@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 extern crate claims;
+mod fsync_durability_706;
 mod local;
 mod networking;
 mod safety_rules;
