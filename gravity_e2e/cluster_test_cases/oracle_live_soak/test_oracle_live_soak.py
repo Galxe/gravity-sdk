@@ -48,6 +48,7 @@ CALLBACK_SUCCESS_TOPIC0 = Web3.keccak(
 DEFAULT_SOAK_SECONDS = 24 * 60 * 60
 DEFAULT_POLL_SECONDS = 15
 DEFAULT_STALL_SECONDS = 6 * 60
+DEFAULT_RESTART_RPC_TIMEOUT_SECONDS = 3 * 60
 EPOCH_TIMEOUT_SECONDS = 180
 ORACLE_TIMEOUT_SECONDS = 360
 MIN_PROPOSAL_WINDOW_SECONDS = 40
@@ -76,6 +77,7 @@ class SoakSettings:
     minimum_advances: int
     restart_after_seconds: int
     restart_node: str
+    restart_rpc_timeout_seconds: int
 
 
 def _env_int(name: str, default: int, minimum: int = 0) -> int:
@@ -123,6 +125,11 @@ def _soak_settings() -> SoakSettings:
         minimum_advances=minimum_advances,
         restart_after_seconds=restart_after,
         restart_node=os.environ.get("ORACLE_SOAK_RESTART_NODE", "node4"),
+        restart_rpc_timeout_seconds=_env_int(
+            "ORACLE_SOAK_RESTART_RPC_TIMEOUT_SECONDS",
+            DEFAULT_RESTART_RPC_TIMEOUT_SECONDS,
+            minimum=30,
+        ),
     )
 
 
@@ -703,12 +710,15 @@ async def _restart_validator(
     node_id: str,
     target_block: int,
     price_targets: list[tuple[str, int]],
+    rpc_timeout: int,
 ) -> float:
     node = cluster.get_node(node_id)
     if node is None:
         raise AssertionError(f"unknown restart node {node_id}")
     started = time.monotonic()
-    assert await node.restart(), f"failed to restart {node_id}"
+    assert await node.restart(rpc_timeout=rpc_timeout), (
+        f"failed to restart {node_id} within {rpc_timeout}s RPC timeout"
+    )
     await _wait_for_block(node_id, node.w3, target_block, timeout=180)
     assert await cluster.check_block_increasing(timeout=60)
     for uri, target_nonce in price_targets:
@@ -803,6 +813,7 @@ async def _run_soak(
                         )
                         for feed in binance_feeds
                     ],
+                    settings.restart_rpc_timeout_seconds,
                 )
                 restart_done = True
             else:
@@ -961,6 +972,7 @@ async def _run_soak(
         "restartNode": (
             settings.restart_node if settings.restart_after_seconds else None
         ),
+        "restartRpcTimeoutSeconds": settings.restart_rpc_timeout_seconds,
         "restartRecoverySeconds": restart_recovery_seconds,
         "restartEpochGuardDeferrals": restart_epoch_guard_deferrals,
         "polymarketMirrorId": mirror_id,

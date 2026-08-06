@@ -135,7 +135,10 @@ With the defaults, `node4` becomes eligible to restart after 12 hours and runs
 as soon as it is outside the five-minute epoch-transition guard. The pytest
 process is the monitor, performs final assertions, writes the report, and tears
 down the cluster. Do not terminate it after merely seeing the first onchain
-update.
+update. A long-lived node can spend more than the cluster harness's usual 30
+seconds reopening its persisted databases, so this suite gives restart RPC
+recovery a three-minute window while still failing immediately if the process
+exits.
 
 ## Controls
 
@@ -147,6 +150,7 @@ update.
 | `ORACLE_SOAK_MIN_ADVANCES` | 80% of expected minutes | Required nonce advances for each Binance feed |
 | `ORACLE_SOAK_RESTART_AFTER_SECONDS` | Halfway for runs >= 1 hour | Earliest restart time; `0` disables |
 | `ORACLE_SOAK_RESTART_NODE` | `node4` | Validator selected for restart |
+| `ORACLE_SOAK_RESTART_RPC_TIMEOUT_SECONDS` | `180` | RPC recovery window for the restarted validator |
 | `BINANCE_PRICE_FEED_BASE_URL` | `https://testnet.binancefuture.com` | Binance Futures testnet base URL |
 | `BINANCE_PRICE_FEED_GRACE_MS` | `120000` | Closed-bucket safety delay |
 | `POLYMARKET_GAMMA_URL` | `https://gamma-api.polymarket.com` | Market discovery API |
