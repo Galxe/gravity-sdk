@@ -1,0 +1,688 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+readonly DISPOSABLE_CONFIRMATION="I_UNDERSTAND_THIS_DATA_WILL_BE_DESTROYED"
+
+die() {
+    echo "bft-storage: $*" >&2
+    exit 1
+}
+
+require_command() {
+    command -v "$1" >/dev/null 2>&1 || die "required command not found: $1"
+}
+
+validate_token() {
+    local label="$1"
+    local value="$2"
+
+    [[ "${value}" =~ ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$ ]] \
+        || die "${label} contains unsupported characters"
+}
+
+validate_non_negative_integer() {
+    local label="$1"
+    local value="$2"
+
+    [[ "${value}" =~ ^[0-9]+$ ]] || die "${label} must be a non-negative integer"
+}
+
+require_enabled() {
+    [[ "${BFT_STORAGE_FIXTURE_ENABLED:-}" == "1" ]] \
+        || die "fixture is disabled; set BFT_STORAGE_FIXTURE_ENABLED=1"
+    [[ "${BFT_STORAGE_DISPOSABLE_DATA:-}" == "${DISPOSABLE_CONFIRMATION}" ]] \
+        || die "disposable-data confirmation is missing"
+    [[ "$(id -u)" == "0" ]] \
+        || die "the hook must run as root (docker exec --user 0)"
+}
+
+path_is_within() {
+    local path="$1"
+    local root="$2"
+
+    [[ "${path}" == "${root}"/* ]]
+}
+
+canonical_existing_dir() {
+    local label="$1"
+    local raw_path="$2"
+    local path
+
+    [[ -n "${raw_path}" ]] || die "${label} is not configured"
+    [[ -d "${raw_path}" ]] || die "${label} is not a directory: ${raw_path}"
+    path="$(readlink -f -- "${raw_path}")"
+    [[ -n "${path}" && -d "${path}" ]] || die "cannot resolve ${label}: ${raw_path}"
+    printf '%s\n' "${path}"
+}
+
+initialize() {
+    require_enabled
+    require_command awk
+    require_command df
+    require_command du
+    require_command find
+    require_command jq
+    require_command readlink
+    require_command sha256sum
+    require_command stat
+    require_command tar
+    require_command truncate
+
+    DATA_ROOT="$(canonical_existing_dir BFT_STORAGE_DATA_ROOT \
+        "${BFT_STORAGE_DATA_ROOT:-/gravity/data}")"
+    RUN_DIR="${BFT_NODE_SUPERVISOR_DIR:-/run/bft-node}"
+    [[ -d "${RUN_DIR}" ]] || die "node supervisor directory is missing: ${RUN_DIR}"
+    RUN_DIR="$(readlink -f -- "${RUN_DIR}")"
+
+    STATE_ROOT_RAW="${BFT_STORAGE_STATE_ROOT:-${DATA_ROOT}/.bft-storage}"
+    mkdir -p "${STATE_ROOT_RAW}"
+    STATE_ROOT="$(readlink -f -- "${STATE_ROOT_RAW}")"
+    path_is_within "${STATE_ROOT}" "${DATA_ROOT}" \
+        || die "BFT_STORAGE_STATE_ROOT must be below BFT_STORAGE_DATA_ROOT"
+
+    STATE_DIR="${STATE_ROOT}/states"
+    BACKUP_ROOT="${STATE_ROOT}/backups"
+    LOCK_DIR="${RUN_DIR}/bft-storage.lock"
+    NODE_PID_FILE="${RUN_DIR}/node.pid"
+    SUPERVISOR_PID_FILE="${RUN_DIR}/supervisor.pid"
+    MAINTENANCE_FILE="${RUN_DIR}/maintenance"
+    FAULT_FILE="${RUN_DIR}/storage-fault"
+    PERSISTENT_FAULT_FILE="${DATA_ROOT}/.bft-storage-active"
+    mkdir -p "${STATE_DIR}" "${BACKUP_ROOT}"
+    chmod 700 "${STATE_ROOT}" "${STATE_DIR}" "${BACKUP_ROOT}"
+}
+
+read_numeric_pid() {
+    local path="$1"
+    local pid=""
+
+    [[ -f "${path}" ]] || return 1
+    pid="$(<"${path}")"
+    [[ "${pid}" =~ ^[0-9]+$ ]] || return 1
+    printf '%s\n' "${pid}"
+}
+
+ensure_supervisor() {
+    local pid
+    local command_line
+
+    pid="$(read_numeric_pid "${SUPERVISOR_PID_FILE}")" \
+        || die "node supervisor PID is unavailable"
+    kill -0 "${pid}" 2>/dev/null || die "node supervisor is not running"
+    command_line="$(tr '\0' ' ' < "/proc/${pid}/cmdline")"
+    [[ "${command_line}" == *"bft-node-supervisor"* ]] \
+        || die "PID ${pid} is not the storage-test node supervisor"
+    SUPERVISOR_PID="${pid}"
+}
+
+acquire_lock() {
+    local owner=""
+
+    if mkdir "${LOCK_DIR}" 2>/dev/null; then
+        printf '%s\n' "$$" > "${LOCK_DIR}/pid"
+        trap release_lock EXIT
+        return
+    fi
+
+    if [[ -f "${LOCK_DIR}/pid" ]]; then
+        owner="$(<"${LOCK_DIR}/pid")"
+    fi
+    if [[ ! "${owner}" =~ ^[0-9]+$ ]]; then
+        die "storage lock exists without a valid owner; inspect ${LOCK_DIR}"
+    fi
+    if kill -0 "${owner}" 2>/dev/null; then
+        die "another storage operation is active (PID ${owner})"
+    fi
+
+    rm -rf -- "${LOCK_DIR}"
+    mkdir "${LOCK_DIR}" 2>/dev/null \
+        || die "another storage operation acquired the lock"
+    printf '%s\n' "$$" > "${LOCK_DIR}/pid"
+    trap release_lock EXIT
+}
+
+release_lock() {
+    rm -rf -- "${LOCK_DIR:-/run/bft-node/bft-storage.lock}"
+}
+
+state_file_for() {
+    local fault_id="$1"
+    printf '%s/%s.json\n' "${STATE_DIR}" "${fault_id}"
+}
+
+write_state() {
+    local state_file="$1"
+    local active="$2"
+    local fault_id="$3"
+    local component="$4"
+    local node_id="$5"
+    local backup_ready="$6"
+    local mutation_applied="$7"
+    local restored="$8"
+    local target_path="$9"
+    local mutation_path="${10}"
+    local backup_path="${11}"
+    local backup_sha256="${12}"
+    local original_size="${13}"
+    local original_sha256="${14}"
+    local node_running="${15}"
+    local tmp="${state_file}.$$"
+
+    jq -cn \
+        --argjson active "${active}" \
+        --arg faultId "${fault_id}" \
+        --arg component "${component}" \
+        --arg nodeId "${node_id}" \
+        --argjson backupReady "${backup_ready}" \
+        --argjson mutationApplied "${mutation_applied}" \
+        --argjson restored "${restored}" \
+        --arg targetPath "${target_path}" \
+        --arg mutationPath "${mutation_path}" \
+        --arg backupPath "${backup_path}" \
+        --arg backupSha256 "${backup_sha256}" \
+        --argjson originalSizeBytes "${original_size}" \
+        --arg originalSha256 "${original_sha256}" \
+        --argjson nodeRunning "${node_running}" \
+        '{schemaVersion: 1,
+          active: $active,
+          faultId: $faultId,
+          component: $component,
+          nodeId: $nodeId,
+          backupReady: $backupReady,
+          mutationApplied: $mutationApplied,
+          restored: $restored,
+          targetPath: $targetPath,
+          mutationPath: $mutationPath,
+          backupPath: $backupPath,
+          backupSha256: $backupSha256,
+          originalSizeBytes: $originalSizeBytes,
+          originalSha256: $originalSha256,
+          nodeRunning: $nodeRunning}' > "${tmp}"
+    chmod 600 "${tmp}"
+    mv -f "${tmp}" "${state_file}"
+}
+
+validate_state_document() {
+    local state_file="$1"
+
+    jq -e '
+      type == "object" and
+      .schemaVersion == 1 and
+      (.active | type == "boolean") and
+      (.backupReady | type == "boolean") and
+      (.mutationApplied | type == "boolean") and
+      (.restored | type == "boolean")
+    ' "${state_file}" >/dev/null \
+        || die "invalid storage state: ${state_file}"
+}
+
+latest_non_empty_log() {
+    local target="$1"
+    local candidate
+    local candidate_mtime
+    local selected=""
+    local selected_mtime=-1
+
+    shopt -s nullglob
+    for candidate in "${target}"/*.log; do
+        [[ -f "${candidate}" && -s "${candidate}" ]] || continue
+        candidate_mtime="$(stat -c '%Y' -- "${candidate}")"
+        if (( candidate_mtime > selected_mtime )) \
+            || { (( candidate_mtime == selected_mtime )) \
+                 && [[ "${candidate}" > "${selected}" ]]; }; then
+            selected="${candidate}"
+            selected_mtime="${candidate_mtime}"
+        fi
+    done
+    shopt -u nullglob
+
+    [[ -n "${selected}" ]] || die "no non-empty *.log WAL file found below ${target}"
+    printf '%s\n' "${selected}"
+}
+
+resolve_mutation_path() {
+    local component="$1"
+    local target="$2"
+    local specification
+    local candidate
+
+    case "${component}" in
+        wal)
+            specification="${BFT_STORAGE_WAL_MUTATION_FILE:-@latest-log}"
+            ;;
+        database)
+            specification="${BFT_STORAGE_DATABASE_MUTATION_FILE:-state/CURRENT}"
+            ;;
+        *)
+            die "unsupported storage component: ${component}"
+            ;;
+    esac
+
+    if [[ "${specification}" == "@latest-log" ]]; then
+        [[ "${component}" == "wal" ]] \
+            || die "@latest-log is supported only for the wal component"
+        candidate="$(latest_non_empty_log "${target}")"
+    else
+        [[ "${specification}" != /* ]] \
+            || die "mutation file must be relative to its component path"
+        candidate="$(readlink -f -- "${target}/${specification}")" \
+            || die "cannot resolve mutation file: ${specification}"
+    fi
+
+    [[ -n "${candidate}" && -f "${candidate}" ]] \
+        || die "mutation file does not exist: ${specification}"
+    path_is_within "${candidate}" "${target}" \
+        || die "mutation file escapes its component path"
+    [[ -s "${candidate}" ]] || die "mutation file is already empty: ${candidate}"
+    printf '%s\n' "${candidate}"
+}
+
+resolve_component_target() {
+    local component="$1"
+    local raw_target
+
+    case "${component}" in
+        wal)
+            raw_target="${BFT_STORAGE_WAL_PATH:-}"
+            ;;
+        database)
+            raw_target="${BFT_STORAGE_DATABASE_PATH:-}"
+            ;;
+        *)
+            die "component must be wal or database"
+            ;;
+    esac
+
+    COMPONENT_TARGET="$(canonical_existing_dir "${component} component path" "${raw_target}")"
+    path_is_within "${COMPONENT_TARGET}" "${DATA_ROOT}" \
+        || die "${component} component path must be below BFT_STORAGE_DATA_ROOT"
+    [[ "${COMPONENT_TARGET}" != "${DATA_ROOT}" ]] \
+        || die "a component path may not equal BFT_STORAGE_DATA_ROOT"
+    if path_is_within "${STATE_ROOT}" "${COMPONENT_TARGET}"; then
+        die "storage state directory may not be inside a component path"
+    fi
+}
+
+resolve_component() {
+    local component="$1"
+
+    resolve_component_target "${component}"
+    MUTATION_PATH="$(resolve_mutation_path "${component}" "${COMPONENT_TARGET}")"
+}
+
+ensure_no_active_fault() {
+    local state_file
+
+    shopt -s nullglob
+    for state_file in "${STATE_DIR}"/*.json; do
+        validate_state_document "${state_file}"
+        if [[ "$(jq -r '.active' "${state_file}")" == "true" ]]; then
+            die "another storage fault is active: $(jq -r '.faultId' "${state_file}")"
+        fi
+    done
+    shopt -u nullglob
+}
+
+write_owned_marker() {
+    local path="$1"
+    local fault_id="$2"
+    local current=""
+    local tmp
+
+    if [[ -f "${path}" ]]; then
+        current="$(<"${path}")"
+        [[ "${current}" == "${fault_id}" ]] \
+            || die "control marker ${path} belongs to ${current}"
+        return
+    fi
+
+    tmp="${path}.$$"
+    printf '%s\n' "${fault_id}" > "${tmp}"
+    chmod 640 "${tmp}"
+    mv -f "${tmp}" "${path}"
+}
+
+remove_owned_marker() {
+    local path="$1"
+    local fault_id="$2"
+    local current=""
+
+    [[ -e "${path}" ]] || return
+    [[ -f "${path}" ]] || die "control marker is not a regular file: ${path}"
+    current="$(<"${path}")"
+    [[ "${current}" == "${fault_id}" ]] \
+        || die "control marker ${path} belongs to ${current}"
+    rm -f -- "${path}"
+}
+
+owned_node_pid() {
+    local pid
+    local parent_pid
+
+    pid="$(read_numeric_pid "${NODE_PID_FILE}")" || return 1
+    kill -0 "${pid}" 2>/dev/null || return 1
+    [[ -r "/proc/${pid}/stat" ]] || return 1
+    parent_pid="$(awk '{print $4}' "/proc/${pid}/stat")"
+    [[ "${parent_pid}" == "${SUPERVISOR_PID}" ]] || return 1
+    printf '%s\n' "${pid}"
+}
+
+stop_node() {
+    local fault_id="$1"
+    local timeout="${BFT_STORAGE_STOP_TIMEOUT_SECONDS:-30}"
+    local deadline
+    local pid=""
+
+    validate_non_negative_integer BFT_STORAGE_STOP_TIMEOUT_SECONDS "${timeout}"
+    write_owned_marker "${MAINTENANCE_FILE}" "${fault_id}"
+
+    if pid="$(owned_node_pid)"; then
+        kill -TERM "${pid}"
+        deadline=$((SECONDS + timeout))
+        while kill -0 "${pid}" 2>/dev/null && (( SECONDS < deadline )); do
+            sleep 0.2
+        done
+        if kill -0 "${pid}" 2>/dev/null; then
+            kill -KILL "${pid}"
+        fi
+    fi
+
+    deadline=$((SECONDS + 5))
+    while [[ -f "${NODE_PID_FILE}" ]] && (( SECONDS < deadline )); do
+        sleep 0.2
+    done
+    [[ ! -f "${NODE_PID_FILE}" ]] \
+        || die "node supervisor did not acknowledge the stopped process"
+}
+
+wait_for_stable_node() {
+    local timeout="$1"
+    local stable_seconds="$2"
+    local deadline=$((SECONDS + timeout))
+    local stable_since=-1
+
+    while (( SECONDS < deadline )); do
+        if owned_node_pid >/dev/null; then
+            if (( stable_since < 0 )); then
+                stable_since=${SECONDS}
+            fi
+            if (( SECONDS - stable_since >= stable_seconds )); then
+                return 0
+            fi
+        else
+            stable_since=-1
+        fi
+        sleep 0.2
+    done
+    return 1
+}
+
+start_node() {
+    local fault_id="$1"
+    local timeout="$2"
+    local stable_seconds="$3"
+
+    validate_non_negative_integer start-timeout "${timeout}"
+    validate_non_negative_integer stable-seconds "${stable_seconds}"
+    remove_owned_marker "${MAINTENANCE_FILE}" "${fault_id}"
+    wait_for_stable_node "${timeout}" "${stable_seconds}"
+}
+
+verify_backup_capacity() {
+    local target="$1"
+    local reserve_mib="${BFT_STORAGE_BACKUP_RESERVE_MIB:-256}"
+    local target_bytes
+    local available_kib
+    local available_bytes
+    local required_bytes
+
+    validate_non_negative_integer BFT_STORAGE_BACKUP_RESERVE_MIB "${reserve_mib}"
+    target_bytes="$(du -sb -- "${target}" | awk '{print $1}')"
+    available_kib="$(df -Pk -- "${BACKUP_ROOT}" | awk 'NR == 2 {print $4}')"
+    validate_non_negative_integer target-size "${target_bytes}"
+    validate_non_negative_integer available-space "${available_kib}"
+    available_bytes=$((available_kib * 1024))
+    required_bytes=$((target_bytes + reserve_mib * 1024 * 1024))
+    (( available_bytes >= required_bytes )) \
+        || die "insufficient backup space: need ${required_bytes} bytes, have ${available_bytes}"
+}
+
+inject_fault() {
+    local component="$1"
+    local fault_id="$2"
+    local node_id="$3"
+    local state_file
+    local backup_dir
+    local backup_path
+    local backup_tmp
+    local backup_sha256=""
+    local original_size
+    local original_sha256
+    local node_running=false
+    local inject_timeout="${BFT_STORAGE_INJECT_START_TIMEOUT_SECONDS:-10}"
+    local inject_stable="${BFT_STORAGE_INJECT_STABLE_SECONDS:-2}"
+
+    validate_token fault-id "${fault_id}"
+    validate_token node-id "${node_id}"
+    resolve_component "${component}"
+    ensure_supervisor
+    acquire_lock
+    ensure_no_active_fault
+
+    state_file="$(state_file_for "${fault_id}")"
+    [[ ! -e "${state_file}" ]] || die "fault ID has already been used: ${fault_id}"
+    backup_dir="${BACKUP_ROOT}/${fault_id}"
+    backup_path="${backup_dir}/component.tar"
+    write_state "${state_file}" true "${fault_id}" "${component}" "${node_id}" \
+        false false false "${COMPONENT_TARGET}" "${MUTATION_PATH}" \
+        "${backup_path}" "" 0 "" false
+
+    stop_node "${fault_id}"
+    sync
+    [[ -f "${MUTATION_PATH}" && -s "${MUTATION_PATH}" ]] \
+        || die "mutation file changed before the stopped snapshot: ${MUTATION_PATH}"
+    original_size="$(stat -c '%s' -- "${MUTATION_PATH}")"
+    original_sha256="$(sha256sum -- "${MUTATION_PATH}" | awk '{print $1}')"
+    write_state "${state_file}" true "${fault_id}" "${component}" "${node_id}" \
+        false false false "${COMPONENT_TARGET}" "${MUTATION_PATH}" \
+        "${backup_path}" "" "${original_size}" "${original_sha256}" false
+
+    verify_backup_capacity "${COMPONENT_TARGET}"
+    mkdir -m 700 "${backup_dir}"
+    backup_tmp="${backup_path}.tmp"
+    tar -C "$(dirname "${COMPONENT_TARGET}")" \
+        -cf "${backup_tmp}" -- "$(basename "${COMPONENT_TARGET}")"
+    tar -tf "${backup_tmp}" >/dev/null
+    mv -f "${backup_tmp}" "${backup_path}"
+    backup_sha256="$(sha256sum -- "${backup_path}" | awk '{print $1}')"
+
+    write_state "${state_file}" true "${fault_id}" "${component}" "${node_id}" \
+        true false false "${COMPONENT_TARGET}" "${MUTATION_PATH}" \
+        "${backup_path}" "${backup_sha256}" "${original_size}" \
+        "${original_sha256}" false
+
+    write_owned_marker "${PERSISTENT_FAULT_FILE}" "${fault_id}"
+    write_owned_marker "${FAULT_FILE}" "${fault_id}"
+    truncate -s 0 -- "${MUTATION_PATH}"
+    sync
+    [[ "$(stat -c '%s' -- "${MUTATION_PATH}")" == "0" ]] \
+        || die "truncation verification failed: ${MUTATION_PATH}"
+    [[ "$(sha256sum -- "${MUTATION_PATH}" | awk '{print $1}')" != "${original_sha256}" ]] \
+        || die "mutation did not change the selected file"
+
+    write_state "${state_file}" true "${fault_id}" "${component}" "${node_id}" \
+        true true false "${COMPONENT_TARGET}" "${MUTATION_PATH}" \
+        "${backup_path}" "${backup_sha256}" "${original_size}" \
+        "${original_sha256}" false
+
+    if start_node "${fault_id}" "${inject_timeout}" "${inject_stable}"; then
+        node_running=true
+    fi
+
+    write_state "${state_file}" true "${fault_id}" "${component}" "${node_id}" \
+        true true false "${COMPONENT_TARGET}" "${MUTATION_PATH}" \
+        "${backup_path}" "${backup_sha256}" "${original_size}" \
+        "${original_sha256}" "${node_running}"
+    jq -c . "${state_file}"
+}
+
+heal_fault() {
+    local fault_id="$1"
+    local state_file
+    local component
+    local node_id
+    local backup_ready
+    local mutation_applied
+    local target_path
+    local mutation_path
+    local backup_path
+    local backup_sha256
+    local original_size
+    local original_sha256
+    local actual_backup_sha256
+    local heal_timeout="${BFT_STORAGE_HEAL_START_TIMEOUT_SECONDS:-60}"
+    local heal_stable="${BFT_STORAGE_HEAL_STABLE_SECONDS:-5}"
+
+    validate_token fault-id "${fault_id}"
+    ensure_supervisor
+    acquire_lock
+    state_file="$(state_file_for "${fault_id}")"
+    [[ -f "${state_file}" ]] || die "storage state not found for fault ${fault_id}"
+    validate_state_document "${state_file}"
+
+    [[ "$(jq -r '.faultId' "${state_file}")" == "${fault_id}" ]] \
+        || die "state fault ID does not match ${fault_id}"
+    if [[ "$(jq -r '.active' "${state_file}")" == "false" \
+          && "$(jq -r '.restored' "${state_file}")" == "true" ]]; then
+        rm -rf -- "${BACKUP_ROOT:?}/${fault_id}"
+        jq -c . "${state_file}"
+        return
+    fi
+
+    component="$(jq -r '.component' "${state_file}")"
+    node_id="$(jq -r '.nodeId' "${state_file}")"
+    backup_ready="$(jq -r '.backupReady' "${state_file}")"
+    mutation_applied="$(jq -r '.mutationApplied' "${state_file}")"
+    target_path="$(jq -r '.targetPath' "${state_file}")"
+    mutation_path="$(jq -r '.mutationPath' "${state_file}")"
+    backup_path="$(jq -r '.backupPath' "${state_file}")"
+    backup_sha256="$(jq -r '.backupSha256' "${state_file}")"
+    original_size="$(jq -r '.originalSizeBytes' "${state_file}")"
+    original_sha256="$(jq -r '.originalSha256' "${state_file}")"
+
+    resolve_component_target "${component}"
+    [[ "${COMPONENT_TARGET}" == "${target_path}" ]] \
+        || die "configured component path no longer matches the recovery state"
+    path_is_within "${mutation_path}" "${target_path}" \
+        || die "recovery mutation path escapes its component path"
+    [[ "${backup_path}" == "${BACKUP_ROOT}/${fault_id}/component.tar" ]] \
+        || die "backup path does not belong to this fault"
+
+    stop_node "${fault_id}"
+    if [[ "${backup_ready}" == "true" ]]; then
+        [[ -f "${backup_path}" ]] || die "recovery backup is missing: ${backup_path}"
+        actual_backup_sha256="$(sha256sum -- "${backup_path}" | awk '{print $1}')"
+        [[ "${actual_backup_sha256}" == "${backup_sha256}" ]] \
+            || die "recovery backup hash mismatch"
+
+        path_is_within "${target_path}" "${DATA_ROOT}" \
+            || die "refusing to restore a target outside the data root"
+        [[ "${target_path}" != "${DATA_ROOT}" ]] \
+            || die "refusing to replace the data root"
+        rm -rf -- "${target_path}"
+        tar -C "$(dirname "${target_path}")" -xf "${backup_path}"
+        [[ -f "${mutation_path}" ]] || die "restored mutation file is missing"
+        [[ "$(stat -c '%s' -- "${mutation_path}")" == "${original_size}" ]] \
+            || die "restored mutation file has the wrong size"
+        [[ "$(sha256sum -- "${mutation_path}" | awk '{print $1}')" == "${original_sha256}" ]] \
+            || die "restored mutation file hash mismatch"
+    elif [[ "${mutation_applied}" == "true" ]]; then
+        die "state reports a mutation without a verified backup"
+    fi
+
+    sync
+    remove_owned_marker "${FAULT_FILE}" "${fault_id}"
+    remove_owned_marker "${PERSISTENT_FAULT_FILE}" "${fault_id}"
+    start_node "${fault_id}" "${heal_timeout}" "${heal_stable}" \
+        || die "node did not become stable after storage restoration"
+
+    write_state "${state_file}" false "${fault_id}" "${component}" "${node_id}" \
+        "${backup_ready}" "${mutation_applied}" true "${target_path}" \
+        "${mutation_path}" "${backup_path}" "${backup_sha256}" \
+        "${original_size}" "${original_sha256}" true
+    rm -rf -- "${BACKUP_ROOT:?}/${fault_id}"
+    jq -c . "${state_file}"
+}
+
+read_state() {
+    local fault_id="$1"
+    local expected_component="${2:-}"
+    local expected_node="${3:-}"
+    local state_file
+
+    validate_token fault-id "${fault_id}"
+    if [[ -n "${expected_node}" ]]; then
+        validate_token node-id "${expected_node}"
+    fi
+    ensure_supervisor
+
+    state_file="$(state_file_for "${fault_id}")"
+    if [[ ! -f "${state_file}" ]]; then
+        if [[ -n "${expected_component}" ]]; then
+            resolve_component "${expected_component}"
+        fi
+        jq -cn '{active: false, backupReady: false,
+                 mutationApplied: false, restored: false}'
+        return
+    fi
+
+    validate_state_document "${state_file}"
+    [[ "$(jq -r '.faultId' "${state_file}")" == "${fault_id}" ]] \
+        || die "state fault ID does not match ${fault_id}"
+    if [[ -n "${expected_component}" ]]; then
+        resolve_component_target "${expected_component}"
+        [[ "$(jq -r '.component' "${state_file}")" == "${expected_component}" ]] \
+            || die "state component does not match ${expected_component}"
+        [[ "$(jq -r '.targetPath' "${state_file}")" == "${COMPONENT_TARGET}" ]] \
+            || die "state component path does not match current configuration"
+    fi
+    if [[ -n "${expected_node}" ]]; then
+        [[ "$(jq -r '.nodeId' "${state_file}")" == "${expected_node}" ]] \
+            || die "state node ID does not match ${expected_node}"
+    fi
+    jq -c . "${state_file}"
+}
+
+usage() {
+    cat >&2 <<'EOF'
+Usage:
+  bft-storage inject <wal|database> <fault-id> <node-id>
+  bft-storage heal <fault-id>
+  bft-storage read <fault-id> [wal|database] [node-id]
+EOF
+    exit 2
+}
+
+[[ $# -ge 1 ]] || usage
+command_name="$1"
+shift
+
+initialize
+
+case "${command_name}" in
+    inject)
+        [[ $# -eq 3 ]] || usage
+        inject_fault "$1" "$2" "$3"
+        ;;
+    heal)
+        [[ $# -eq 1 ]] || usage
+        heal_fault "$1"
+        ;;
+    read)
+        [[ $# -ge 1 && $# -le 3 ]] || usage
+        read_state "$@"
+        ;;
+    *)
+        usage
+        ;;
+esac

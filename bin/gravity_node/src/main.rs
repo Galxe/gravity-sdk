@@ -345,7 +345,7 @@ fn main() {
     // `_engine` owns tokio Runtimes; it must be returned out of `block_on` so it
     // drops in this sync context — dropping a Runtime inside an async context
     // panics in tokio's blocking-pool shutdown.
-    let (coordinator_result, _engine) = rt.block_on(async move {
+    let (coordinator_result, _engine, failed_init_coordinator) = rt.block_on(async move {
         let datadir = datadir_rx.await.expect("datadir should be sent");
         let client = Arc::new(RethCli::new(consensus_args, txn_cache, shutdown_rx_cli).await);
         let chain_id = client.chain_id();
@@ -372,8 +372,7 @@ fn main() {
                     panic!("failed to set global relayer");
                 }
             }
-            _engine = Some(
-                ConsensusEngine::init(
+            match ConsensusEngine::init(
                     ConsensusEngineArgs {
                         node_config: gcei_config,
                         chain_id,
@@ -384,8 +383,19 @@ fn main() {
                     },
                     pool,
                 )
-                .await,
-            );
+                .await
+            {
+                Ok(engine) => _engine = Some(engine),
+                Err(error) => {
+                    tracing::error!("Failed to initialize consensus engine: {error:#}");
+                    let _ = shutdown_tx.send(());
+                    return (
+                        Err(format!("failed to initialize consensus engine: {error:#}")),
+                        _engine,
+                        Some(coordinator),
+                    );
+                }
+            }
         }
         coordinator.send_execution_args().await;
         let result = coordinator.run().await;
@@ -395,12 +405,17 @@ fn main() {
         }
 
         info!("Main shutdown complete");
-        (result, _engine)
+        (result, _engine, None)
     });
     drop(rt);
     drop(_engine);
 
-    if let Err(err) = reth_thread.join() {
+    // Keep the execution-args sender alive until Reth has shut down. Its receiver
+    // currently unwraps channel closure, so dropping the failed coordinator first
+    // would turn an expected initialization error into a background-task panic.
+    let reth_result = reth_thread.join();
+    drop(failed_init_coordinator);
+    if let Err(err) = reth_result {
         eprintln!("Reth thread panicked: {err:?}");
         std::process::exit(1);
     }

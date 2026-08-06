@@ -51,4 +51,5 @@ bytes = { workspace = true }
 [features]
 default = []
 failpoints = ["fail/failpoints", "aptos-consensus/failpoints", "aptos-mempool/failpoints"]
+byzantine-test = ["aptos-consensus/byzantine-test"]
 jemalloc-profiling = ["tikv-jemallocator/profiling", "tikv-jemalloc-sys/profiling"]
