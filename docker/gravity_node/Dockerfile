@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 #
-# Two build targets:
+# Runtime build targets:
 #
 #   1. `runtime` (default) — compile gravity_node and gravity_cli from source
 #      inside the container's `builder` stage:
@@ -17,8 +17,18 @@
 #                     -t gravity_node:rel \
 #                     -f docker/gravity_node/Dockerfile .
 #
-# Stage pruning means `--target runtime-host-binary` does not enter the
-# `builder` stage — the cargo build is genuinely skipped, not just cached.
+# The opt-in `runtime-storage-test` and
+# `runtime-host-binary-storage-test` targets add the destructive BFT storage
+# fixture and its child-process supervisor. They are never selected by the
+# default or release build.
+#
+# The opt-in `runtime-byzantine-test` and
+# `runtime-host-binary-byzantine-test` targets add the protocol-aware
+# equivocation hook. The source target compiles gravity_node with the
+# `byzantine-test` feature; neither target is used by default or release builds.
+#
+# Stage pruning means host-binary targets do not enter the `builder` stage;
+# the cargo build is genuinely skipped, not just cached.
 
 # ─── Stage 1: builder (used only by the `runtime` target) ────────────
 FROM rust:1.93-slim-bookworm AS builder
@@ -51,6 +61,19 @@ RUN --mount=type=cache,target=/build/target,id=gravity-target \
     && mkdir -p /out \
     && cp "target/${CARGO_PROFILE}/gravity_node" /out/gravity_node \
     && cp "target/${CARGO_PROFILE}/gravity_cli" /out/gravity_cli
+
+# Reuse the normal build cache, then replace only gravity_node with a binary
+# that contains the test-only Byzantine control path.
+FROM builder AS builder-byzantine-test
+
+ARG CARGO_PROFILE=release
+
+RUN --mount=type=cache,target=/build/target,id=gravity-target \
+    --mount=type=cache,target=/usr/local/cargo/registry,id=gravity-cargo-registry \
+    --mount=type=cache,target=/usr/local/cargo/git,id=gravity-cargo-git \
+    cargo build --bin gravity_node --profile "${CARGO_PROFILE}" \
+        --features byzantine-test \
+    && cp "target/${CARGO_PROFILE}/gravity_node" /out/gravity_node
 
 # ─── Stage 2: runtime-base (shared apt + user setup + entrypoint) ────
 # Common to both leaf targets. The binaries are added in the leaves
@@ -94,13 +117,80 @@ USER gravity
 ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/entrypoint.sh"]
 CMD ["node"]
 
-# ─── Stage 3b: runtime (default target) — copy from in-container build ─
-# Put last so `docker build .` (no --target) picks this and the
-# from-source build is the default behaviour, matching prior versions.
-FROM runtime-base AS runtime
+# Opt-in destructive storage fixture. This target is never selected by a
+# default or release build and must be paired with an explicitly disposable
+# data volume at runtime.
+FROM runtime-host-binary AS runtime-host-binary-storage-test
+
+USER root
+COPY docker/gravity_node/bft-node-supervisor.sh /usr/local/bin/bft-node-supervisor
+COPY docker/gravity_node/bft-storage /usr/local/bin/bft-storage
+RUN chmod 755 /usr/local/bin/bft-node-supervisor /usr/local/bin/bft-storage \
+    && mkdir -p /run/bft-node \
+    && chown gravity:gravity /run/bft-node
+
+USER gravity
+ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/bft-node-supervisor"]
+CMD ["node"]
+
+# Opt-in protocol-aware Byzantine fixture for a host-built binary. The caller
+# must supply a gravity_node compiled with `--features byzantine-test`.
+FROM runtime-host-binary AS runtime-host-binary-byzantine-test
+
+USER root
+COPY docker/gravity_node/bft-byzantine /usr/local/bin/bft-byzantine
+RUN chmod 755 /usr/local/bin/bft-byzantine \
+    && mkdir -p /run/bft-node \
+    && chown gravity:gravity /run/bft-node
+
+ENV BFT_BYZANTINE_CONTROL_PATH=/run/bft-node/byzantine-control.json \
+    BFT_BYZANTINE_EVIDENCE_PATH=/run/bft-node/byzantine-evidence.json
+
+USER gravity
+ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/entrypoint.sh"]
+CMD ["node"]
+
+# ─── Stage 3b: source-runtime-base — copy from in-container build ───
+FROM runtime-base AS source-runtime-base
 
 COPY --from=builder --chmod=755 /out/gravity_node /usr/local/bin/gravity_node
 COPY --from=builder --chmod=755 /out/gravity_cli /usr/local/bin/gravity_cli
+
+# Source-built equivalent of the host-binary storage-test target.
+FROM source-runtime-base AS runtime-storage-test
+
+COPY docker/gravity_node/bft-node-supervisor.sh /usr/local/bin/bft-node-supervisor
+COPY docker/gravity_node/bft-storage /usr/local/bin/bft-storage
+RUN chmod 755 /usr/local/bin/bft-node-supervisor /usr/local/bin/bft-storage \
+    && mkdir -p /run/bft-node \
+    && chown gravity:gravity /run/bft-node
+
+USER gravity
+ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/bft-node-supervisor"]
+CMD ["node"]
+
+# Source-built protocol-aware Byzantine fixture. The binary comes from the
+# dedicated feature-enabled builder stage, not from the normal runtime stage.
+FROM runtime-base AS runtime-byzantine-test
+
+COPY --from=builder-byzantine-test --chmod=755 /out/gravity_node /usr/local/bin/gravity_node
+COPY --from=builder-byzantine-test --chmod=755 /out/gravity_cli /usr/local/bin/gravity_cli
+COPY docker/gravity_node/bft-byzantine /usr/local/bin/bft-byzantine
+RUN chmod 755 /usr/local/bin/bft-byzantine \
+    && mkdir -p /run/bft-node \
+    && chown gravity:gravity /run/bft-node
+
+ENV BFT_BYZANTINE_CONTROL_PATH=/run/bft-node/byzantine-control.json \
+    BFT_BYZANTINE_EVIDENCE_PATH=/run/bft-node/byzantine-evidence.json
+
+USER gravity
+ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/entrypoint.sh"]
+CMD ["node"]
+
+# ─── Stage 3c: runtime (default target) ─────────────────────────────
+# Put last so `docker build .` (no --target) picks this and the
+# from-source build remains the default behaviour.
+FROM source-runtime-base AS runtime
 
 USER gravity
 ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/entrypoint.sh"]

@@ -38,7 +38,8 @@ impl TestConsensusLayer {
             },
             EmptyTxPool::boxed(),
         )
-        .await;
+        .await
+        .expect("failed to initialize consensus engine");
         Self { consensus_engine: engine }
     }
 

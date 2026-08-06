@@ -22,6 +22,8 @@ extern crate scopeguard;
 extern crate core;
 
 mod block_storage;
+#[cfg(feature = "byzantine-test")]
+mod byzantine_test;
 pub mod consensusdb;
 mod dag;
 mod epoch_manager;
