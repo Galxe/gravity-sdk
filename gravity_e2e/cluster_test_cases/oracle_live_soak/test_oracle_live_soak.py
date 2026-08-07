@@ -75,7 +75,7 @@ class SoakSettings:
     poll_seconds: int
     stall_seconds: int
     minimum_advances: int
-    restart_after_seconds: int
+    restart_schedule_seconds: tuple[int, ...]
     restart_node: str
     restart_rpc_timeout_seconds: int
 
@@ -108,22 +108,45 @@ def _soak_settings() -> SoakSettings:
     if minimum_advances < 0:
         raise ValueError("ORACLE_SOAK_MIN_ADVANCES must be non-negative")
 
-    configured_restart = os.environ.get("ORACLE_SOAK_RESTART_AFTER_SECONDS")
-    restart_after = (
-        duration // 2
-        if configured_restart is None and duration >= 60 * 60
-        else int(configured_restart or 0)
+    configured_schedule = os.environ.get(
+        "ORACLE_SOAK_RESTART_SCHEDULE_SECONDS"
     )
-    if restart_after < 0 or restart_after >= duration:
+    configured_restart = os.environ.get("ORACLE_SOAK_RESTART_AFTER_SECONDS")
+    if configured_schedule is not None and configured_restart is not None:
         raise ValueError(
-            "ORACLE_SOAK_RESTART_AFTER_SECONDS must be zero or less than duration"
+            "configure only one of ORACLE_SOAK_RESTART_SCHEDULE_SECONDS "
+            "and ORACLE_SOAK_RESTART_AFTER_SECONDS"
+        )
+    if configured_schedule is not None:
+        restart_schedule = tuple(
+            int(value.strip())
+            for value in configured_schedule.split(",")
+            if value.strip()
+        )
+    elif configured_restart is not None:
+        restart_after = int(configured_restart or 0)
+        restart_schedule = (restart_after,) if restart_after else ()
+    elif duration >= 60 * 60:
+        restart_schedule = (duration // 2,)
+    else:
+        restart_schedule = ()
+    if any(
+        restart_after <= 0 or restart_after >= duration
+        for restart_after in restart_schedule
+    ):
+        raise ValueError(
+            "restart schedule entries must be positive and less than duration"
+        )
+    if tuple(sorted(set(restart_schedule))) != restart_schedule:
+        raise ValueError(
+            "restart schedule entries must be unique and strictly increasing"
         )
     return SoakSettings(
         duration_seconds=duration,
         poll_seconds=poll_seconds,
         stall_seconds=stall_seconds,
         minimum_advances=minimum_advances,
-        restart_after_seconds=restart_after,
+        restart_schedule_seconds=restart_schedule,
         restart_node=os.environ.get("ORACLE_SOAK_RESTART_NODE", "node4"),
         restart_rpc_timeout_seconds=_env_int(
             "ORACLE_SOAK_RESTART_RPC_TIMEOUT_SECONDS",
@@ -131,6 +154,57 @@ def _soak_settings() -> SoakSettings:
             minimum=30,
         ),
     )
+
+
+def test_soak_settings_defaults_to_one_midpoint_restart(monkeypatch):
+    monkeypatch.setenv("ORACLE_SOAK_DURATION_SECONDS", "7200")
+    monkeypatch.delenv(
+        "ORACLE_SOAK_RESTART_SCHEDULE_SECONDS", raising=False
+    )
+    monkeypatch.delenv("ORACLE_SOAK_RESTART_AFTER_SECONDS", raising=False)
+
+    assert _soak_settings().restart_schedule_seconds == (3600,)
+
+
+def test_soak_settings_accepts_multiple_restarts(monkeypatch):
+    monkeypatch.setenv("ORACLE_SOAK_DURATION_SECONDS", "1200")
+    monkeypatch.setenv(
+        "ORACLE_SOAK_RESTART_SCHEDULE_SECONDS", "360, 720,960"
+    )
+    monkeypatch.delenv("ORACLE_SOAK_RESTART_AFTER_SECONDS", raising=False)
+
+    assert _soak_settings().restart_schedule_seconds == (360, 720, 960)
+
+
+def test_soak_settings_legacy_zero_disables_restart(monkeypatch):
+    monkeypatch.setenv("ORACLE_SOAK_DURATION_SECONDS", "7200")
+    monkeypatch.delenv(
+        "ORACLE_SOAK_RESTART_SCHEDULE_SECONDS", raising=False
+    )
+    monkeypatch.setenv("ORACLE_SOAK_RESTART_AFTER_SECONDS", "0")
+
+    assert _soak_settings().restart_schedule_seconds == ()
+
+
+@pytest.mark.parametrize("schedule", ["720,360", "360,360", "0", "1200"])
+def test_soak_settings_rejects_invalid_restart_schedule(
+    monkeypatch, schedule
+):
+    monkeypatch.setenv("ORACLE_SOAK_DURATION_SECONDS", "1200")
+    monkeypatch.setenv("ORACLE_SOAK_RESTART_SCHEDULE_SECONDS", schedule)
+    monkeypatch.delenv("ORACLE_SOAK_RESTART_AFTER_SECONDS", raising=False)
+
+    with pytest.raises(ValueError):
+        _soak_settings()
+
+
+def test_soak_settings_rejects_two_restart_controls(monkeypatch):
+    monkeypatch.setenv("ORACLE_SOAK_DURATION_SECONDS", "1200")
+    monkeypatch.setenv("ORACLE_SOAK_RESTART_SCHEDULE_SECONDS", "360")
+    monkeypatch.setenv("ORACLE_SOAK_RESTART_AFTER_SECONDS", "720")
+
+    with pytest.raises(ValueError, match="configure only one"):
+        _soak_settings()
 
 
 def _metadata() -> dict:
@@ -783,8 +857,8 @@ async def _run_soak(
     max_price_gaps = {pair: 0.0 for pair in initial_nonces}
     last_height_change = {node_id: started for node_id in cluster.nodes}
     previous_heights = dict(initial["heights"])
-    restart_done = False
-    restart_recovery_seconds = None
+    restart_index = 0
+    restart_recoveries = []
     restart_epoch_guard_deferrals = 0
     samples = 0
     final = initial
@@ -792,13 +866,16 @@ async def _run_soak(
     while time.monotonic() < deadline:
         now = time.monotonic()
         if (
-            settings.restart_after_seconds
-            and not restart_done
-            and now - started >= settings.restart_after_seconds
+            restart_index < len(settings.restart_schedule_seconds)
+            and now - started
+            >= settings.restart_schedule_seconds[restart_index]
         ):
             epoch_rpc = next(iter(cluster.nodes.values())).w3
             if _restart_window_is_safe(epoch_rpc):
-                restart_recovery_seconds = await _restart_validator(
+                scheduled_after = settings.restart_schedule_seconds[
+                    restart_index
+                ]
+                recovery_seconds = await _restart_validator(
                     cluster,
                     settings.restart_node,
                     max(int(height) for height in final["heights"].values()),
@@ -815,13 +892,27 @@ async def _run_soak(
                     ],
                     settings.restart_rpc_timeout_seconds,
                 )
-                restart_done = True
+                restart_recoveries.append(
+                    {
+                        "sequence": restart_index + 1,
+                        "scheduledAfterSeconds": scheduled_after,
+                        "actualAfterSeconds": round(
+                            time.monotonic() - started, 3
+                        ),
+                        "recoverySeconds": round(recovery_seconds, 3),
+                    }
+                )
+                restart_index += 1
             else:
                 restart_epoch_guard_deferrals += 1
-                if restart_epoch_guard_deferrals == 1:
+                if restart_epoch_guard_deferrals == 1 or (
+                    restart_epoch_guard_deferrals - 1
+                ) % 20 == 0:
                     LOG.info(
-                        "deferring validator restart outside the epoch "
-                        "transition guard"
+                        "deferring validator restart %d/%d outside the "
+                        "epoch transition guard",
+                        restart_index + 1,
+                        len(settings.restart_schedule_seconds),
                     )
 
         final = await _replicated_snapshot(
@@ -900,7 +991,9 @@ async def _run_soak(
             "nodeHeights": final["heights"],
             "priceFeeds": price_heartbeats,
             "polymarketNonce": int(final["polymarketProgress"][0]),
-            "restartCompleted": restart_done,
+            "restartCompleted": bool(settings.restart_schedule_seconds)
+            and restart_index == len(settings.restart_schedule_seconds),
+            "restartCount": restart_index,
             "restartEpochGuardDeferrals": restart_epoch_guard_deferrals,
         }
         _append_json_line(heartbeat_path, heartbeat)
@@ -920,8 +1013,11 @@ async def _run_soak(
         mirror_id,
         condition_id,
     )
-    if settings.restart_after_seconds:
-        assert restart_done, "configured validator restart did not run"
+    if settings.restart_schedule_seconds:
+        assert restart_index == len(settings.restart_schedule_seconds), (
+            f"only {restart_index}/{len(settings.restart_schedule_seconds)} "
+            "configured validator restarts ran"
+        )
 
     price_summaries = {}
     for feed in binance_feeds:
@@ -933,7 +1029,7 @@ async def _run_soak(
             f"{pair} advanced {advances} rounds; expected at least "
             f"{settings.minimum_advances}"
         )
-        if settings.restart_after_seconds:
+        if settings.restart_schedule_seconds:
             await _wait_for_relayer_node(
                 cluster,
                 settings.restart_node,
@@ -970,10 +1066,18 @@ async def _run_soak(
         "finalGravityBlock": int(final["block"]),
         "finalGravityBlockHash": final["blockHash"],
         "restartNode": (
-            settings.restart_node if settings.restart_after_seconds else None
+            settings.restart_node
+            if settings.restart_schedule_seconds
+            else None
         ),
+        "restartScheduleSeconds": list(settings.restart_schedule_seconds),
         "restartRpcTimeoutSeconds": settings.restart_rpc_timeout_seconds,
-        "restartRecoverySeconds": restart_recovery_seconds,
+        "restartRecoverySeconds": (
+            restart_recoveries[0]["recoverySeconds"]
+            if len(restart_recoveries) == 1
+            else None
+        ),
+        "restartRecoveries": restart_recoveries,
         "restartEpochGuardDeferrals": restart_epoch_guard_deferrals,
         "polymarketMirrorId": mirror_id,
         "polymarketNonce": int(final["polymarketProgress"][0]),
@@ -1308,6 +1412,14 @@ async def test_governance_activated_oracles_soak_for_configured_duration(
                 "errorType": type(error).__name__,
                 "error": str(error),
                 "configuredDurationSeconds": settings.duration_seconds,
+                "restartNode": (
+                    settings.restart_node
+                    if settings.restart_schedule_seconds
+                    else None
+                ),
+                "restartScheduleSeconds": list(
+                    settings.restart_schedule_seconds
+                ),
                 "binancePairs": [
                     feed["pair"] for feed in binance_feeds
                 ],
