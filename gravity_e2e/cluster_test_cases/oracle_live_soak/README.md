@@ -54,11 +54,11 @@ changes per pair; price changes are informational because timely identical
 index closes are valid Oracle updates.
 
 For runs of at least one hour, `node4` becomes eligible to restart halfway
-through by default. The runner defers the restart while the chain is within
-five minutes of an epoch boundary, then requires the node's chain and relayer
-checkpoints to catch up without nonce regression or a duplicate Polymarket
-delivery. This keeps the Oracle restart check independent from a simultaneous
-epoch reconfiguration.
+through by default. A focused regression can configure multiple restart times.
+The runner defers each restart while the chain is within five minutes of an
+epoch boundary, then requires the node's chain and relayer checkpoints to catch
+up without nonce regression or a duplicate Polymarket delivery. This keeps the
+Oracle restart check independent from a simultaneous epoch reconfiguration.
 
 ## Prerequisites
 
@@ -117,6 +117,30 @@ ORACLE_SOAK_RESTART_AFTER_SECONDS=0 \
 Do not start the 24-hour run unless this command exits successfully and the
 summary reports `status: passed`.
 
+## Focused Multi-Restart Regression
+
+Use this after changing validator startup, persistence, JWK consensus, or
+relayer recovery. It restarts `node4` three times while the same live Binance
+and Polygon tasks continue running:
+
+```bash
+ORACLE_SOAK_DURATION_SECONDS=1200 \
+ORACLE_SOAK_POLL_SECONDS=15 \
+ORACLE_SOAK_STALL_TIMEOUT_SECONDS=360 \
+ORACLE_SOAK_MIN_ADVANCES=15 \
+ORACLE_SOAK_RESTART_SCHEDULE_SECONDS=360,720,960 \
+  ./gravity_e2e/run_test.sh \
+    oracle_live_soak \
+    --force-init \
+    --log-cli-level=INFO
+```
+
+The schedule is measured from the start of the monitored soak, after task
+activation and initial quorum. A scheduled restart can run later than its
+threshold when the epoch guard is closed. The summary must contain three
+entries in `restartRecoveries`, and the final snapshot must still show all four
+replicas and every relayer checkpoint caught up.
+
 ## 24-Hour Soak
 
 Run from a terminal multiplexer or another session that will stay alive:
@@ -149,6 +173,7 @@ exits.
 | `ORACLE_SOAK_STALL_TIMEOUT_SECONDS` | `360` | Maximum feed or chain stall |
 | `ORACLE_SOAK_MIN_ADVANCES` | 80% of expected minutes | Required nonce advances for each Binance feed |
 | `ORACLE_SOAK_RESTART_AFTER_SECONDS` | Halfway for runs >= 1 hour | Earliest restart time; `0` disables |
+| `ORACLE_SOAK_RESTART_SCHEDULE_SECONDS` | unset | Strictly increasing comma-separated restart times; mutually exclusive with `ORACLE_SOAK_RESTART_AFTER_SECONDS` |
 | `ORACLE_SOAK_RESTART_NODE` | `node4` | Validator selected for restart |
 | `ORACLE_SOAK_RESTART_RPC_TIMEOUT_SECONDS` | `180` | RPC recovery window for the restarted validator |
 | `BINANCE_PRICE_FEED_BASE_URL` | `https://testnet.binancefuture.com` | Binance Futures testnet base URL |
