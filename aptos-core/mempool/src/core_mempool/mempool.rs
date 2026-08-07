@@ -26,7 +26,7 @@ use gaptos::{
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
     ops::Bound::{Excluded, Included, Unbounded},
-    sync::Mutex,
+    sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
 
@@ -136,7 +136,8 @@ pub struct Mempool {
     /// Broadcast projection (`TransactionStore`), under mutex because
     /// `CoreMempoolTrait::{read_timeline,timeline_range*}` take `&self` and must
     /// mutate. Aptos: `transactions: TransactionStore` with `&mut self` APIs.
-    transactions: Mutex<TransactionStore>,
+    /// `Arc` so [`AdmitHandle`] can lock the same store without the outer mempool.
+    transactions: Arc<Mutex<TransactionStore>>,
     /// Number of sender-address buckets (`addr last byte % n`). Aptos: same
     /// field on `TransactionStore` / mempool config `num_sender_buckets`.
     num_sender_buckets: u8,
@@ -145,6 +146,60 @@ pub struct Mempool {
     /// this many fee sub-timelines; Gravity v1 only advances fee slot 0 but must
     /// still emit this length so gaptos `PeerSyncState::update` is not a no-op.
     num_fee_slots: usize,
+}
+
+/// Listener-side admit path: shares the broadcast store Arc with [`Mempool`].
+///
+/// Locks only the inner `TransactionStore` mutex — never an outer `smp.mempool`
+/// lock — so network/listener code can admit without contending on mempool APIs.
+#[derive(Clone)]
+pub struct AdmitHandle {
+    store: Arc<Mutex<TransactionStore>>,
+    num_sender_buckets: u8,
+}
+
+/// Insert or refresh a signed txn in the broadcast store.
+///
+/// - **New hash**: allocate next monotonic timeline id, record admit `Instant`.
+/// - **Same hash while present**: optional body overwrite only; **no** new id, **no** Instant
+///   refresh (idempotent for cursor / Failover `before`).
+fn admit_into_store(
+    store: &mut TransactionStore,
+    num_sender_buckets: u8,
+    signed: SignedTransaction,
+) {
+    let hash = TxnHash::from_bytes(signed.committed_hash().as_slice());
+    use std::collections::hash_map::Entry;
+    match store.transactions.entry(hash) {
+        Entry::Occupied(mut e) => {
+            // Still present: optional body overwrite; timeline id/Instant stay.
+            e.insert(signed);
+        }
+        Entry::Vacant(e) => {
+            let sender = ExternalAccountAddress::new(signed.sender().into_bytes());
+            let bucket = sender_to_bucket(&sender, num_sender_buckets);
+            let tl = store.timeline_index.entry(bucket).or_insert_with(TimelineIndex::new);
+            let id = tl.timeline_id;
+            tl.timeline_id = tl.timeline_id.saturating_add(1);
+            tl.timeline.insert(id, (hash, Instant::now()));
+            store.hash_index.insert(hash, (bucket, id));
+            e.insert(signed);
+        }
+    }
+}
+
+impl AdmitHandle {
+    pub fn admit_one(&self, txn: SignedTransaction) {
+        let mut store = self.store.lock().unwrap();
+        admit_into_store(&mut store, self.num_sender_buckets, txn);
+    }
+
+    pub fn admit_batch(&self, txns: impl IntoIterator<Item = SignedTransaction>) {
+        let mut store = self.store.lock().unwrap();
+        for txn in txns {
+            admit_into_store(&mut store, self.num_sender_buckets, txn);
+        }
+    }
 }
 
 impl CoreMempoolTrait for Mempool {
@@ -310,9 +365,18 @@ impl Mempool {
 
         Self {
             pool,
-            transactions: Mutex::new(TransactionStore::new(max_age)),
+            transactions: Arc::new(Mutex::new(TransactionStore::new(max_age))),
             num_sender_buckets,
             num_fee_slots,
+        }
+    }
+
+    /// Cloneable handle that admits into the same broadcast store without
+    /// locking any outer mempool wrapper.
+    pub fn admit_handle(&self) -> AdmitHandle {
+        AdmitHandle {
+            store: Arc::clone(&self.transactions),
+            num_sender_buckets: self.num_sender_buckets,
         }
     }
 
@@ -382,24 +446,9 @@ impl Mempool {
             store.transactions.remove(&h);
         }
 
-        // --- admit new hashes in iteration order ---
-        for (hash, bucket, signed) in pending_pairs {
-            use std::collections::hash_map::Entry;
-            match store.transactions.entry(hash) {
-                Entry::Occupied(mut e) => {
-                    // Still present: optional body overwrite; timeline id/Instant stay.
-                    e.insert(signed);
-                    continue;
-                }
-                Entry::Vacant(e) => {
-                    let tl = store.timeline_index.entry(bucket).or_insert_with(TimelineIndex::new);
-                    let id = tl.timeline_id;
-                    tl.timeline_id = tl.timeline_id.saturating_add(1);
-                    tl.timeline.insert(id, (hash, Instant::now()));
-                    store.hash_index.insert(hash, (bucket, id));
-                    e.insert(signed);
-                }
-            }
+        // --- admit new hashes in iteration order (same path as AdmitHandle) ---
+        for (_hash, _bucket, signed) in pending_pairs {
+            admit_into_store(store, self.num_sender_buckets, signed);
         }
 
         store.reconciled = true;
@@ -549,7 +598,10 @@ mod tests {
     use gaptos::api_types::{
         account::ExternalChainId, VerifiedTxn as ApiVerifiedTxn, GLOBAL_CRYPTO_TXN_HASHER,
     };
-    use std::sync::{Arc, Mutex as StdMutex};
+    use std::{
+        collections::BTreeSet,
+        sync::{Arc, Mutex as StdMutex},
+    };
 
     fn install_hasher() {
         // Identity-ish hasher for tests: hash = first 32 bytes of payload,
@@ -606,10 +658,53 @@ mod tests {
         }
         Mempool {
             pool: Box::new(Shared(txns)),
-            transactions: Mutex::new(TransactionStore::new(max_age)),
+            transactions: Arc::new(Mutex::new(TransactionStore::new(max_age))),
             num_sender_buckets: num_buckets.max(1),
             num_fee_slots: fee_slots.max(1),
         }
+    }
+
+    fn signed_from(txn: ApiVerifiedTxn) -> SignedTransaction {
+        VerifiedTxn::from(txn).into()
+    }
+
+    #[test]
+    fn admit_new_hash_allocates_monotonic_id() {
+        let m = mempool_with(Arc::new(StdMutex::new(vec![])), Duration::from_secs(2), 1, 10);
+        let h = m.admit_handle();
+        h.admit_one(signed_from(mk_txn(0, 0, 1)));
+        assert_eq!(m.debug_timeline_len(0), 1);
+        assert_eq!(m.debug_next_id(0), 2);
+        assert_eq!(m.debug_bodies_len(), 1);
+    }
+
+    #[test]
+    fn admit_same_hash_is_idempotent_on_id_and_instant() {
+        let m = mempool_with(Arc::new(StdMutex::new(vec![])), Duration::from_secs(2), 1, 10);
+        let h = m.admit_handle();
+        let t = signed_from(mk_txn(0, 0, 1));
+        h.admit_one(t.clone());
+        let id1 = m.debug_only_id(0);
+        let inst1 = m.debug_admit_instant_for_nonce(0);
+        std::thread::sleep(Duration::from_millis(5));
+        h.admit_one(t);
+        assert_eq!(m.debug_only_id(0), id1);
+        assert_eq!(m.debug_admit_instant_for_nonce(0), inst1);
+        assert_eq!(m.debug_next_id(0), id1 + 1);
+    }
+
+    #[test]
+    fn admit_then_read_timeline_without_reconcile() {
+        // max_age large so maybe_reconcile does not full-poll empty pool and wipe admits
+        let m = mempool_with(Arc::new(StdMutex::new(vec![])), Duration::from_secs(3600), 1, 10);
+        // Empty force_reconcile sets reconciled=true without bodies so later
+        // read_timeline's maybe_reconcile skips and admits survive.
+        m.force_reconcile_for_test();
+        m.admit_handle().admit_one(signed_from(mk_txn(0, 0, 1)));
+        let (out, cur) =
+            m.read_timeline(0, &empty_cursor(10), 16, None, BroadcastPeerPriority::Primary);
+        assert_eq!(out.len(), 1);
+        assert_eq!(cur.id_per_bucket[0], m.debug_only_id(0));
     }
 
     #[test]
@@ -823,7 +918,7 @@ mod tests {
         }
         Mempool {
             pool: Box::new(BatchPool(txns)),
-            transactions: Mutex::new(TransactionStore::new(Duration::from_millis(20))),
+            transactions: Arc::new(Mutex::new(TransactionStore::new(Duration::from_millis(20)))),
             num_sender_buckets: 1,
             num_fee_slots: 10,
         }
