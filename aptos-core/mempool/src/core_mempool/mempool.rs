@@ -24,7 +24,7 @@ use gaptos::{
     },
 };
 use std::{
-    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet},
     ops::Bound::{Excluded, Included, Unbounded},
     sync::Mutex,
     time::{Duration, Instant},
@@ -384,17 +384,22 @@ impl Mempool {
 
         // --- admit new hashes in iteration order ---
         for (hash, bucket, signed) in pending_pairs {
-            if store.transactions.contains_key(&hash) {
-                // Still present: optional body overwrite; timeline id/Instant stay.
-                store.transactions.insert(hash, signed);
-                continue;
+            use std::collections::hash_map::Entry;
+            match store.transactions.entry(hash) {
+                Entry::Occupied(mut e) => {
+                    // Still present: optional body overwrite; timeline id/Instant stay.
+                    e.insert(signed);
+                    continue;
+                }
+                Entry::Vacant(e) => {
+                    let tl = store.timeline_index.entry(bucket).or_insert_with(TimelineIndex::new);
+                    let id = tl.timeline_id;
+                    tl.timeline_id = tl.timeline_id.saturating_add(1);
+                    tl.timeline.insert(id, (hash, Instant::now()));
+                    store.hash_index.insert(hash, (bucket, id));
+                    e.insert(signed);
+                }
             }
-            let tl = store.timeline_index.entry(bucket).or_insert_with(TimelineIndex::new);
-            let id = tl.timeline_id;
-            tl.timeline_id = tl.timeline_id.saturating_add(1);
-            tl.timeline.insert(id, (hash, Instant::now()));
-            store.hash_index.insert(hash, (bucket, id));
-            store.transactions.insert(hash, signed);
         }
 
         store.reconciled = true;
