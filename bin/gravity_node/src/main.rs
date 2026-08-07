@@ -372,20 +372,21 @@ fn main() {
                     panic!("failed to set global relayer");
                 }
             }
-            _engine = Some(
-                ConsensusEngine::init(
-                    ConsensusEngineArgs {
-                        node_config: gcei_config,
-                        chain_id,
-                        latest_block_number,
-                        config_storage: Some(Arc::new(ConfigStorageWrapper::new(Arc::new(
-                            RethCliConfigStorage::new(client),
-                        )))),
-                    },
-                    pool,
-                )
-                .await,
-            );
+            let (engine, admit_handle) = ConsensusEngine::init(
+                ConsensusEngineArgs {
+                    node_config: gcei_config,
+                    chain_id,
+                    latest_block_number,
+                    config_storage: Some(Arc::new(ConfigStorageWrapper::new(Arc::new(
+                        RethCliConfigStorage::new(client),
+                    )))),
+                },
+                pool,
+            )
+            .await;
+            // Task 5 will spawn the listener with admit_handle.
+            let _ = &admit_handle;
+            _engine = Some(engine);
         }
         coordinator.send_execution_args().await;
         let result = coordinator.run().await;
