@@ -107,7 +107,7 @@ struct TransactionStore {
     last_reconcile: Instant,
 
     /// Max age of a reconcile before `maybe_reconcile(false)` refreshes.
-    /// Driven by `MEMPOOL_SNAPSHOT_MAX_AGE_MS` (default 20ms). Aptos has no
+    /// Driven by `MEMPOOL_SNAPSHOT_MAX_AGE_MS` (default 2000ms). Aptos has no
     /// equivalent poll interval on the timeline path.
     reconcile_max_age: Duration,
 
@@ -358,7 +358,7 @@ impl Mempool {
             std::env::var("MEMPOOL_SNAPSHOT_MAX_AGE_MS")
                 .ok()
                 .and_then(|s| s.parse::<u64>().ok())
-                .unwrap_or(20),
+                .unwrap_or(2000),
         );
         let num_sender_buckets = config.mempool.num_sender_buckets.max(1);
         let num_fee_slots = config.mempool.broadcast_buckets.len().max(1);
@@ -725,6 +725,24 @@ mod tests {
         txns.lock().unwrap().clear();
         m.force_reconcile_for_test();
         assert_eq!(m.debug_timeline_len(0), 0);
+        assert_eq!(m.debug_bodies_len(), 0);
+    }
+
+    #[test]
+    fn reconcile_throttled_within_max_age() {
+        // Pool starts with one txn; after first reconcile, clear pool but do not
+        // force — within max_age, leave must remain until force or age elapses.
+        // Production Mempool::new default is 2000ms (MEMPOOL_SNAPSHOT_MAX_AGE_MS);
+        // unit tests inject max_age via mempool_with.
+        let txns = Arc::new(StdMutex::new(vec![mk_txn(0, 0, 1)]));
+        let m = mempool_with(txns.clone(), Duration::from_secs(2), 1, 10);
+        m.force_reconcile_for_test();
+        assert_eq!(m.debug_bodies_len(), 1);
+        txns.lock().unwrap().clear();
+        // Non-force path:
+        let _ = m.read_timeline(0, &empty_cursor(10), 16, None, BroadcastPeerPriority::Primary);
+        assert_eq!(m.debug_bodies_len(), 1, "stale leave until max_age or force");
+        m.force_reconcile_for_test();
         assert_eq!(m.debug_bodies_len(), 0);
     }
 
