@@ -219,6 +219,8 @@ async def execute_governance_proposal(
     targets: list[str],
     datas: list[bytes],
     description: str,
+    *,
+    gas: int = 5_000_000,
 ) -> dict:
     assert len(targets) == len(datas) and targets
     _ensure_faucet_executor(w3)
@@ -230,9 +232,9 @@ async def execute_governance_proposal(
         "from": FAUCET_ADDRESS,
         "to": GOVERNANCE_ADDRESS,
         "data": create_data,
-        "gas": 5_000_000,
+        "gas": gas,
     })
-    receipt = _send_tx(w3, GOVERNANCE_ADDRESS, create_data, gas=5_000_000)
+    receipt = _send_tx(w3, GOVERNANCE_ADDRESS, create_data, gas=gas)
     proposal_id = next(
         (
             int.from_bytes(log["topics"][1], "big")
@@ -274,7 +276,7 @@ async def execute_governance_proposal(
         ["uint64", "address[]", "bytes[]"],
         [proposal_id, targets, datas],
     )
-    return _send_tx(w3, GOVERNANCE_ADDRESS, execute_data, gas=5_000_000)
+    return _send_tx(w3, GOVERNANCE_ADDRESS, execute_data, gas=gas)
 
 
 async def wait_for_latest_price(
