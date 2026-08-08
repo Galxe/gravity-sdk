@@ -1020,7 +1020,7 @@ mod tests {
         }
 
         fn to_range_args(
-            &self,
+            self,
         ) -> HashMap<MempoolSenderBucket, HashMap<TimelineIndexIdentifier, (u64, u64)>> {
             let mut inner = HashMap::new();
             inner.insert(0, (self.start, self.end));
@@ -1031,8 +1031,9 @@ mod tests {
     }
 
     /// Outcome of one simulated `determine_broadcast_batch` tick (filter + pending
-    /// + Expired/Retry/Fresh + optional backoff). See gaptos `network.rs`
-    /// determine_broadcast_batch / process_broadcast_ack.
+    /// + Expired/Retry/Fresh + optional backoff).
+    ///
+    /// See gaptos `network.rs` `determine_broadcast_batch` / `process_broadcast_ack`.
     #[derive(Debug)]
     enum SimBatchOutcome {
         TooManyPendingBroadcasts {
@@ -1080,6 +1081,7 @@ mod tests {
     }
 
     /// Minimal reimplementation of determine_broadcast_batch branches used by T1-B/C.
+    #[allow(clippy::too_many_arguments)] // mirrors gaptos broadcast params in a test helper
     fn sim_determine_broadcast_batch(
         m: &Mempool,
         sent: &mut BTreeMap<SimMessageId, Instant>,
@@ -1104,6 +1106,7 @@ mod tests {
     }
 
     /// Extended sim: backoff gate + optional retry set (gaptos order approximated).
+    #[allow(clippy::too_many_arguments)] // mirrors gaptos broadcast params in a test helper
     fn sim_determine_broadcast_batch_ex(
         m: &Mempool,
         sent: &mut BTreeMap<SimMessageId, Instant>,
@@ -1480,7 +1483,7 @@ mod tests {
 
         assert_eq!(first_batch_len, Some(count), "first batch must be full when S > count");
 
-        let max_ticks = (s + count - 1) / count + 1; // ceil(S/count)+1
+        let max_ticks = s.div_ceil(count) + 1; // ceil(S/count)+1
         assert!(ticks <= max_ticks, "full cover ticks {ticks} > ceil(S/count)+1 = {max_ticks}");
 
         for i in 0..s as u8 {
@@ -2116,7 +2119,7 @@ mod tests {
         }
 
         assert_eq!(first_batch_len, Some(count));
-        let max_ticks = (s + count - 1) / count + 1;
+        let max_ticks = s.div_ceil(count) + 1;
         assert!(ticks <= max_ticks, "ticks {ticks} > ceil(S/count)+1 = {max_ticks}");
         for i in 0..s as u8 {
             assert!(
