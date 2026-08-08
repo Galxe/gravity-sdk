@@ -1,5 +1,4 @@
 use alloy_eips::BlockHashOrNumber;
-use alloy_primitives::TxHash;
 use api::{
     check_bootstrap_config,
     config_storage::ConfigStorageWrapper,
@@ -20,10 +19,9 @@ use greth::{
     gravity_storage, reth,
     reth_chainspec::ChainSpecProvider,
     reth_cli::chainspec::ChainSpecParser,
-    reth_cli_util, reth_db, reth_node_api, reth_node_builder, reth_node_ethereum,
+    reth_cli_util, reth_db, reth_node_api, reth_node_builder, reth_node_core, reth_node_ethereum,
     reth_pipe_exec_layer_ext_v2::{self, ExecutionArgs},
     reth_provider,
-    reth_transaction_pool::TransactionPool,
 };
 use pprof::{protos::Message, ProfilerGuard};
 use reth::rpc::builder::auth::AuthServerHandle;
@@ -40,6 +38,7 @@ use tokio::{
     sync::{broadcast, oneshot},
 };
 use tracing::{info, warn};
+mod broadcast_listener;
 mod chainspec;
 mod cli;
 mod consensus;
@@ -69,7 +68,6 @@ struct ConsensusArgs<EthApi: RethEthCall> {
     pub engine_api: AuthServerHandle,
     pub pipeline_api: RethPipeExecLayerApi<EthApi>,
     pub provider: RethBlockChainProvider,
-    pub tx_listener: tokio::sync::mpsc::Receiver<TxHash>,
     pub pool: RethTransactionPool,
 }
 
@@ -142,8 +140,6 @@ fn run_reth(
                     }
 
                     let eth_api = handle.node.rpc_registry.eth_api().clone();
-                    let pending_listener: tokio::sync::mpsc::Receiver<TxHash> =
-                        handle.node.pool.pending_transactions_listener();
                     let engine_cli = handle.node.auth_server_handle().clone();
                     let provider = handle.node.provider;
                     let recover_block_number = provider
@@ -177,7 +173,6 @@ fn run_reth(
                         engine_api: engine_cli,
                         pipeline_api: pipeline_api_v2,
                         provider,
-                        tx_listener: pending_listener,
                         pool,
                     };
                     let _ = tx.send((args, recover_block_number));
@@ -272,6 +267,15 @@ fn main() {
         std::env::set_var("RUST_BACKTRACE", "1");
     }
 
+    // Raise new-tx body listener buffer before CLI parse (operators can still
+    // override via --txpool.max-new-txns). Default greth size is 1024.
+    if let Err(_) = reth_node_core::args::DefaultTxPoolValues::default()
+        .with_new_tx_listener_buffer_size(1024 * 16)
+        .try_init()
+    {
+        warn!("DefaultTxPoolValues already initialized; leaving new_tx_listener_buffer_size as-is");
+    }
+
     let _profiling_state =
         if std::env::var("ENABLE_PPROF").is_ok() { Some(setup_pprof_profiler()) } else { None };
     let cli = Cli::parse();
@@ -335,11 +339,13 @@ fn main() {
             greth::reth_chainspec::ChainKind::Id(id) => id,
         }
     };
-    let pool = Box::new(Mempool::new(
-        consensus_args.pool.clone(),
-        gcei_config.base.role == RoleType::FullNode,
-        chain_id,
-    ));
+    // Clone reth pool for the body listener before Mempool / RethCli consume it.
+    let reth_pool = consensus_args.pool.clone();
+    let mempool =
+        Mempool::new(reth_pool.clone(), gcei_config.base.role == RoleType::FullNode, chain_id);
+    // Post blackhole gate — must match get_broadcast_txns emptiness.
+    let enable_broadcast = mempool.enable_broadcast();
+    let pool = Box::new(mempool);
     let txn_cache = pool.tx_cache();
     let shutdown_rx_cli = shutdown_tx.subscribe();
     // `_engine` owns tokio Runtimes; it must be returned out of `block_on` so it
@@ -372,20 +378,23 @@ fn main() {
                     panic!("failed to set global relayer");
                 }
             }
-            _engine = Some(
-                ConsensusEngine::init(
-                    ConsensusEngineArgs {
-                        node_config: gcei_config,
-                        chain_id,
-                        latest_block_number,
-                        config_storage: Some(Arc::new(ConfigStorageWrapper::new(Arc::new(
-                            RethCliConfigStorage::new(client),
-                        )))),
-                    },
-                    pool,
-                )
-                .await,
-            );
+            let (engine, admit_handle) = ConsensusEngine::init(
+                ConsensusEngineArgs {
+                    node_config: gcei_config,
+                    chain_id,
+                    latest_block_number,
+                    config_storage: Some(Arc::new(ConfigStorageWrapper::new(Arc::new(
+                        RethCliConfigStorage::new(client),
+                    )))),
+                },
+                pool,
+            )
+            .await;
+            if enable_broadcast {
+                broadcast_listener::spawn_broadcast_listener(reth_pool, admit_handle, chain_id);
+            }
+            // else: drop admit_handle; no subscribe (validator / blackhole)
+            _engine = Some(engine);
         }
         coordinator.send_execution_args().await;
         let result = coordinator.run().await;

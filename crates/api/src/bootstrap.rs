@@ -26,7 +26,8 @@ use gaptos::{
 };
 
 use aptos_mempool::{
-    core_mempool::CoreMempool, MempoolClientRequest, MempoolSyncMsg, QuorumStoreRequest,
+    core_mempool::{AdmitHandle, CoreMempool},
+    MempoolClientRequest, MempoolSyncMsg, QuorumStoreRequest,
 };
 use futures::channel::mpsc::{Receiver, Sender};
 use gaptos::{
@@ -241,12 +242,13 @@ pub fn init_mempool(
     mempool_listener: MempoolNotificationListener,
     peers_and_metadata: Arc<PeersAndMetadata>,
     pool: Box<dyn TxPool>,
-) -> Vec<Runtime> {
+) -> (Vec<Runtime>, AdmitHandle) {
     let mempool_reconfig_subscription = event_subscription_service
         .subscribe_to_reconfigurations()
         .expect("Mempool must subscribe to reconfigurations");
     let mempool = Box::new(CoreMempool::new(node_config, pool));
-    vec![aptos_mempool::bootstrap(
+    let admit_handle = mempool.admit_handle();
+    let runtime = aptos_mempool::bootstrap(
         node_config,
         Arc::clone(&db.reader),
         mempool_interfaces.network_client,
@@ -257,7 +259,8 @@ pub fn init_mempool(
         mempool_reconfig_subscription,
         peers_and_metadata,
         mempool,
-    )]
+    );
+    (vec![runtime], admit_handle)
 }
 
 pub fn init_peers_and_metadata(

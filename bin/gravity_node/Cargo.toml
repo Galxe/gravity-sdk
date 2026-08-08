@@ -44,6 +44,7 @@ alloy-transport-http = "=2.0.5"
 alloy-rpc-types-eth = "=2.0.5"
 async-trait.workspace = true
 api.workspace = true
+aptos-mempool = { workspace = true }
 gaptos = { workspace = true, features = ["gcp-secret-manager"] }
 block-buffer-manager.workspace = true
 proposer-reth-map.workspace = true

@@ -8,7 +8,7 @@ pub mod transaction;
 // mod transaction_store;
 
 pub use self::{
-    mempool::Mempool as CoreMempool,
+    mempool::{AdmitHandle, Mempool as CoreMempool},
     transaction::TimelineState,
     // transaction_store::TXN_INDEX_ESTIMATED_BYTES,
 };

@@ -29,18 +29,17 @@ struct TestConsensusLayer {
 
 impl TestConsensusLayer {
     async fn new(node_config: NodeConfig) -> Self {
-        Self {
-            consensus_engine: ConsensusEngine::init(
-                ConsensusEngineArgs {
-                    node_config,
-                    chain_id: 1337,
-                    latest_block_number: 0,
-                    config_storage: None,
-                },
-                EmptyTxPool::boxed(),
-            )
-            .await,
-        }
+        let (engine, _admit) = ConsensusEngine::init(
+            ConsensusEngineArgs {
+                node_config,
+                chain_id: 1337,
+                latest_block_number: 0,
+                config_storage: None,
+            },
+            EmptyTxPool::boxed(),
+        )
+        .await;
+        Self { consensus_engine: engine }
     }
 
     async fn random_txns(num: u64) -> Vec<ExecTxn> {

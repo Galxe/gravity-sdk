@@ -95,23 +95,28 @@ impl Drop for Mempool {
     }
 }
 
+/// Resolve whether mempool broadcast (and the body listener) should run.
+///
+/// Gate matches historical `Mempool::new`: FullNode role and not blackhole mode.
+/// Debug-only override: `GRAVITY_BLACKHOLE_BROADCAST=1` forces this node to keep
+/// RPC / consensus / block-sync healthy but drop every outbound mempool broadcast
+/// — reproduces design.md §3.8 silent black-hole semantics for pfn_chain Phase 3.
+/// MUST NOT be set in production deployments.
+pub fn resolve_enable_broadcast(role_is_fullnode: bool) -> bool {
+    if std::env::var("GRAVITY_BLACKHOLE_BROADCAST").as_deref() == Ok("1") {
+        tracing::warn!(
+            "GRAVITY_BLACKHOLE_BROADCAST=1: mempool broadcast forcibly \
+             disabled (silent black-hole mode); MUST NOT be set in production"
+        );
+        false
+    } else {
+        role_is_fullnode
+    }
+}
+
 impl Mempool {
     pub fn new(pool: RethTransactionPool, enable_broadcast: bool, chain_id: u64) -> Self {
-        // Debug-only override: GRAVITY_BLACKHOLE_BROADCAST=1 forces this node
-        // to keep RPC / consensus / block-sync paths fully healthy but drop
-        // every outbound mempool broadcast — reproduces design.md §3.8 silent
-        // black-hole semantics for the pfn_chain Phase 3 test. MUST NOT be
-        // set in production deployments.
-        let enable_broadcast = if std::env::var("GRAVITY_BLACKHOLE_BROADCAST").as_deref() == Ok("1")
-        {
-            tracing::warn!(
-                "GRAVITY_BLACKHOLE_BROADCAST=1: mempool broadcast forcibly \
-                 disabled (silent black-hole mode); MUST NOT be set in production"
-            );
-            false
-        } else {
-            enable_broadcast
-        };
+        let enable_broadcast = resolve_enable_broadcast(enable_broadcast);
         let runtime = tokio::runtime::Runtime::new().unwrap();
         let txn_cache: TxnCache = Arc::new(DashMap::new());
 
@@ -155,6 +160,11 @@ impl Mempool {
     pub fn tx_cache(&self) -> TxnCache {
         self.txn_cache.clone()
     }
+
+    /// Whether outbound broadcast / body listener is enabled (post blackhole gate).
+    pub fn enable_broadcast(&self) -> bool {
+        self.enable_broadcast
+    }
 }
 
 pub fn convert_account(acc: Address) -> ExternalAccountAddress {
@@ -163,7 +173,7 @@ pub fn convert_account(acc: Address) -> ExternalAccountAddress {
     ExternalAccountAddress::new(bytes)
 }
 
-fn to_verified_txn(
+pub(crate) fn to_verified_txn(
     pool_txn: Arc<ValidPoolTransaction<EthPooledTransaction>>,
     chain_id: u64,
 ) -> VerifiedTxn {

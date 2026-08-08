@@ -6,6 +6,7 @@ mod https;
 mod logger;
 mod network;
 
+pub use aptos_mempool::core_mempool::AdmitHandle;
 pub use bootstrap::check_bootstrap_config;
 use clap::Parser;
 pub use gaptos::aptos_config::config::NodeConfig;
