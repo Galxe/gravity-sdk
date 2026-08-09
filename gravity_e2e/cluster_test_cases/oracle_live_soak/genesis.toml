@@ -1,5 +1,6 @@
-# Source types 3 and 6 are enabled at genesis, while their concrete tasks are
-# registered by governance during the test.
+# Source type 3 is enabled at genesis, while its concrete price-feed tasks are
+# registered by governance during the test. Source type 6 stays disabled for
+# the initial Binance-only launch profile.
 
 [dependencies.genesis_contracts]
 repo = "https://github.com/Galxe/gravity_chain_core_contracts.git"
@@ -87,10 +88,9 @@ reconstruction_threshold = 12297829382473033728
 fast_path_secrecy_threshold = 12297829382473033728
 
 [genesis.oracle_config]
-source_types = [1, 3, 6]
+source_types = [1, 3]
 callbacks = [
   "0x00000000000000000000000000000001625F4001",
-  "0x0000000000000000000000000000000000000000",
   "0x0000000000000000000000000000000000000000",
 ]
 

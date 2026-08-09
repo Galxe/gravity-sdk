@@ -1,4 +1,4 @@
-# Four-validator live Binance and Polymarket soak test.
+# Four-validator live Binance price-feed soak test.
 # Keep fixed listeners below Linux's default ephemeral source-port range.
 
 [cluster]

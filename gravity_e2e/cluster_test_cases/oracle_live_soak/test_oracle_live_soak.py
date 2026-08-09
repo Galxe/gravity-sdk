@@ -1,4 +1,4 @@
-"""Manual four-validator soak against live Binance and Polygon data."""
+"""Manual four-validator soak against live Binance index-price data."""
 
 import asyncio
 from dataclasses import dataclass
@@ -12,6 +12,11 @@ from pathlib import Path
 import time
 from urllib.parse import urlencode
 from urllib.request import urlopen
+
+try:
+    import tomllib
+except ImportError:
+    import tomli as tomllib
 
 import pytest
 from web3 import Web3
@@ -27,12 +32,6 @@ SUITE_DIR = Path(__file__).resolve().parent
 
 INTERVAL_MS = 60_000
 DECIMALS = 8
-SOURCE_TYPE_POLYMARKET = 6
-POLYGON_CHAIN_ID = 137
-CTF_ADDRESS = Web3.to_checksum_address(
-    "0x4D97DCd97eC945f40cF65F87097ACe5EA0476045"
-)
-POLYMARKET_TASK = Web3.keccak(text="polymarket_settlement")
 RECONFIGURATION_ADDRESS = Web3.to_checksum_address(
     "0x00000000000000000000000000000001625F2003"
 )
@@ -47,7 +46,7 @@ CALLBACK_SUCCESS_TOPIC0 = Web3.keccak(
 
 DEFAULT_SOAK_SECONDS = 24 * 60 * 60
 DEFAULT_POLL_SECONDS = 15
-DEFAULT_STALL_SECONDS = 6 * 60
+DEFAULT_STALL_SECONDS = 15 * 60
 DEFAULT_RESTART_RPC_TIMEOUT_SECONDS = 3 * 60
 EPOCH_TIMEOUT_SECONDS = 180
 ORACLE_TIMEOUT_SECONDS = 360
@@ -365,20 +364,6 @@ async def _wait_for_block(
     )
 
 
-async def _wait_for_settlement(
-    resolver, mirror_id: int, condition_id: bytes
-) -> tuple:
-    deadline = time.monotonic() + ORACLE_TIMEOUT_SECONDS
-    while time.monotonic() < deadline:
-        settlement = tuple(
-            resolver.functions.getSettlement(mirror_id, condition_id).call()
-        )
-        if settlement[0]:
-            return settlement
-        await asyncio.sleep(2)
-    raise TimeoutError(f"Polymarket mirror {mirror_id} was not settled")
-
-
 def _call_at_block_hash(function, block_hash: str):
     response = function.w3.provider.make_request(
         "eth_call",
@@ -536,7 +521,7 @@ def test_callback_success_logs_snapshots_latest_once():
             self.eth = FakeEth()
 
     w3 = FakeWeb3()
-    assert _callback_success_logs(w3, 6, 42, 0) == []
+    assert _callback_success_logs(w3, 3, 42, 0) == []
     assert [
         (request["fromBlock"], request["toBlock"])
         for request in w3.eth.requests
@@ -642,12 +627,8 @@ async def _replicated_snapshot_once(
     cluster: Cluster,
     native_artifact: dict,
     price_artifact: dict,
-    polymarket_artifact: dict,
     price_resolver_address: str,
-    polymarket_resolver_address: str,
     binance_feeds: list[dict],
-    mirror_id: int,
-    condition_id: bytes,
 ) -> dict:
     heights = {}
     for node_id, node in cluster.nodes.items():
@@ -680,9 +661,6 @@ async def _replicated_snapshot_once(
     price_resolver = node1.w3.eth.contract(
         address=price_resolver_address, abi=price_artifact["abi"]
     )
-    polymarket_resolver = node1.w3.eth.contract(
-        address=polymarket_resolver_address, abi=polymarket_artifact["abi"]
-    )
     price_feeds = {}
     for feed in binance_feeds:
         feed_id = int(feed["feedId"])
@@ -709,25 +687,6 @@ async def _replicated_snapshot_once(
             "progress": progress,
             "latestPrice": latest,
         }
-    polymarket_progress = tuple(
-        _call_at_block_hash(
-            native_oracle.functions.getSourceProgress(
-                SOURCE_TYPE_POLYMARKET, mirror_id
-            ),
-            snapshot_hash,
-        )
-    )
-    settlement = tuple(
-        _call_at_block_hash(
-            polymarket_resolver.functions.getSettlement(
-                mirror_id, condition_id
-            ),
-            snapshot_hash,
-        )
-    )
-
-    assert polymarket_progress[0] == 1
-    assert settlement[0]
 
     for node_id, node in cluster.nodes.items():
         replica_native = node.w3.eth.contract(
@@ -735,10 +694,6 @@ async def _replicated_snapshot_once(
         )
         replica_price = node.w3.eth.contract(
             address=price_resolver_address, abi=price_artifact["abi"]
-        )
-        replica_polymarket = node.w3.eth.contract(
-            address=polymarket_resolver_address,
-            abi=polymarket_artifact["abi"],
         )
         for feed in binance_feeds:
             feed_id = int(feed["feedId"])
@@ -762,40 +717,12 @@ async def _replicated_snapshot_once(
                     f"{replica_latest} != "
                     f"{price_feeds[pair]['latestPrice']}"
                 )
-        replica_polymarket_progress = tuple(
-            _call_at_block_hash(
-                replica_native.functions.getSourceProgress(
-                    SOURCE_TYPE_POLYMARKET, mirror_id
-                ),
-                snapshot_hash,
-            )
-        )
-        if replica_polymarket_progress != polymarket_progress:
-            raise SnapshotNotConverged(
-                f"{node_id} Polymarket progress diverged: "
-                f"{replica_polymarket_progress} != {polymarket_progress}"
-            )
-        replica_settlement = tuple(
-            _call_at_block_hash(
-                replica_polymarket.functions.getSettlement(
-                    mirror_id, condition_id
-                ),
-                snapshot_hash,
-            )
-        )
-        if replica_settlement != settlement:
-            raise SnapshotNotConverged(
-                f"{node_id} Polymarket settlement diverged: "
-                f"{replica_settlement} != {settlement}"
-            )
 
     return {
         "block": snapshot_block,
         "blockHash": snapshot_hash,
         "heights": heights,
         "priceFeeds": price_feeds,
-        "polymarketProgress": polymarket_progress,
-        "settlement": settlement,
     }
 
 
@@ -803,12 +730,8 @@ async def _replicated_snapshot(
     cluster: Cluster,
     native_artifact: dict,
     price_artifact: dict,
-    polymarket_artifact: dict,
     price_resolver_address: str,
-    polymarket_resolver_address: str,
     binance_feeds: list[dict],
-    mirror_id: int,
-    condition_id: bytes,
 ) -> dict:
     first_error = None
     for attempt in range(1, SNAPSHOT_CONVERGENCE_RETRIES + 1):
@@ -817,12 +740,8 @@ async def _replicated_snapshot(
                 cluster,
                 native_artifact,
                 price_artifact,
-                polymarket_artifact,
                 price_resolver_address,
-                polymarket_resolver_address,
                 binance_feeds,
-                mirror_id,
-                condition_id,
             )
             if attempt > 1:
                 LOG.info(
@@ -879,15 +798,9 @@ async def _run_soak(
     settings: SoakSettings,
     native_artifact: dict,
     price_artifact: dict,
-    polymarket_artifact: dict,
     price_resolver_address: str,
-    polymarket_resolver_address: str,
     binance_feeds: list[dict],
-    polymarket: dict,
-    expected_settlement: tuple,
 ) -> dict:
-    mirror_id = int(polymarket["mirrorId"])
-    condition_id = bytes.fromhex(polymarket["conditionId"].removeprefix("0x"))
     heartbeat_path = SUITE_DIR / "artifacts" / _HEARTBEAT_FILE
     heartbeat_path.unlink(missing_ok=True)
 
@@ -906,12 +819,8 @@ async def _run_soak(
         cluster,
         native_artifact,
         price_artifact,
-        polymarket_artifact,
         price_resolver_address,
-        polymarket_resolver_address,
         binance_feeds,
-        mirror_id,
-        condition_id,
     )
     initial_nonces = {
         pair: int(state["progress"][0])
@@ -991,12 +900,8 @@ async def _run_soak(
             cluster,
             native_artifact,
             price_artifact,
-            polymarket_artifact,
             price_resolver_address,
-            polymarket_resolver_address,
             binance_feeds,
-            mirror_id,
-            condition_id,
         )
         now = time.monotonic()
         price_heartbeats = {}
@@ -1049,12 +954,6 @@ async def _run_soak(
                 f"{now - last_height_change[node_id]:.1f}s"
             )
 
-        assert tuple(final["polymarketProgress"]) == (
-            1,
-            int(polymarket["blockNumber"]),
-        )
-        assert tuple(final["settlement"]) == expected_settlement
-
         samples += 1
         heartbeat = {
             "elapsedSeconds": round(now - started, 3),
@@ -1062,7 +961,6 @@ async def _run_soak(
             "gravityBlockHash": final["blockHash"],
             "nodeHeights": final["heights"],
             "priceFeeds": price_heartbeats,
-            "polymarketNonce": int(final["polymarketProgress"][0]),
             "restartCompleted": bool(settings.restart_schedule_seconds)
             and restart_index == len(settings.restart_schedule_seconds),
             "restartCount": restart_index,
@@ -1078,12 +976,8 @@ async def _run_soak(
         cluster,
         native_artifact,
         price_artifact,
-        polymarket_artifact,
         price_resolver_address,
-        polymarket_resolver_address,
         binance_feeds,
-        mirror_id,
-        condition_id,
     )
     if settings.restart_schedule_seconds:
         assert restart_index == len(settings.restart_schedule_seconds), (
@@ -1151,8 +1045,6 @@ async def _run_soak(
         ),
         "restartRecoveries": restart_recoveries,
         "restartEpochGuardDeferrals": restart_epoch_guard_deferrals,
-        "polymarketMirrorId": mirror_id,
-        "polymarketNonce": int(final["polymarketProgress"][0]),
     }
 
 
@@ -1162,13 +1054,13 @@ def _write_summary(payload: dict) -> None:
 
 
 @pytest.mark.asyncio
-async def test_governance_activated_oracles_soak_for_configured_duration(
+async def test_governance_activated_price_feeds_soak_for_configured_duration(
     cluster: Cluster,
 ):
     settings = _soak_settings()
     metadata = _metadata()
+    assert set(metadata) == {"binanceFeeds"}
     binance_feeds = metadata["binanceFeeds"]
-    polymarket = metadata["polymarket"]
     assert [feed["pair"] for feed in binance_feeds] == [
         "NVDAUSDT",
         "BTCUSDT",
@@ -1177,8 +1069,16 @@ async def test_governance_activated_oracles_soak_for_configured_duration(
     assert len({int(feed["feedId"]) for feed in binance_feeds}) == len(
         binance_feeds
     )
-    mirror_id = int(polymarket["mirrorId"])
-    condition_id = bytes.fromhex(polymarket["conditionId"].removeprefix("0x"))
+    relayer_config = json.loads(
+        (SUITE_DIR / "artifacts" / "relayer_config.live.json").read_text()
+    )
+    expected_uris = {feed["taskUri"] for feed in binance_feeds}
+    assert set(relayer_config["uri_mappings"]) == expected_uris
+    assert all(uri.startswith("gravity://3/") for uri in expected_uris)
+    with (SUITE_DIR / "genesis.toml").open("rb") as genesis_file:
+        oracle_config = tomllib.load(genesis_file)["genesis"]["oracle_config"]
+    assert oracle_config["source_types"] == [1, 3]
+    assert len(oracle_config["callbacks"]) == 2
 
     assert len(cluster.nodes) == 4
     assert await cluster.set_full_live(timeout=180)
@@ -1191,7 +1091,6 @@ async def test_governance_activated_oracles_soak_for_configured_duration(
     w3 = node1.w3
     required = [
         ("PriceFeedResolver.sol", "PriceFeedResolver"),
-        ("PolymarketSettlementResolver.sol", "PolymarketSettlementResolver"),
         ("NativeOracle.sol", "NativeOracle"),
         ("OracleTaskConfig.sol", "OracleTaskConfig"),
         ("EpochConfig.sol", "EpochConfig"),
@@ -1199,11 +1098,6 @@ async def test_governance_activated_oracles_soak_for_configured_duration(
     contracts_out = support.ensure_contract_artifacts(SUITE_DIR, required)
     price_artifact = support.load_artifact(
         contracts_out, "PriceFeedResolver.sol", "PriceFeedResolver"
-    )
-    polymarket_artifact = support.load_artifact(
-        contracts_out,
-        "PolymarketSettlementResolver.sol",
-        "PolymarketSettlementResolver",
     )
     native_artifact = support.load_artifact(
         contracts_out, "NativeOracle.sol", "NativeOracle"
@@ -1216,7 +1110,6 @@ async def test_governance_activated_oracles_soak_for_configured_duration(
     )
 
     price_resolver = support.deploy_contract(w3, price_artifact)
-    polymarket_resolver = support.deploy_contract(w3, polymarket_artifact)
     native_oracle = w3.eth.contract(
         address=support.NATIVE_ORACLE_ADDRESS, abi=native_artifact["abi"]
     )
@@ -1239,9 +1132,6 @@ async def test_governance_activated_oracles_soak_for_configured_duration(
             int(feed["feedId"]),
             support.TASK_PRICE_FEED,
         ).call()
-    assert not task_config.functions.hasTask(
-        SOURCE_TYPE_POLYMARKET, mirror_id, POLYMARKET_TASK
-    ).call()
 
     setup_epoch = await _wait_for_proposal_window(cluster)
     targets = [EPOCH_CONFIG_ADDRESS, support.NATIVE_ORACLE_ADDRESS]
@@ -1269,48 +1159,12 @@ async def test_governance_activated_oracles_soak_for_configured_duration(
                 )
             )
         )
-    targets.extend(
-        [
-            support.ORACLE_TASK_CONFIG_ADDRESS,
-            support.NATIVE_ORACLE_ADDRESS,
-            polymarket_resolver.address,
-        ]
-    )
-    datas.extend(
-        [
-            support.function_calldata(
-                task_config.functions.setTask(
-                    SOURCE_TYPE_POLYMARKET,
-                    mirror_id,
-                    POLYMARKET_TASK,
-                    polymarket["taskUri"].encode(),
-                )
-            ),
-            support.function_calldata(
-                native_oracle.functions.setCallback(
-                    SOURCE_TYPE_POLYMARKET,
-                    mirror_id,
-                    polymarket_resolver.address,
-                )
-            ),
-            support.function_calldata(
-                polymarket_resolver.functions.registerMirror(
-                    mirror_id,
-                    POLYGON_CHAIN_ID,
-                    CTF_ADDRESS,
-                    condition_id,
-                    int(polymarket["outcomeSlotCount"]),
-                )
-            ),
-        ]
-    )
     receipt = await support.execute_governance_proposal(
         w3,
         support.faucet_voting_pool(w3),
         targets,
         datas,
-        "activate-live-binance-and-polymarket-soak",
-        gas=8_000_000,
+        "activate-live-binance-price-soak",
     )
     assert _current_epoch(w3) == setup_epoch
     assert (
@@ -1330,14 +1184,6 @@ async def test_governance_activated_oracles_soak_for_configured_duration(
         )
         for feed in binance_feeds
     ]
-    configured_tasks.append(
-        (
-            SOURCE_TYPE_POLYMARKET,
-            mirror_id,
-            POLYMARKET_TASK,
-            polymarket["taskUri"],
-        )
-    )
     for source_type, source_id, task_name, expected_uri in configured_tasks:
         assert task_config.functions.hasTask(
             source_type, source_id, task_name
@@ -1351,8 +1197,7 @@ async def test_governance_activated_oracles_soak_for_configured_duration(
         ).call() == 0
 
     issuers = [
-        *(f"gravity://3/{int(feed['feedId'])}" for feed in binance_feeds),
-        f"gravity://6/{mirror_id}",
+        f"gravity://3/{int(feed['feedId'])}" for feed in binance_feeds
     ]
     for node_id in cluster.nodes:
         for issuer in issuers:
@@ -1379,66 +1224,6 @@ async def test_governance_activated_oracles_soak_for_configured_duration(
             1,
             timeout=ORACLE_TIMEOUT_SECONDS,
         )
-    deadline = time.monotonic() + ORACLE_TIMEOUT_SECONDS
-    while time.monotonic() < deadline:
-        polymarket_progress = tuple(
-            native_oracle.functions.getSourceProgress(
-                SOURCE_TYPE_POLYMARKET, mirror_id
-            ).call()
-        )
-        if polymarket_progress[0] >= 1:
-            break
-        await asyncio.sleep(2)
-    else:
-        raise TimeoutError("Polymarket source did not reach nonce 1")
-
-    assert polymarket_progress == (1, int(polymarket["blockNumber"]))
-    settlement = await _wait_for_settlement(
-        polymarket_resolver, mirror_id, condition_id
-    )
-    assert settlement[1] == 1
-    assert settlement[2] == POLYGON_CHAIN_ID
-    assert Web3.to_checksum_address(settlement[3]) == CTF_ADDRESS
-    assert Web3.to_checksum_address(settlement[4]) == Web3.to_checksum_address(
-        polymarket["oracle"]
-    )
-    assert Web3.to_hex(settlement[5]).lower() == polymarket["questionId"].lower()
-    assert settlement[6] == int(polymarket["outcomeSlotCount"])
-    assert Web3.to_hex(settlement[7]).lower() == polymarket[
-        "transactionHash"
-    ].lower()
-    assert settlement[8] == int(polymarket["logIndex"])
-    observation = tuple(
-        polymarket_resolver.functions.getSettlementObservation(
-            mirror_id, condition_id
-        ).call()
-    )
-    assert observation[0] == 1
-    expected_winning_slot = next(
-        index
-        for index, payout in enumerate(polymarket["payoutNumerators"])
-        if payout > 0
-    )
-    assert observation[1] == expected_winning_slot
-    assert observation[2] == 1
-    assert Web3.to_hex(observation[4]).lower() == polymarket[
-        "transactionHash"
-    ].lower()
-    assert observation[5] == int(polymarket["logIndex"])
-    resolution_events = (
-        polymarket_resolver.events.PolymarketConditionResolved().get_logs(
-            from_block=receipt["blockNumber"],
-            to_block="latest",
-            argument_filters={
-                "mirrorId": mirror_id,
-                "conditionId": condition_id,
-            },
-        )
-    )
-    assert len(resolution_events) == 1
-    assert list(resolution_events[0]["args"]["payoutNumerators"]) == polymarket[
-        "payoutNumerators"
-    ]
 
     for feed in binance_feeds:
         price_progress, initial_price = initial_prices[feed["pair"]]
@@ -1464,12 +1249,8 @@ async def test_governance_activated_oracles_soak_for_configured_duration(
             settings,
             native_artifact,
             price_artifact,
-            polymarket_artifact,
             price_resolver.address,
-            polymarket_resolver.address,
             binance_feeds,
-            polymarket,
-            settlement,
         )
     except BaseException as error:
         last_heartbeat = None
@@ -1495,7 +1276,6 @@ async def test_governance_activated_oracles_soak_for_configured_duration(
                 "binancePairs": [
                     feed["pair"] for feed in binance_feeds
                 ],
-                "polymarketMirrorId": mirror_id,
                 "lastHeartbeat": last_heartbeat,
             }
         )
@@ -1517,24 +1297,11 @@ async def test_governance_activated_oracles_soak_for_configured_duration(
             f"{pair} callback count does not match final source nonce"
         )
         price_delivery_counts[pair] = delivery_count
-    polymarket_delivery_count = len(
-        _callback_success_logs(
-            w3,
-            SOURCE_TYPE_POLYMARKET,
-            mirror_id,
-            receipt["blockNumber"],
-            summary["finalGravityBlock"],
-        )
-    )
-    assert polymarket_delivery_count == 1, (
-        "Polymarket settlement was delivered more than once"
-    )
     summary.update(
         {
             "activationEpoch": activation_epoch,
             "governanceBlock": receipt["blockNumber"],
             "priceCallbackEvents": price_delivery_counts,
-            "polymarketCallbackEvents": polymarket_delivery_count,
             "soakEpochIntervalSeconds": (
                 SOAK_EPOCH_INTERVAL_MICROS // 1_000_000
             ),
