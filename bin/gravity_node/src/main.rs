@@ -392,7 +392,13 @@ fn main() {
             )
             .await;
             if enable_broadcast {
-                broadcast_listener::spawn_broadcast_listener(reth_pool, admit_handle, chain_id);
+                // CAP/wait from env (MEMPOOL_ADMIT_BATCH_*); see AdmitBatchConfig::from_env.
+                broadcast_listener::spawn_broadcast_listener(
+                    reth_pool,
+                    admit_handle,
+                    chain_id,
+                    broadcast_listener::AdmitBatchConfig::from_env(),
+                );
             }
             // else: drop admit_handle; no subscribe (validator / blackhole)
             _engine = Some(engine);

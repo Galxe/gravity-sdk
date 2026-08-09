@@ -59,3 +59,8 @@ inspection_service:
 
 mempool:
   capacity_per_user: 20000
+  # Gravity PFN broadcast timeline knobs are env-based until MempoolConfig lands
+  # (gravity-aptos feat/mempool-admit-reconcile-config) and greth pins the same rev:
+  #   MEMPOOL_ADMIT_BATCH_CAP=64
+  #   MEMPOOL_ADMIT_BATCH_MAX_WAIT_MS=5
+  #   MEMPOOL_SNAPSHOT_MAX_AGE_MS=2000   # reconcile_max_age

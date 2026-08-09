@@ -107,7 +107,7 @@ struct TransactionStore {
     last_reconcile: Instant,
 
     /// Max age of a reconcile before `maybe_reconcile(false)` refreshes.
-    /// Driven by `MEMPOOL_SNAPSHOT_MAX_AGE_MS` (default 2000ms). Aptos has no
+    /// Config: env `MEMPOOL_SNAPSHOT_MAX_AGE_MS` (default 2000). Aptos has no
     /// equivalent poll interval on the timeline path.
     reconcile_max_age: Duration,
 
@@ -358,7 +358,7 @@ impl Mempool {
             std::env::var("MEMPOOL_SNAPSHOT_MAX_AGE_MS")
                 .ok()
                 .and_then(|s| s.parse::<u64>().ok())
-                .unwrap_or(2000),
+                .unwrap_or(2_000),
         );
         let num_sender_buckets = config.mempool.num_sender_buckets.max(1);
         let num_fee_slots = config.mempool.broadcast_buckets.len().max(1);

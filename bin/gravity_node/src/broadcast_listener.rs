@@ -1,9 +1,13 @@
 //! Reth pending-body listener → timeline admit (via [`AdmitHandle`]).
 //!
-//! Drain policy: CAP=128 + hard 1ms batch wait (`tokio::time::timeout` on recv).
+//! Drain policy: CAP + hard max-wait batch (`tokio::time::timeout` on recv).
+//! Knobs (env, with defaults):
+//! - `MEMPOOL_ADMIT_BATCH_CAP` (default 64)
+//! - `MEMPOOL_ADMIT_BATCH_MAX_WAIT_MS` (default 5)
+//!
 //! Never locks outer `smp.mempool` — only `admit.admit_batch`.
 
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use api::AdmitHandle;
 use aptos_mempool::core_mempool::transaction::VerifiedTxn as CoreVerifiedTxn;
@@ -16,19 +20,65 @@ use tracing::{info, warn};
 
 use crate::{mempool::to_verified_txn, reth_cli::RethTransactionPool};
 
-/// Max number of txs to batch before flushing to admit.
-pub const ADMIT_BATCH_CAP: usize = 128;
+/// Default batch size (`MEMPOOL_ADMIT_BATCH_CAP`).
+pub const DEFAULT_ADMIT_BATCH_CAP: usize = 64;
 
-/// Max time to wait after the first item before flushing even if under CAP.
-pub const ADMIT_BATCH_MAX_WAIT: std::time::Duration = std::time::Duration::from_millis(1);
+/// Default max wait ms (`MEMPOOL_ADMIT_BATCH_MAX_WAIT_MS`).
+pub const DEFAULT_ADMIT_BATCH_MAX_WAIT_MS: u64 = 5;
+
+/// Runtime batching knobs for the pending-body → admit path.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct AdmitBatchConfig {
+    /// Max txs to batch before flushing.
+    pub cap: usize,
+    /// Max time to wait after the first item before flushing even if under CAP.
+    pub max_wait: Duration,
+}
+
+impl Default for AdmitBatchConfig {
+    fn default() -> Self {
+        Self {
+            cap: DEFAULT_ADMIT_BATCH_CAP,
+            max_wait: Duration::from_millis(DEFAULT_ADMIT_BATCH_MAX_WAIT_MS),
+        }
+    }
+}
+
+impl AdmitBatchConfig {
+    /// Build from explicit values; zero cap is clamped to 1.
+    pub fn new(cap: usize, max_wait_ms: u64) -> Self {
+        Self { cap: cap.max(1), max_wait: Duration::from_millis(max_wait_ms) }
+    }
+
+    /// Read from process env; missing/invalid → defaults.
+    ///
+    /// - `MEMPOOL_ADMIT_BATCH_CAP` (usize, default 64)
+    /// - `MEMPOOL_ADMIT_BATCH_MAX_WAIT_MS` (u64, default 5)
+    pub fn from_env() -> Self {
+        let cap = std::env::var("MEMPOOL_ADMIT_BATCH_CAP")
+            .ok()
+            .and_then(|s| s.parse::<usize>().ok())
+            .unwrap_or(DEFAULT_ADMIT_BATCH_CAP);
+        let max_wait_ms = std::env::var("MEMPOOL_ADMIT_BATCH_MAX_WAIT_MS")
+            .ok()
+            .and_then(|s| s.parse::<u64>().ok())
+            .unwrap_or(DEFAULT_ADMIT_BATCH_MAX_WAIT_MS);
+        Self::new(cap, max_wait_ms)
+    }
+}
 
 /// Drain decision: flush when CAP hit, max wait elapsed, or no more pending work.
 ///
 /// Pure policy helper (unit-tested). The async drain loop enforces the same rules via
 /// CAP and `tokio::time::timeout` on recv rather than calling this after a blocking recv.
 #[cfg_attr(not(test), allow(dead_code))]
-pub fn should_flush(len: usize, elapsed: std::time::Duration, more_pending: bool) -> bool {
-    len >= ADMIT_BATCH_CAP || elapsed >= ADMIT_BATCH_MAX_WAIT || (!more_pending && len > 0)
+pub fn should_flush(
+    len: usize,
+    elapsed: Duration,
+    more_pending: bool,
+    cfg: AdmitBatchConfig,
+) -> bool {
+    len >= cfg.cap || elapsed >= cfg.max_wait || (!more_pending && len > 0)
 }
 
 /// Convert a reth pending pool event into a consensus `SignedTransaction`.
@@ -57,9 +107,18 @@ fn event_pool_txn_to_signed(
 ///
 /// Spawns a task on the current tokio runtime. On channel close, the task exits
 /// (reconcile-only degrade). Only uses `admit.admit_batch` — never outer mempool lock.
-pub fn spawn_broadcast_listener(pool: RethTransactionPool, admit: AdmitHandle, chain_id: u64) {
+pub fn spawn_broadcast_listener(
+    pool: RethTransactionPool,
+    admit: AdmitHandle,
+    chain_id: u64,
+    batch_cfg: AdmitBatchConfig,
+) {
     let mut rx = pool.new_pending_pool_transactions_listener();
-    info!("spawned reth pending-body broadcast listener (cap={ADMIT_BATCH_CAP}, wait=1ms)");
+    info!(
+        "spawned reth pending-body broadcast listener (cap={}, wait={}ms)",
+        batch_cfg.cap,
+        batch_cfg.max_wait.as_millis()
+    );
 
     tokio::spawn(async move {
         loop {
@@ -74,15 +133,15 @@ pub fn spawn_broadcast_listener(pool: RethTransactionPool, admit: AdmitHandle, c
                 }
             };
 
-            let deadline = tokio::time::Instant::now() + ADMIT_BATCH_MAX_WAIT;
-            let mut batch = Vec::with_capacity(ADMIT_BATCH_CAP);
+            let deadline = tokio::time::Instant::now() + batch_cfg.max_wait;
+            let mut batch = Vec::with_capacity(batch_cfg.cap);
             if let Some(signed) = event_to_signed(first, chain_id) {
                 batch.push(signed);
             } else {
                 warn!("skipping pool event: conversion to SignedTransaction failed");
             }
 
-            while batch.len() < ADMIT_BATCH_CAP {
+            while batch.len() < batch_cfg.cap {
                 let left = deadline.saturating_duration_since(tokio::time::Instant::now());
                 if left.is_zero() {
                     break;
@@ -120,23 +179,32 @@ pub fn spawn_broadcast_listener(pool: RethTransactionPool, admit: AdmitHandle, c
 mod tests {
     use super::*;
 
+    fn cfg(cap: usize, wait_ms: u64) -> AdmitBatchConfig {
+        AdmitBatchConfig::new(cap, wait_ms)
+    }
+
     #[test]
     fn flush_on_cap() {
-        assert!(should_flush(128, std::time::Duration::from_micros(10), true));
+        assert!(should_flush(64, Duration::from_micros(10), true, cfg(64, 5)));
     }
 
     #[test]
     fn flush_on_max_wait_even_if_under_cap() {
-        assert!(should_flush(1, std::time::Duration::from_millis(1), true));
+        assert!(should_flush(1, Duration::from_millis(5), true, cfg(64, 5)));
     }
 
     #[test]
     fn no_flush_mid_batch_before_wait() {
-        assert!(!should_flush(3, std::time::Duration::from_micros(100), true));
+        assert!(!should_flush(3, Duration::from_micros(100), true, cfg(64, 5)));
     }
 
     #[test]
     fn flush_when_no_more_pending() {
-        assert!(should_flush(1, std::time::Duration::from_micros(1), false));
+        assert!(should_flush(1, Duration::from_micros(1), false, cfg(64, 5)));
+    }
+
+    #[test]
+    fn new_clamps_zero_cap() {
+        assert_eq!(AdmitBatchConfig::new(0, 5).cap, 1);
     }
 }
