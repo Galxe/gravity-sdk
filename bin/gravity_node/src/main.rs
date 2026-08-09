@@ -269,9 +269,10 @@ fn main() {
 
     // Raise new-tx body listener buffer before CLI parse (operators can still
     // override via --txpool.max-new-txns). Default greth size is 1024.
-    if let Err(_) = reth_node_core::args::DefaultTxPoolValues::default()
+    if reth_node_core::args::DefaultTxPoolValues::default()
         .with_new_tx_listener_buffer_size(1024 * 16)
         .try_init()
+        .is_err()
     {
         warn!("DefaultTxPoolValues already initialized; leaving new_tx_listener_buffer_size as-is");
     }
