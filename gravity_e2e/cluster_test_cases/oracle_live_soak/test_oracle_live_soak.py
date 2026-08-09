@@ -60,6 +60,7 @@ SNAPSHOT_CONFIRMATION_BLOCKS = 16
 SNAPSHOT_READ_RETRIES = 20
 SNAPSHOT_CONVERGENCE_RETRIES = 20
 SNAPSHOT_CONVERGENCE_DELAY_SECONDS = 0.25
+MAX_GET_LOGS_BLOCKS = 100_000
 
 
 class SnapshotNotConverged(AssertionError):
@@ -457,18 +458,89 @@ def _callback_success_logs(
     from_block: int,
     to_block: int | str = "latest",
 ) -> list:
-    return w3.eth.get_logs(
-        {
-            "fromBlock": from_block,
-            "toBlock": to_block,
-            "address": support.NATIVE_ORACLE_ADDRESS,
-            "topics": [
-                CALLBACK_SUCCESS_TOPIC0,
-                _topic(source_type),
-                _topic(source_id),
-            ],
-        }
+    final_block = (
+        int(w3.eth.block_number) if to_block == "latest" else int(to_block)
     )
+    if final_block < from_block:
+        return []
+
+    logs = []
+    for chunk_start in range(
+        from_block, final_block + 1, MAX_GET_LOGS_BLOCKS
+    ):
+        chunk_end = min(
+            chunk_start + MAX_GET_LOGS_BLOCKS - 1, final_block
+        )
+        logs.extend(
+            w3.eth.get_logs(
+                {
+                    "fromBlock": chunk_start,
+                    "toBlock": chunk_end,
+                    "address": support.NATIVE_ORACLE_ADDRESS,
+                    "topics": [
+                        CALLBACK_SUCCESS_TOPIC0,
+                        _topic(source_type),
+                        _topic(source_id),
+                    ],
+                }
+            )
+        )
+    return logs
+
+
+def test_callback_success_logs_chunks_large_ranges():
+    class FakeEth:
+        block_number = 400_000
+
+        def __init__(self):
+            self.requests = []
+
+        def get_logs(self, request):
+            self.requests.append(request)
+            return [(request["fromBlock"], request["toBlock"])]
+
+    class FakeWeb3:
+        def __init__(self):
+            self.eth = FakeEth()
+
+    w3 = FakeWeb3()
+    logs = _callback_success_logs(w3, 3, 1001, 68, 343_799)
+
+    assert logs == [
+        (68, 100_067),
+        (100_068, 200_067),
+        (200_068, 300_067),
+        (300_068, 343_799),
+    ]
+    assert all(
+        request["address"] == support.NATIVE_ORACLE_ADDRESS
+        and request["topics"]
+        == [CALLBACK_SUCCESS_TOPIC0, _topic(3), _topic(1001)]
+        for request in w3.eth.requests
+    )
+
+
+def test_callback_success_logs_snapshots_latest_once():
+    class FakeEth:
+        block_number = 200_001
+
+        def __init__(self):
+            self.requests = []
+
+        def get_logs(self, request):
+            self.requests.append(request)
+            return []
+
+    class FakeWeb3:
+        def __init__(self):
+            self.eth = FakeEth()
+
+    w3 = FakeWeb3()
+    assert _callback_success_logs(w3, 6, 42, 0) == []
+    assert [
+        (request["fromBlock"], request["toBlock"])
+        for request in w3.eth.requests
+    ] == [(0, 99_999), (100_000, 199_999), (200_000, 200_001)]
 
 
 def _round_start_ms(first_bucket_start_ms: int, delivery_nonce: int) -> int:
