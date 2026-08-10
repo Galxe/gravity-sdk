@@ -17,6 +17,7 @@ use crate::{
     },
 };
 use aptos_consensus::{consensusdb::ConsensusDB, gravity_state_computer::ConsensusAdapterArgs};
+use aptos_mempool::core_mempool::AdmitHandle;
 use block_buffer_manager::TxPool;
 use build_info::build_information;
 use futures::channel::mpsc;
@@ -114,7 +115,10 @@ pub struct ConsensusEngineArgs {
 }
 
 impl ConsensusEngine {
-    pub async fn init(args: ConsensusEngineArgs, pool: Box<dyn TxPool>) -> Arc<Self> {
+    pub async fn init(
+        args: ConsensusEngineArgs,
+        pool: Box<dyn TxPool>,
+    ) -> (Arc<Self>, AdmitHandle) {
         let ConsensusEngineArgs { node_config, chain_id, latest_block_number, config_storage } =
             args;
         // Setup panic handler
@@ -281,7 +285,7 @@ impl ConsensusEngine {
                 notification_receiver,
             );
         let (_mempool_client_sender, _mempool_client_receiver) = mpsc::channel(1);
-        let mempool_runtime = init_mempool(
+        let (mempool_runtime, admit_handle) = init_mempool(
             &node_config,
             &db,
             &mut event_subscription_service,
@@ -368,9 +372,9 @@ impl ConsensusEngine {
             }
         }
         let arc_consensus_engine = Arc::new(Self { runtimes });
-        // process new round should be after init retƒh hash
+        // process new round should be after init reth hash
         info!("pass latest_block_number: {:?} to event_subscription_service", latest_block_number);
         let _ = event_subscription_service.lock().await.notify_initial_configs(latest_block_number);
-        arc_consensus_engine
+        (arc_consensus_engine, admit_handle)
     }
 }

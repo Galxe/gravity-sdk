@@ -61,6 +61,14 @@ PFN_DOWN_DURATION = 30           # seconds each PFN stays stopped
 CATCHUP_TIMEOUT = PFN_DOWN_DURATION * 4   # 120s budget per plan §7.4
 POST_TAIL_DURATION = 60          # final monitor window after Phase 1b
 STEADY_INITIAL_TIMEOUT = 60      # max wait for first steady before any stops
+# After STOP sibling A, ConnectivityManager re-dials A with exponential
+# backoff capped at max_connection_delay_ms (Public default 60s). Height
+# steady after A's restart only proves the *other* upstream still feeds
+# pfn3 — not that pfn3↔A is back. Before STOP sibling B, wait until wall
+# time since A's stop is at least this long so the re-dial cliff can clear.
+# = 60s cap + 5s connectivity_check_interval (no peer-table probe in e2e yet).
+# See _local/tmp/pfn3-topology-stall-analysis.md H1.
+UPSTREAM_REDIAL_SETTLE_SECS = 65
 # No absolute confirm-count threshold: TxSender's loop ensures
 # `total_sent == total_confirmed + total_timeout` after stop(), so the
 # meaningful health check is "did anything actually fail" — see Phase 1
@@ -643,6 +651,7 @@ async def test_pfn_chain_topology(cluster: Cluster):
                 f"in_flight_hashes={in_flight_at_stop}"
             )
 
+            stop_mono = time.monotonic()
             assert await victim.stop(), f"{victim_id} failed to stop"
             excluded.add(victim_id)
 
@@ -677,6 +686,33 @@ async def test_pfn_chain_topology(cluster: Cluster):
                 (f"Phase 1b {victim_id} catchup",
                  after_catchup_snap - during_stop_snap)
             )
+
+            # After pfn1 returns, pfn3 may still be mid re-dial (≤60s backoff).
+            # Do not stop pfn2 until wall time since pfn1 stop covers that cliff;
+            # otherwise pfn3 can have zero live PreferredUpstream (topology stall).
+            if victim_id == "pfn1":
+                elapsed = time.monotonic() - stop_mono
+                remaining = UPSTREAM_REDIAL_SETTLE_SECS - elapsed
+                if remaining > 0:
+                    LOG.info(
+                        f"[phase 1b] dual-upstream re-dial settle: sleep {remaining:.1f}s "
+                        f"(elapsed_since_pfn1_stop={elapsed:.1f}s, "
+                        f"target={UPSTREAM_REDIAL_SETTLE_SECS}s)"
+                    )
+                    settle_snap = tx_sender.snapshot()
+                    await asyncio.sleep(remaining)
+                    window_log.append(
+                        (
+                            f"Phase 1b pfn1 re-dial settle ({remaining:.0f}s)",
+                            tx_sender.snapshot() - settle_snap,
+                        )
+                    )
+                else:
+                    LOG.info(
+                        f"[phase 1b] dual-upstream re-dial settle: skip "
+                        f"(elapsed_since_pfn1_stop={elapsed:.1f}s already "
+                        f">= {UPSTREAM_REDIAL_SETTLE_SECS}s)"
+                    )
 
         # Phase 1c — post-tail steady state to confirm everything still healthy.
         LOG.info(f"[phase 1c] post-tail monitoring for {POST_TAIL_DURATION}s")
@@ -773,20 +809,17 @@ async def test_pfn_chain_topology(cluster: Cluster):
         "Vfn instead of Public. Regression of commit 16ebf363."
     )
 
-    # Phase 3 — silent black-hole verification (impl-d slot-flip).
+    # Phase 3 — silent black-hole commit-latency safety net (poll-timeline v1).
     #
-    # Goal: verify design.md §3.8 / impl-d §6.4 — when a PFN is alive
-    # (RPC + consensus healthy, still in sync_states) but its mempool
-    # broadcaster is silenced, pfn3 RPC tx still commits within ~1 TTL via
-    # the Failover slot.
+    # When a PFN is alive (RPC + consensus healthy, still in sync_states) but
+    # its mempool broadcaster is silenced, pfn3 RPC tx must still commit via
+    # the Failover-assigned path. Failover Fresh uses
+    # before=now-shared_mempool_failover_delay_ms (default 500ms); there is
+    # no Arch-A cache TTL rebroadcast cycle.
     #
-    # We run two halves back-to-back, blackholing pfn1 then pfn2, and assert
-    # per-half SLA: p99 ≤ 3 × TTL + slack regardless of whether priority.rs
-    # put us on the direct path or the slot-flip path. Branch coverage of
-    # the slot-flip code itself is handled by the unit tests
-    # `ttl_expired_alt_slot_dispatches` etc. in
-    # aptos-core/mempool/src/core_mempool/mempool.rs, so e2e does not try
-    # to infer it from latency shape. See impl-d §9.2 for design rationale.
+    # Two halves blackhole pfn1 then pfn2; per-half SLA is on **commit**
+    # p50/p99 (client submit→confirm), not isolated first-alt path latency.
+    # Instant `before` semantics: unit tests `t5_*` in mempool.rs.
     await _phase3_silent_blackhole(cluster)
 
     LOG.info("PFN fan-out test PASSED")
@@ -869,17 +902,15 @@ async def _run_blackhole_half(
 
 async def _phase3_silent_blackhole(cluster: Cluster):
     """
-    Phase 3: two-half silent-blackhole SLA verification of impl-d.
+    Phase 3: two-half silent-blackhole **commit-latency** safety net.
 
     Half A blackholes pfn1, Half B blackholes pfn2. Per half we assert that
-    every tx commits within `3 × TTL + slop` (~18s) regardless of which peer
-    priority.rs picked as Primary. The slot-flip code path itself is covered
-    deterministically by the unit tests in
-    aptos-core/mempool/src/core_mempool/mempool.rs
-    (`ttl_expired_alt_slot_dispatches` and friends), so e2e does not try to
-    infer slot-flip coverage from latency shape.
+    client submit→confirm latencies stay well below multi-second Arch-A TTL
+    ceilings, regardless of which peer priority.rs marked Primary.
 
-    See _local/drafts/pfn/mempool-broadcast-impl-d.md §9.2.
+    Metrics are end-to-end commit p50/p99 (not isolated first-alt path
+    latency). Failover `before` Instant semantics are covered by unit
+    `t5_*` in aptos-core/mempool/src/core_mempool/mempool.rs.
     """
     LOG.info("=" * 70)
     LOG.info("[phase 3] silent black-hole (two-half SLA verification)")
@@ -908,25 +939,23 @@ async def _phase3_silent_blackhole(cluster: Cluster):
         cluster, "pfn2", bench_accounts, PHASE3_LOAD_SECS, label="b",
     )
 
-    # Per-half SLA asserts. The mempool broadcast cache TTL governs the
-    # worst-case slot-flip latency. Worst-case path stacks:
-    #   - TTL=5s wait for the cache entry to expire (Primary suppress window)
-    #   - one more TTL window of alt-slot retry queueing when priority.rs put
-    #     the blackhole peer as Primary on (nearly) every active sender
-    #     bucket — every in-flight tx funnels through the single Failover
-    #     slot and back-pressure stretches the next tick by up to a full TTL
-    #   - ~1s commit
-    #   - ~2s slack for snapshot refresh / tick jitter
-    # = 3 × TTL + 3s = 18s. Observed worst case in CI: p99 ≈ 15s when
-    # priority.rs degenerates to all-buckets-share-one-Primary.
+    # Per-half SLA (commit latency under silent Primary black-hole).
     #
-    # Direct path is ~1-2s, so this ceiling is loose for the
-    # well-distributed case and tight for the degenerate case. Replaces
-    # the prior bimodal split assertion which depended on Primary-stability
-    # across halves (PR #722 review point 1).
-    MEMPOOL_TTL_SECONDS = 5.0   # MEMPOOL_BROADCAST_CACHE_TTL_SECS in mempool.rs
+    # Historical Arch-A: cache TTL 5s → worst-case slot-flip ceiling
+    #   3 × 5s + 3s slack = 18s
+    #
+    # poll-timeline v1: no TTL rebroadcast; Failover Fresh gated by
+    # shared_mempool_failover_delay_ms (default 500ms) via read_timeline
+    # `before`. Local e2e black-hole commit p99 was ~1.7–2.2s.
+    #
+    # Tightened safety net (still commit proxy, NOT first-alt 500ms proof):
+    #   p50 ≤ 4s   — must not look like ~5s Arch-A TTL-world median
+    #   p99 ≤ 10s  — ≪ historical Arch-A 18s; absorbs loopback load variance
+    #                (observed black-hole commit p99 ≈ 1.7–2.2s on a quiet run,
+    #                 ≈ 7.1–7.6s under noisier host load — keep margin)
     EXPECTED_MIN_SENT = PHASE3_LOAD_SECS * 5
-    P99_CEILING = 3.0 * MEMPOOL_TTL_SECONDS + 3.0   # 18.0s
+    P50_CEILING = 4.0    # seconds; anti-regression vs Arch-A TTL median
+    P99_CEILING = 10.0   # seconds; black-hole commit safety net (not first-alt)
     for half in (half_a, half_b):
         tag = f"phase 3{half['label']}/{half['target']}"
         assert half["sent"] >= EXPECTED_MIN_SENT, (
@@ -934,20 +963,26 @@ async def _phase3_silent_blackhole(cluster: Cluster):
             f"MultiAccountTxSender stalled?"
         )
         assert half["timeout"] == 0, (
-            f"[{tag}] {half['timeout']} timeouts — impl-d slot-flip is NOT "
-            f"catching in-flight txs within TTL window"
+            f"[{tag}] {half['timeout']} timeouts — failover path is NOT "
+            f"catching in-flight txs within the safety ceiling"
         )
         assert half["failed"] == 0, f"[{tag}] send failures: {half['failed']}"
+        assert half["p50"] <= P50_CEILING, (
+            f"[{tag}] p50={half['p50']:.2f}s exceeds ceiling {P50_CEILING:.1f}s "
+            f"(commit proxy; ≥4s suggests Arch-A TTL-scale failover lag)"
+        )
         assert half["p99"] <= P99_CEILING, (
-            f"[{tag}] p99={half['p99']:.2f}s exceeds SLA ceiling "
-            f"{P99_CEILING:.1f}s (= 3 × TTL + 3s slack)"
+            f"[{tag}] p99={half['p99']:.2f}s exceeds safety ceiling "
+            f"{P99_CEILING:.1f}s (commit latency under black-hole; not "
+            f"isolated first-alt / failover_delay 500ms SLA)"
         )
 
     LOG.info(
         f"[phase 3] SLA PASSED: halves: pfn1-blackhole "
-        f"p95={half_a['p95']:.2f}s p99={half_a['p99']:.2f}s, "
-        f"pfn2-blackhole p95={half_b['p95']:.2f}s p99={half_b['p99']:.2f}s "
-        f"(ceiling {P99_CEILING:.1f}s)"
+        f"p50={half_a['p50']:.2f}s p95={half_a['p95']:.2f}s p99={half_a['p99']:.2f}s, "
+        f"pfn2-blackhole "
+        f"p50={half_b['p50']:.2f}s p95={half_b['p95']:.2f}s p99={half_b['p99']:.2f}s "
+        f"(ceilings p50≤{P50_CEILING:.1f}s p99≤{P99_CEILING:.1f}s; commit proxy)"
     )
 
     # Final probe: cluster fully healthy again after both halves restored.

@@ -63,6 +63,7 @@ mod tests;
 pub use tests::mocks;
 
 pub mod core_mempool;
+pub use core_mempool::AdmitHandle;
 pub use gaptos::aptos_mempool::shared_mempool;
 // pub(crate) mod thread_pool;
 

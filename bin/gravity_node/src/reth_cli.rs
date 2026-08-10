@@ -1,7 +1,7 @@
 use crate::ConsensusArgs;
 use alloy_consensus::transaction::SignerRecoverable;
 use alloy_eips::{eip4895::Withdrawals, Decodable2718};
-use alloy_primitives::{Address, TxHash, B256, U256};
+use alloy_primitives::{Address, B256, U256};
 use block_buffer_manager::get_block_buffer_manager;
 use core::panic;
 use dashmap::DashMap;
@@ -38,7 +38,7 @@ use std::{
     time::Instant,
 };
 
-use tokio::sync::{broadcast, Mutex};
+use tokio::sync::broadcast;
 use tracing::*;
 
 const FILTER_REASON_DECODE_FAILED: &str = "decode_failed";
@@ -100,7 +100,6 @@ pub struct RethCli<EthApi: RethEthCall> {
     pipe_api: RethPipeExecLayerApi<EthApi>,
     chain_id: u64,
     provider: RethBlockChainProvider,
-    _txn_listener: Mutex<tokio::sync::mpsc::Receiver<TxHash>>,
     _pool: RethTransactionPool,
     txn_cache: TxnCache,
     _txn_batch_size: usize,
@@ -136,7 +135,6 @@ impl<EthApi: RethEthCall> RethCli<EthApi> {
             pipe_api: args.pipeline_api,
             chain_id,
             provider: args.provider,
-            _txn_listener: Mutex::new(args.tx_listener),
             _pool: args.pool,
             txn_cache,
             _txn_batch_size: 2000,
