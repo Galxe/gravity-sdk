@@ -420,8 +420,8 @@ def _price_state_at_block_hash(
         )
         if (
             progress_before == progress_after
-            and latest[0]
-            and progress_after[1] == latest[2]
+            and latest[0] > 0
+            and progress_after[1] == latest[1]
         ):
             return progress_after, latest
         time.sleep(0.05)
@@ -676,12 +676,10 @@ async def _replicated_snapshot_once(
         round_start = _round_start_ms(
             int(feed["bucketStartMs"]), progress[0]
         )
-        assert latest[0]
-        assert latest[1] == round_start // INTERVAL_MS
-        assert latest[2] == round_start + INTERVAL_MS - 1
-        assert progress[1] == latest[2]
-        assert latest[3] == DECIMALS
-        assert latest[4] > 0
+        assert latest[0] == round_start // INTERVAL_MS
+        assert latest[1] == round_start + INTERVAL_MS - 1
+        assert progress[1] == latest[1]
+        assert latest[2] > 0
         price_feeds[pair] = {
             "feedId": feed_id,
             "progress": progress,
@@ -828,7 +826,7 @@ async def _run_soak(
     }
     last_nonces = dict(initial_nonces)
     last_prices = {
-        pair: int(state["latestPrice"][4])
+        pair: int(state["latestPrice"][2])
         for pair, state in initial["priceFeeds"].items()
     }
     observed_price_changes = {pair: 0 for pair in initial_nonces}
@@ -909,7 +907,7 @@ async def _run_soak(
             pair = feed["pair"]
             state = final["priceFeeds"][pair]
             nonce = int(state["progress"][0])
-            price = int(state["latestPrice"][4])
+            price = int(state["latestPrice"][2])
             assert nonce >= last_nonces[pair], (
                 f"{pair} source nonce regressed"
             )
@@ -936,7 +934,7 @@ async def _run_soak(
                 "feedId": int(feed["feedId"]),
                 "nonce": nonce,
                 "position": int(state["progress"][1]),
-                "round": int(state["latestPrice"][1]),
+                "round": int(state["latestPrice"][0]),
                 "price": str(price),
                 "observedPriceChanges": observed_price_changes[pair],
                 "relayerQuorumNodes": relayer_nodes,
@@ -1012,14 +1010,14 @@ async def _run_soak(
         expected_price = await _fetch_binance_price_with_retry(
             feed["baseUrl"], pair, final_bucket
         )
-        assert int(state["latestPrice"][4]) == expected_price
+        assert int(state["latestPrice"][2]) == expected_price
         price_summaries[pair] = {
             "feedId": int(feed["feedId"]),
             "initialNonce": initial_nonces[pair],
             "finalNonce": final_nonce,
             "advances": advances,
             "minimumAdvances": settings.minimum_advances,
-            "finalPrice": str(state["latestPrice"][4]),
+            "finalPrice": str(state["latestPrice"][2]),
             "observedPriceChanges": observed_price_changes[pair],
             "maxObservedGapSeconds": round(max_price_gaps[pair], 3),
         }
@@ -1233,7 +1231,7 @@ async def test_governance_activated_price_feeds_soak_for_configured_duration(
         expected_initial_price = await _fetch_binance_price_with_retry(
             feed["baseUrl"], feed["pair"], first_bucket
         )
-        assert int(initial_price[4]) == expected_initial_price
+        assert int(initial_price[2]) == expected_initial_price
     await _wait_for_consensus_evidence(cluster, issuers)
     for feed in binance_feeds:
         price_progress, _ = initial_prices[feed["pair"]]

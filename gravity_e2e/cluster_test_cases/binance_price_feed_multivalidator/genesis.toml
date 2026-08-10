@@ -1,6 +1,6 @@
 [dependencies.genesis_contracts]
 repo = "https://github.com/Galxe/gravity_chain_core_contracts.git"
-ref = "ccd88ee62d90d38f824def26b32063fd094807c7"
+ref = "d90d81583b95adac73e86c8aafd27530414df03f"
 
 # node1 is the faucet so the test can execute the governance setup with one
 # development key. All four validators retain equal JWK voting power.

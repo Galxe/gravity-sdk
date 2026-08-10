@@ -7,6 +7,7 @@ from pathlib import Path
 import time
 
 import pytest
+from eth_abi import decode
 
 from gravity_e2e.cluster.manager import Cluster
 from gravity_e2e.utils import oracle_test_support as support
@@ -24,6 +25,36 @@ SUITE_DIR = Path(__file__).resolve().parent
 FEEDS = {1001: "NVDAUSDT", 1002: "TSLAUSDT"}
 TARGET_NONCE = 1
 QUORUM_VALIDATORS = 3
+PRICE_V1_GOLDEN_INNER = bytes.fromhex(
+    "0100000000000007d101b2e020018e23f2365f0000000000000009543637a800"
+)
+PRICE_V1_GOLDEN_WRAPPER = bytes.fromhex(
+    "0000000000000000000000000000000000000000000000000000000000000020"
+    "0000000000000000000000000000000000000000000000000000000000000001"
+    "0000000000000000000000000000000000000000000000000000018e23f2365f"
+    "0000000000000000000000000000000000000000000000000000000000000060"
+    "0000000000000000000000000000000000000000000000000000000000000020"
+    "0100000000000007d101b2e020018e23f2365f0000000000000009543637a800"
+)
+
+
+def test_price_v1_golden_vectors_match_contracts_and_reth():
+    payload = PRICE_V1_GOLDEN_INNER
+    assert len(payload) == 32
+    assert payload[0] == 1
+    assert int.from_bytes(payload[1:9], "big") == 2001
+    assert int.from_bytes(payload[9:13], "big") == 28_500_000
+    assert int.from_bytes(payload[13:19], "big") == 1_710_000_059_999
+    assert int.from_bytes(payload[19:31], "big") == 40_067_545_000
+    assert payload[31] == 0
+
+    assert len(PRICE_V1_GOLDEN_WRAPPER) == 192
+    nonce, source_position, callback_body = decode(
+        ["(uint128,uint256,bytes)"], PRICE_V1_GOLDEN_WRAPPER
+    )[0]
+    assert nonce == 1
+    assert source_position == 1_710_000_059_999
+    assert callback_body == payload
 
 
 def _price_feed_uri(feed_id: int, pair: str) -> str:
@@ -235,13 +266,11 @@ async def test_four_validators_resolve_deterministic_binance_prices(cluster: Clu
             delivery_nonce = int(progress[0])
             bucket_start = BUCKET_START_MS + (delivery_nonce - 1) * INTERVAL_MS
             assert latest == (
-                True,
                 bucket_start // INTERVAL_MS,
                 bucket_start + INTERVAL_MS - 1,
-                DECIMALS,
                 mock_scaled_price(pair, delivery_nonce - 1),
             )
-            assert progress[1] == latest[2]
+            assert progress[1] == latest[1]
             expected_progress[feed_id] = progress
             expected_rounds[feed_id] = latest
 
@@ -272,5 +301,5 @@ async def test_four_validators_resolve_deterministic_binance_prices(cluster: Clu
 
         LOG.info(
             "Four-validator Binance QC stored rounds: %s",
-            {feed_id: round_data[1] for feed_id, round_data in expected_rounds.items()},
+            {feed_id: round_data[0] for feed_id, round_data in expected_rounds.items()},
         )

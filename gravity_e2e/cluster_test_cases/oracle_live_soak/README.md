@@ -7,6 +7,11 @@ three continuous Binance Futures testnet closed index-price kline feeds:
 - `BTCUSDT` (`sourceType=3`, feed ID `1002`);
 - `ETHUSDT` (`sourceType=3`, feed ID `1003`).
 
+Each callback uses packed Price Feed V1: a canonical 32-byte big-endian body
+containing `version`, `feedId`, `roundId`, `resolvedAtMs`, fixed-8 `price`, and
+zero `flags`. The resolver exposes the latest round as
+`(uint32 roundId, uint48 resolvedAtMs, uint96 price)`.
+
 The suite submits one Gravity governance proposal that registers the three
 price tasks and the `PriceFeedResolver` callback. The same proposal changes the
 epoch interval from the 60-second bootstrap value to two hours for `E+1`. It
@@ -114,6 +119,27 @@ ORACLE_SOAK_RESTART_SCHEDULE_SECONDS=3600,10800 \
 The summary must contain two entries in `restartRecoveries`; the final snapshot
 must still show all four replicas, every relayer checkpoint caught up, and every
 price callback count equal to its source nonce.
+
+## Two-Hour Packed V1 Gate
+
+This focused compatibility run validates the packed contracts/reth/SDK stack
+and restarts `node4` at the midpoint:
+
+```bash
+ORACLE_SOAK_DURATION_SECONDS=7200 \
+ORACLE_SOAK_POLL_SECONDS=15 \
+ORACLE_SOAK_STALL_TIMEOUT_SECONDS=900 \
+ORACLE_SOAK_MIN_ADVANCES=96 \
+ORACLE_SOAK_RESTART_AFTER_SECONDS=3600 \
+  ./gravity_e2e/run_test.sh \
+    oracle_live_soak \
+    --force-init \
+    --log-cli-level=INFO
+```
+
+The final summary must report `status: passed`, one restart recovery, at least
+96 advances for every feed, four converged replicas, and callback counts equal
+to final source nonces.
 
 ## Optional 24-Hour Soak
 

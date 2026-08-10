@@ -293,7 +293,7 @@ async def wait_for_latest_price(
             ).call()
         )
         latest = tuple(resolver.functions.latestPrice(feed_id).call())
-        if progress[0] >= target_nonce and latest[0] and latest[2] == progress[1]:
+        if progress[0] >= target_nonce and latest[0] > 0 and latest[1] == progress[1]:
             return progress, latest
         await asyncio.sleep(2)
     raise TimeoutError(f"latestPrice({feed_id}) did not reach delivery nonce {target_nonce}")
