@@ -146,14 +146,17 @@ jobs:
       - name: Run E2E suite ${{ matrix.suite }} (skip build)
         run: |
           set -euo pipefail
-          # Artifact may land as flat files or nested; normalize paths.
-          if [ ! -x target/quick-release/gravity_node ]; then
-            found="$(find target/quick-release -type f -name gravity_node | head -1)"
-            cli="$(find target/quick-release -type f -name gravity_cli | head -1)"
-            test -n "${found}" && test -n "${cli}"
-            mkdir -p target/quick-release
-            cp -f "${found}" target/quick-release/gravity_node
-            cp -f "${cli}" target/quick-release/gravity_cli
+          # Artifact may land flat under target/quick-release/ or nested.
+          # download-artifact does not preserve +x; only relocate when needed.
+          node_src="$(find target/quick-release -type f -name gravity_node | head -1)"
+          cli_src="$(find target/quick-release -type f -name gravity_cli | head -1)"
+          test -n "${node_src}" && test -n "${cli_src}"
+          mkdir -p target/quick-release
+          if [ "${node_src}" != "target/quick-release/gravity_node" ]; then
+            cp -f "${node_src}" target/quick-release/gravity_node
+          fi
+          if [ "${cli_src}" != "target/quick-release/gravity_cli" ]; then
+            cp -f "${cli_src}" target/quick-release/gravity_cli
           fi
           chmod +x target/quick-release/gravity_node target/quick-release/gravity_cli
           chmod +x gravity_e2e/run_docker.sh
