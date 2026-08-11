@@ -88,6 +88,7 @@ fuzzing = [
     "aptos-safety-rules/testing",
 ]
 failpoints = ["fail/failpoints"]
+byzantine-test = []
 randomness_disabled = ["gaptos/randomness_disabled"]
 
 [package.metadata.cargo-machete]

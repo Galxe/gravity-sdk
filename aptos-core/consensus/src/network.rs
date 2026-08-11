@@ -454,7 +454,7 @@ impl NetworkSender {
         self.send(msg, recipients).await
     }
 
-    #[cfg(feature = "failpoints")]
+    #[cfg(any(feature = "failpoints", feature = "byzantine-test"))]
     pub async fn send_proposal(&self, proposal_msg: ProposalMsg, recipients: Vec<Author>) {
         fail_point!("consensus::send::proposal", |_| ());
         let msg = ConsensusMsg::ProposalMsg(Box::new(proposal_msg));

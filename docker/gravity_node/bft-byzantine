@@ -1,0 +1,228 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+die() {
+    echo "bft-byzantine: $*" >&2
+    exit 1
+}
+
+validate_token() {
+    local label="$1"
+    local value="$2"
+
+    [[ "${value}" =~ ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$ ]] \
+        || die "${label} contains unsupported characters"
+}
+
+canonical_state_file() {
+    local raw_path="$1"
+    local parent
+    local name
+
+    [[ "${raw_path}" == /* ]] || die "state file path must be absolute"
+    parent="$(readlink -f -- "$(dirname -- "${raw_path}")")" \
+        || die "cannot resolve state file parent"
+    name="$(basename -- "${raw_path}")"
+    [[ -n "${name}" && "${name}" != "." && "${name}" != ".." ]] \
+        || die "invalid state file name"
+    printf '%s/%s\n' "${parent}" "${name}"
+}
+
+initialize() {
+    [[ "${BFT_BYZANTINE_FIXTURE_ENABLED:-}" == "1" ]] \
+        || die "fixture is disabled; set BFT_BYZANTINE_FIXTURE_ENABLED=1"
+    [[ "$(id -u)" == "0" ]] \
+        || die "the hook must run as root (docker exec --user 0)"
+    command -v jq >/dev/null 2>&1 || die "required command not found: jq"
+
+    STATE_ROOT="${BFT_BYZANTINE_STATE_ROOT:-/run/bft-node}"
+    [[ "${STATE_ROOT}" == /* ]] || die "state root must be an absolute path"
+    mkdir -p "${STATE_ROOT}"
+    STATE_ROOT="$(readlink -f -- "${STATE_ROOT}")"
+    CONTROL_PATH="${BFT_BYZANTINE_CONTROL_PATH:-${STATE_ROOT}/byzantine-control.json}"
+    EVIDENCE_PATH="${BFT_BYZANTINE_EVIDENCE_PATH:-${STATE_ROOT}/byzantine-evidence.json}"
+    LOCK_DIR="${STATE_ROOT}/byzantine.lock"
+
+    CONTROL_PATH="$(canonical_state_file "${CONTROL_PATH}")"
+    EVIDENCE_PATH="$(canonical_state_file "${EVIDENCE_PATH}")"
+    for path in "${CONTROL_PATH}" "${EVIDENCE_PATH}"; do
+        [[ "${path}" == "${STATE_ROOT}"/* ]] \
+            || die "control and evidence paths must be below the state root"
+    done
+}
+
+acquire_lock() {
+    local owner=""
+
+    if mkdir "${LOCK_DIR}" 2>/dev/null; then
+        printf '%s\n' "$$" > "${LOCK_DIR}/pid"
+        trap release_lock EXIT
+        return
+    fi
+    [[ -f "${LOCK_DIR}/pid" ]] && owner="$(<"${LOCK_DIR}/pid")"
+    if [[ "${owner}" =~ ^[0-9]+$ ]] && kill -0 "${owner}" 2>/dev/null; then
+        die "another Byzantine hook operation is active (PID ${owner})"
+    fi
+    rm -rf -- "${LOCK_DIR}"
+    mkdir "${LOCK_DIR}" 2>/dev/null \
+        || die "another Byzantine hook operation acquired the lock"
+    printf '%s\n' "$$" > "${LOCK_DIR}/pid"
+    trap release_lock EXIT
+}
+
+release_lock() {
+    rm -rf -- "${LOCK_DIR:-/run/bft-node/byzantine.lock}"
+}
+
+validate_control() {
+    local path="$1"
+
+    jq -e '
+      type == "object" and
+      .schemaVersion == 1 and
+      (.active | type == "boolean") and
+      (.faultId | type == "string") and
+      .behavior == "equivocation" and
+      (.nodeId | type == "string")
+    ' "${path}" >/dev/null || die "invalid Byzantine control state"
+}
+
+write_control() {
+    local active="$1"
+    local fault_id="$2"
+    local node_id="$3"
+    local temporary="${CONTROL_PATH}.$$"
+
+    jq -cn \
+        --argjson active "${active}" \
+        --arg faultId "${fault_id}" \
+        --arg nodeId "${node_id}" \
+        '{schemaVersion: 1,
+          active: $active,
+          faultId: $faultId,
+          behavior: "equivocation",
+          nodeId: $nodeId}' > "${temporary}"
+    chmod 644 "${temporary}"
+    mv -f -- "${temporary}" "${CONTROL_PATH}"
+}
+
+inject_fault() {
+    local behavior="$1"
+    local fault_id="$2"
+    local node_id="$3"
+
+    [[ "${behavior}" == "equivocation" ]] \
+        || die "unsupported behavior: ${behavior}; capabilities: equivocation"
+    validate_token fault-id "${fault_id}"
+    validate_token node-id "${node_id}"
+    acquire_lock
+
+    if [[ -f "${CONTROL_PATH}" ]]; then
+        validate_control "${CONTROL_PATH}"
+        if [[ "$(jq -r '.active' "${CONTROL_PATH}")" == "true" ]]; then
+            die "another Byzantine fault is active: $(jq -r '.faultId' "${CONTROL_PATH}")"
+        fi
+    fi
+    rm -f -- "${EVIDENCE_PATH}"
+    write_control true "${fault_id}" "${node_id}"
+}
+
+heal_fault() {
+    local fault_id="$1"
+    local node_id="unknown"
+
+    validate_token fault-id "${fault_id}"
+    acquire_lock
+    if [[ -f "${CONTROL_PATH}" ]]; then
+        validate_control "${CONTROL_PATH}"
+        local current_fault
+        current_fault="$(jq -r '.faultId' "${CONTROL_PATH}")"
+        [[ "${current_fault}" == "${fault_id}" ]] \
+            || die "control state belongs to fault ${current_fault}"
+        node_id="$(jq -r '.nodeId' "${CONTROL_PATH}")"
+    fi
+    write_control false "${fault_id}" "${node_id}"
+}
+
+read_state() {
+    local fault_id="$1"
+    local active=false
+    local behavior="equivocation"
+    local node_id=""
+    local effect
+
+    validate_token fault-id "${fault_id}"
+    if [[ -f "${CONTROL_PATH}" ]]; then
+        validate_control "${CONTROL_PATH}"
+        local current_fault
+        current_fault="$(jq -r '.faultId' "${CONTROL_PATH}")"
+        if [[ "$(jq -r '.active' "${CONTROL_PATH}")" == "true" ]]; then
+            [[ "${current_fault}" == "${fault_id}" ]] \
+                || die "active control state belongs to fault ${current_fault}"
+        fi
+        active="$(jq -r '.active' "${CONTROL_PATH}")"
+        behavior="$(jq -r '.behavior' "${CONTROL_PATH}")"
+        node_id="$(jq -r '.nodeId' "${CONTROL_PATH}")"
+    fi
+
+    effect="$(jq -cn \
+        --arg behavior "${behavior}" \
+        '{observed: false,
+          behavior: $behavior,
+          eventCount: 0,
+          distinctMessageCount: 0,
+          recipientGroupCount: 0}')"
+    if [[ -f "${EVIDENCE_PATH}" ]] \
+        && jq -e --arg faultId "${fault_id}" '
+             type == "object" and
+             .schemaVersion == 1 and
+             .faultId == $faultId and
+             .behavior == "equivocation" and
+             (.protocolEffect | type == "object")
+           ' "${EVIDENCE_PATH}" >/dev/null; then
+        effect="$(jq -c '.protocolEffect' "${EVIDENCE_PATH}")"
+    fi
+
+    jq -cn \
+        --argjson active "${active}" \
+        --arg faultId "${fault_id}" \
+        --arg behavior "${behavior}" \
+        --arg nodeId "${node_id}" \
+        --argjson protocolEffect "${effect}" \
+        '{schemaVersion: 1,
+          active: $active,
+          faultId: $faultId,
+          behavior: $behavior,
+          nodeId: $nodeId,
+          capabilities: ["equivocation"],
+          protocolEffect: $protocolEffect}'
+}
+
+usage() {
+    cat >&2 <<'EOF'
+usage:
+  bft-byzantine inject equivocation <fault-id> <node-id>
+  bft-byzantine heal <fault-id>
+  bft-byzantine read <fault-id>
+EOF
+    exit 2
+}
+
+initialize
+case "${1:-}" in
+    inject)
+        [[ "$#" == 4 ]] || usage
+        inject_fault "$2" "$3" "$4"
+        ;;
+    heal)
+        [[ "$#" == 2 ]] || usage
+        heal_fault "$2"
+        ;;
+    read)
+        [[ "$#" == 2 ]] || usage
+        read_state "$2"
+        ;;
+    *)
+        usage
+        ;;
+esac
