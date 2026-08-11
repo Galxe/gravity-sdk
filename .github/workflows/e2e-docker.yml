@@ -6,7 +6,9 @@ on:
   workflow_dispatch:
     inputs:
       suite:
-        description: 'Test suite to run (empty = all)'
+        description: >
+          Single suite to run (empty = all PR suites). Examples: distinct_roles,
+          single_node, fuzzy_cluster, rolling_upgrade, long_test.
         required: false
         default: ''
 
@@ -31,22 +33,118 @@ jobs:
       workflow_file: e2e-docker.yml
       ignore_patterns: 'book/*|scripts/*|template_config/*|*.md|bin/sentinel/*|genesis/*'
 
-  e2e-test:
-    name: E2E Test
-    runs-on: [self-hosted, linux]
+  # ==========================================================================
+  # Build the suite matrix as JSON.
+  #
+  # Job-level `if` cannot use the `matrix` context, so selection lives here:
+  #   - PR review / dispatch with empty suite → PR default suite set
+  #     (same as the old serial job: all suites minus fuzzy_cluster,
+  #     rolling_upgrade, long_test)
+  #   - dispatch with suite=NAME → single-cell matrix
+  # ==========================================================================
+  prepare-matrix:
+    name: Prepare E2E matrix
+    runs-on: ubuntu-latest
     needs: gate
     if: needs.gate.outputs.should_run == 'true'
+    outputs:
+      matrix: ${{ steps.set.outputs.matrix }}
+    steps:
+      - name: Select suites
+        id: set
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          # workflow_dispatch only; empty on pull_request_review
+          SUITE: ${{ github.event.inputs.suite || '' }}
+        run: |
+          set -euo pipefail
+
+          # PR / default-dispatch suite set (matches prior
+          # `--exclude fuzzy_cluster --exclude rolling_upgrade` plus the
+          # run_docker.sh / runner default exclude of long_test).
+          PR_SUITES='[
+            "bridge",
+            "bridge_cross_epoch",
+            "bridge_multi_round",
+            "distinct_roles",
+            "distinct_roles_3nodes",
+            "four_validator",
+            "gov_consensus_config_test",
+            "gov_validator_whitelist_test",
+            "pfn_chain",
+            "prague",
+            "randomness_config_transition",
+            "single_node",
+            "vfn",
+            "vfn_shadow"
+          ]'
+
+          # Also accepted for workflow_dispatch single-suite runs.
+          EXTRA_SUITES='["fuzzy_cluster","rolling_upgrade","long_test"]'
+
+          ALL=$(jq -cn --argjson a "${PR_SUITES}" --argjson b "${EXTRA_SUITES}" '$a + $b')
+
+          if [ "${EVENT_NAME}" = "workflow_dispatch" ] && [ -n "${SUITE}" ]; then
+            if ! echo "${ALL}" | jq -e --arg s "${SUITE}" 'index($s) != null' >/dev/null; then
+              echo "::error::Unknown suite '${SUITE}'. Valid: $(echo "${ALL}" | jq -r 'join(", ")')"
+              exit 1
+            fi
+            MATRIX=$(jq -cn --arg s "${SUITE}" '{include:[{suite:$s}]}')
+          else
+            MATRIX=$(jq -cn --argjson s "${PR_SUITES}" '{include:[$s[]|{suite:.}]}')
+          fi
+
+          echo "matrix=${MATRIX}" >> "${GITHUB_OUTPUT}"
+          echo "Selected matrix: ${MATRIX}"
+
+  # ==========================================================================
+  # Per-suite jobs – "Re-run failed jobs" retries only red suite(s).
+  #
+  # Each cell still invokes gravity_e2e/run_docker.sh (full docker build +
+  # suite). max-parallel caps simultaneous cargo builds on self-hosted.
+  # ==========================================================================
+  e2e-test:
+    name: E2E / ${{ matrix.suite }}
+    runs-on: [self-hosted, linux]
+    needs: [gate, prepare-matrix]
+    if: needs.gate.outputs.should_run == 'true'
     timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix: ${{ fromJSON(needs.prepare-matrix.outputs.matrix) }}
 
     steps:
     - name: Checkout
       uses: actions/checkout@v4
 
-    - name: Run E2E Tests
+    - name: Run E2E suite ${{ matrix.suite }}
       run: |
+        set -euo pipefail
         chmod +x gravity_e2e/run_docker.sh
-        if [ "${{ github.event_name }}" = "pull_request_review" ]; then
-          ./gravity_e2e/run_docker.sh --exclude fuzzy_cluster --exclude rolling_upgrade
-        else
-          ./gravity_e2e/run_docker.sh ${{ github.event.inputs.suite }}
-        fi
+        # Named suite: runner does not apply default excludes, so
+        # long_test / rolling_upgrade / fuzzy_cluster stay reachable via
+        # workflow_dispatch.
+        ./gravity_e2e/run_docker.sh "${{ matrix.suite }}"
+
+  # Single check name for merge queues / humans. Fails if any matrix cell
+  # failed, or if prepare-matrix rejected an unknown suite name.
+  e2e-result:
+    name: E2E Result
+    runs-on: ubuntu-latest
+    needs: [gate, prepare-matrix, e2e-test]
+    if: always() && needs.gate.outputs.should_run == 'true'
+    steps:
+      - name: Check matrix conclusion
+        env:
+          PREPARE: ${{ needs.prepare-matrix.result }}
+          TEST: ${{ needs.e2e-test.result }}
+        run: |
+          set -euo pipefail
+          echo "prepare-matrix: ${PREPARE}"
+          echo "e2e-test:       ${TEST}"
+          if [ "${PREPARE}" = "success" ] && [ "${TEST}" = "success" ]; then
+            exit 0
+          fi
+          echo "::error::E2E did not succeed (prepare=${PREPARE}, test=${TEST}). Re-run failed jobs to retry only the red suite(s)."
+          exit 1
