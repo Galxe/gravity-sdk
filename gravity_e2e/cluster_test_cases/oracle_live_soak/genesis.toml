@@ -4,7 +4,7 @@
 
 [dependencies.genesis_contracts]
 repo = "https://github.com/Galxe/gravity_chain_core_contracts.git"
-ref = "d90d81583b95adac73e86c8aafd27530414df03f"
+ref = "2762c3c98f1eed5fb6fe4d9bd4b6fefbadf7ce14"
 
 # Equal voting power means a JWK QC requires matching signatures from at least
 # three of the four validators.
