@@ -118,7 +118,7 @@ impl ConsensusEngine {
     pub async fn init(
         args: ConsensusEngineArgs,
         pool: Box<dyn TxPool>,
-    ) -> (Arc<Self>, AdmitHandle) {
+    ) -> anyhow::Result<(Arc<Self>, AdmitHandle)> {
         let ConsensusEngineArgs { node_config, chain_id, latest_block_number, config_storage } =
             args;
         // Setup panic handler
@@ -320,9 +320,12 @@ impl ConsensusEngine {
             );
             runtimes.push(jwk_consensus_runtime);
         }
-        init_block_buffer_manager(&consensus_db, latest_block_number)
-            .await
-            .expect("failed to initialize BlockBufferManager");
+        if let Err(error) = init_block_buffer_manager(&consensus_db, latest_block_number).await {
+            for runtime in runtimes.drain(..) {
+                runtime.shutdown_background();
+            }
+            return Err(error);
+        }
         let mut args = ConsensusAdapterArgs::new(consensus_db.clone());
         let (consensus_runtime, _, _) = start_consensus(
             &node_config,
@@ -375,6 +378,6 @@ impl ConsensusEngine {
         // process new round should be after init reth hash
         info!("pass latest_block_number: {:?} to event_subscription_service", latest_block_number);
         let _ = event_subscription_service.lock().await.notify_initial_configs(latest_block_number);
-        (arc_consensus_engine, admit_handle)
+        Ok((arc_consensus_engine, admit_handle))
     }
 }

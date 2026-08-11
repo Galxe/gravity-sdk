@@ -27,6 +27,8 @@ use crate::{
     util::is_vtxn_expected,
 };
 use anyhow::{bail, ensure, Context};
+#[cfg(feature = "byzantine-test")]
+use aptos_consensus_types::block_data::BlockData;
 use aptos_consensus_types::{
     block::Block,
     block_data::BlockType,
@@ -460,10 +462,33 @@ impl RoundManager {
             sync_info,
             network.clone(),
             proposal_generator,
-            safety_rules,
+            safety_rules.clone(),
             proposer_election,
         )
         .await?;
+        #[cfg(feature = "byzantine-test")]
+        match Self::attempt_to_equivocate(
+            epoch_state.clone(),
+            network.clone(),
+            safety_rules,
+            &proposal_msg,
+        )
+        .await
+        {
+            Ok(true) => {
+                counters::PROPOSALS_COUNT.inc();
+                return Ok(());
+            }
+            Ok(false) => {}
+            Err(error) => {
+                warn!(
+                    error = ?error,
+                    epoch = epoch,
+                    round = proposal_msg.proposal().round(),
+                    "Byzantine test hook failed; broadcasting the original proposal"
+                );
+            }
+        }
         #[cfg(feature = "failpoints")]
         {
             if Self::check_whether_to_inject_reconfiguration_error() {
@@ -594,6 +619,102 @@ impl RoundManager {
             "{}", signed_proposal
         );
         Ok(ProposalMsg::new(signed_proposal, sync_info))
+    }
+
+    #[cfg(feature = "byzantine-test")]
+    fn conflicting_proposal_data(original: &BlockData) -> anyhow::Result<BlockData> {
+        let author = original.author().context("proposal has no author")?;
+        let payload = original.payload().cloned().context("proposal has no payload")?;
+        let failed_authors = original.failed_authors().cloned().unwrap_or_default();
+        let timestamp =
+            original.timestamp_usecs().checked_add(1).context("proposal timestamp overflow")?;
+        let round = original.round();
+        let quorum_cert = original.quorum_cert().clone();
+
+        match original.block_type() {
+            BlockType::Proposal { .. } => Ok(BlockData::new_proposal(
+                payload,
+                author,
+                failed_authors,
+                round,
+                timestamp,
+                quorum_cert,
+            )),
+            BlockType::ProposalExt(_) => Ok(BlockData::new_proposal_ext(
+                original.validator_txns().cloned().unwrap_or_default(),
+                payload,
+                author,
+                failed_authors,
+                round,
+                timestamp,
+                quorum_cert,
+            )),
+            block_type => bail!("cannot equivocate proposal block type {block_type:?}"),
+        }
+    }
+
+    #[cfg(feature = "byzantine-test")]
+    async fn attempt_to_equivocate(
+        epoch_state: Arc<EpochState>,
+        network: Arc<NetworkSender>,
+        safety_rules: Arc<Mutex<MetricsSafetyRules>>,
+        proposal_msg: &ProposalMsg,
+    ) -> anyhow::Result<bool> {
+        let epoch = proposal_msg.epoch();
+        let round = proposal_msg.proposal().round();
+        let Some(request) = crate::byzantine_test::claim_equivocation(epoch, round)? else {
+            return Ok(false);
+        };
+
+        let conflicting_data =
+            Self::conflicting_proposal_data(proposal_msg.proposal().block_data())?;
+        let signature = safety_rules.lock().sign_proposal(&conflicting_data)?;
+        let conflicting = ProposalMsg::new(
+            Block::new_proposal_from_block_data_and_signature(conflicting_data, signature),
+            proposal_msg.sync_info().clone(),
+        );
+        ensure!(
+            proposal_msg.proposal().id() != conflicting.proposal().id(),
+            "equivocation proposals must have distinct IDs"
+        );
+
+        let mut recipients: Vec<_> =
+            epoch_state.verifier.get_ordered_account_addresses_iter().collect();
+        ensure!(recipients.len() >= 2, "equivocation requires at least two validators");
+        recipients.sort_unstable();
+        let second_group = recipients.split_off(recipients.len() / 2);
+        let first_group = recipients;
+        ensure!(
+            !first_group.is_empty() && !second_group.is_empty(),
+            "equivocation recipient groups must be non-empty"
+        );
+
+        network.send_proposal(proposal_msg.clone(), first_group.clone()).await;
+        network.send_proposal(conflicting.clone(), second_group.clone()).await;
+
+        let first_id = proposal_msg.proposal().id().to_string();
+        let second_id = conflicting.proposal().id().to_string();
+        crate::byzantine_test::record_equivocation(
+            &request,
+            epoch,
+            round,
+            &first_id,
+            &second_id,
+            first_group.len(),
+            second_group.len(),
+        )?;
+        warn!(
+            fault_id = request.fault_id,
+            node_id = request.node_id,
+            epoch = epoch,
+            round = round,
+            first_message_id = first_id,
+            second_message_id = second_id,
+            first_recipient_count = first_group.len(),
+            second_recipient_count = second_group.len(),
+            "Byzantine test hook emitted conflicting signed proposals"
+        );
+        Ok(true)
     }
 
     /// Process the proposal message:
