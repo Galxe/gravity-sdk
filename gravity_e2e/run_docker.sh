@@ -207,9 +207,10 @@ fi
 echo ''
 echo '===== Phase 3: Running E2E Tests ====='
 echo '[Step 7] Running runner.py...'
-# ${PYTHONPATH:-} — container starts with PYTHONPATH unset; set -u would
-# otherwise abort on a bare $PYTHONPATH expansion.
-export PYTHONPATH=\"/app:/app/gravity_e2e\${PYTHONPATH:+:\$PYTHONPATH}\"
+# Fresh container: hardcode PYTHONPATH. Do not expand host/container
+# PYTHONPATH inside this double-quoted bash -c (outer set -u would
+# treat comment refs as real expansions too).
+export PYTHONPATH=/app:/app/gravity_e2e
 cd /app/gravity_e2e
 python3 runner.py --force-init --exclude long_test ${RUNNER_ARGS}
 
