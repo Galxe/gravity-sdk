@@ -164,9 +164,10 @@ jobs:
           # Named suite + --skip-build: reuse e2e-build artifact (no cargo).
           ./gravity_e2e/run_docker.sh --skip-build "${{ matrix.suite }}"
 
-  # Aggregate matrix + build for a single green/red check.
+  # Aggregate matrix + build into the required status check name
+  # (branch protection on main expects exactly "E2E Test").
   e2e-result:
-    name: E2E Result
+    name: E2E Test
     runs-on: ubuntu-latest
     needs: [gate, prepare-matrix, e2e-build, e2e-test]
     if: always() && needs.gate.outputs.should_run == 'true'
