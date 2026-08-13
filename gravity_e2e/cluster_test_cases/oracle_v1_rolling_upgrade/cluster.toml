@@ -1,0 +1,73 @@
+# Four-validator OracleV1 binary rolling-upgrade test.
+# Keep fixed listeners below Linux's default ephemeral source-port range.
+
+[cluster]
+name = "gravity-devnet-oracle-v1-rolling-upgrade"
+base_dir = "/tmp/gravity-cluster-oracle-v1-rolling-upgrade"
+
+[genesis_source]
+genesis_path = "./artifacts/genesis.json"
+waypoint_path = "./artifacts/waypoint.txt"
+
+[[nodes]]
+id = "node1"
+role = "genesis"
+source = { project_path = "../" }
+host = "127.0.0.1"
+validator_port = 27680
+vfn_port = 27690
+rpc_port = 27700
+api_port = 27710
+metrics_port = 27720
+inspection_port = 27730
+https_port = 27740
+authrpc_port = 27750
+reth_p2p_port = 27760
+
+[[nodes]]
+id = "node2"
+role = "genesis"
+source = { project_path = "../" }
+host = "127.0.0.1"
+validator_port = 27681
+vfn_port = 27691
+rpc_port = 27701
+api_port = 27711
+metrics_port = 27721
+inspection_port = 27731
+https_port = 27741
+authrpc_port = 27751
+reth_p2p_port = 27761
+
+[[nodes]]
+id = "node3"
+role = "genesis"
+source = { project_path = "../" }
+host = "127.0.0.1"
+validator_port = 27682
+vfn_port = 27692
+rpc_port = 27702
+api_port = 27712
+metrics_port = 27722
+inspection_port = 27732
+https_port = 27742
+authrpc_port = 27752
+reth_p2p_port = 27762
+
+[[nodes]]
+id = "node4"
+role = "genesis"
+source = { project_path = "../" }
+host = "127.0.0.1"
+validator_port = 27683
+vfn_port = 27693
+rpc_port = 27703
+api_port = 27713
+metrics_port = 27723
+inspection_port = 27733
+https_port = 27743
+authrpc_port = 27753
+reth_p2p_port = 27763
+
+[faucet_init]
+num_accounts = 0
