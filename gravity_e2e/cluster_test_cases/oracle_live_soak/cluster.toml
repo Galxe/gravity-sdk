@@ -1,0 +1,73 @@
+# Four-validator live Binance price-feed soak test.
+# Keep fixed listeners below Linux's default ephemeral source-port range.
+
+[cluster]
+name = "gravity-devnet-oracle-live-soak"
+base_dir = "/tmp/gravity-cluster-oracle-live-soak"
+
+[genesis_source]
+genesis_path = "./artifacts/genesis.json"
+waypoint_path = "./artifacts/waypoint.txt"
+
+[[nodes]]
+id = "node1"
+role = "genesis"
+source = { project_path = "../" }
+host = "127.0.0.1"
+validator_port = 26680
+vfn_port = 26690
+rpc_port = 26700
+api_port = 26710
+metrics_port = 26720
+inspection_port = 26730
+https_port = 26740
+authrpc_port = 26750
+reth_p2p_port = 26760
+
+[[nodes]]
+id = "node2"
+role = "genesis"
+source = { project_path = "../" }
+host = "127.0.0.1"
+validator_port = 26681
+vfn_port = 26691
+rpc_port = 26701
+api_port = 26711
+metrics_port = 26721
+inspection_port = 26731
+https_port = 26741
+authrpc_port = 26751
+reth_p2p_port = 26761
+
+[[nodes]]
+id = "node3"
+role = "genesis"
+source = { project_path = "../" }
+host = "127.0.0.1"
+validator_port = 26682
+vfn_port = 26692
+rpc_port = 26702
+api_port = 26712
+metrics_port = 26722
+inspection_port = 26732
+https_port = 26742
+authrpc_port = 26752
+reth_p2p_port = 26762
+
+[[nodes]]
+id = "node4"
+role = "genesis"
+source = { project_path = "../" }
+host = "127.0.0.1"
+validator_port = 26683
+vfn_port = 26693
+rpc_port = 26703
+api_port = 26713
+metrics_port = 26723
+inspection_port = 26733
+https_port = 26743
+authrpc_port = 26753
+reth_p2p_port = 26763
+
+[faucet_init]
+num_accounts = 0

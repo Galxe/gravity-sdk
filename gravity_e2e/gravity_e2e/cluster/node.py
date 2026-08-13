@@ -184,10 +184,13 @@ class Node:
         else:
             return NodeState.STOPPED, -1
 
-    async def start(self) -> bool:
+    async def start(self, rpc_timeout: int = 30) -> bool:
         """
         Start this individual node.
         Returns True if node is now RUNNING.
+
+        ``rpc_timeout`` may be increased by long-running recovery tests whose
+        persisted databases need more than the default startup window.
         """
         if not self.start_script.exists():
             LOG.warning(
@@ -259,7 +262,7 @@ class Node:
                 return False
 
             # Wait for RPC to come up
-            if await self.wait_for_rpc(timeout=30):
+            if await self.wait_for_rpc(timeout=rpc_timeout):
                 LOG.info(f"Node {self.id} started and RPC verified.")
                 return True
             else:
@@ -361,13 +364,13 @@ class Node:
             await asyncio.sleep(0.25)
         return False
 
-    async def restart(self) -> bool:
+    async def restart(self, rpc_timeout: int = 30) -> bool:
         """Bounce the node."""
         if not await self.stop():
             return False
         # stop() already waits for process exit / RocksDB unlock; short settle only.
         await asyncio.sleep(0.5)
-        return await self.start()
+        return await self.start(rpc_timeout=rpc_timeout)
 
     def is_running(self) -> bool:
         """Check if node process is running based on PID file."""
