@@ -38,6 +38,24 @@ RECONFIGURATION_ADDRESS = Web3.to_checksum_address(
 EPOCH_CONFIG_ADDRESS = Web3.to_checksum_address(
     "0x00000000000000000000000000000001625F1005"
 )
+ORACLE_V1_CONTRACTS = (
+    {
+        "name": "NativeOracle",
+        "address": Web3.to_checksum_address(
+            "0x00000000000000000000000000000001625F4000"
+        ),
+        "preForkCodeHash": "0x30dd3888ce26735c0d6c5a036b48a1de668dd5506efa7588ce450f976da28255",
+        "postForkCodeHash": "0x981087ccdaa0b7843960782e99b078ccdd3820b331f86ce337d9750c5565d984",
+    },
+    {
+        "name": "OracleTaskConfig",
+        "address": Web3.to_checksum_address(
+            "0x00000000000000000000000000000001625F1009"
+        ),
+        "preForkCodeHash": "0x74127baf705119810746598b2695ff5fa38f94bd778f0edae46799ffd3606bda",
+        "postForkCodeHash": "0xa21bf93e6123b0104b9ea851b8154fb342a5b576c22c71f15f851e266faa9f7f",
+    },
+)
 SEL_CURRENT_EPOCH = Web3.keccak(text="currentEpoch()")[:4]
 SEL_REMAINING_TIME = Web3.keccak(text="getRemainingTimeSeconds()")[:4]
 CALLBACK_SUCCESS_TOPIC0 = Web3.keccak(
@@ -207,6 +225,23 @@ def test_soak_settings_rejects_two_restart_controls(monkeypatch):
         _soak_settings()
 
 
+def test_signed_testnet_genesis_pins_oracle_v1_pre_fork_runtimes():
+    path = SUITE_DIR.parents[2] / "genesis" / "testnet" / "genesis.json"
+    alloc = json.loads(path.read_text())["alloc"]
+    normalized_alloc = {
+        key.removeprefix("0x").lower(): account
+        for key, account in alloc.items()
+    }
+    for contract in ORACLE_V1_CONTRACTS:
+        key = contract["address"].removeprefix("0x").lower()
+        code = normalized_alloc[key]["code"]
+        assert len(code) > 2
+        assert (
+            Web3.to_hex(Web3.keccak(hexstr=code)).lower()
+            == contract["preForkCodeHash"]
+        )
+
+
 def _metadata() -> dict:
     path = SUITE_DIR / "artifacts" / "oracle_live_soak_metadata.json"
     return json.loads(path.read_text())
@@ -362,6 +397,127 @@ async def _wait_for_block(
         f"{node_id} RPC did not reach Gravity block {block_number}; "
         f"last height was {last_height}"
     )
+
+
+def _account_snapshot(w3: Web3, address: str, block_number: int) -> dict:
+    code = bytes(w3.eth.get_code(address, block_identifier=block_number))
+    proof = w3.eth.get_proof(address, [], block_identifier=block_number)
+    code_hash = Web3.to_hex(Web3.keccak(code)).lower()
+    proof_code_hash = Web3.to_hex(HexBytes(proof["codeHash"])).lower()
+    assert code_hash == proof_code_hash, (
+        f"eth_getCode/eth_getProof disagree for {address} at block "
+        f"{block_number}"
+    )
+    return {
+        "balance": int(proof["balance"]),
+        "nonce": int(proof["nonce"]),
+        "codeHash": code_hash,
+        "codeLength": len(code),
+        "storageHash": Web3.to_hex(HexBytes(proof["storageHash"])).lower(),
+    }
+
+
+async def _capture_oracle_v1_phase(
+    node_id: str, w3: Web3, block_number: int
+) -> tuple[str, dict]:
+    await _wait_for_block(node_id, w3, block_number, timeout=180)
+    block_hash = Web3.to_hex(w3.eth.get_block(block_number)["hash"])
+    accounts = {
+        contract["name"]: _account_snapshot(
+            w3, contract["address"], block_number
+        )
+        for contract in ORACLE_V1_CONTRACTS
+    }
+    return node_id, {
+        "block": block_number,
+        "blockHash": block_hash,
+        "accounts": accounts,
+    }
+
+
+async def _verify_oracle_v1_hardfork(
+    cluster: Cluster, activation_block: int
+) -> dict:
+    assert activation_block > 0
+    phase_blocks = {
+        "preFork": activation_block - 1,
+        "postFork": activation_block,
+    }
+    snapshots = {}
+    for phase, block_number in phase_blocks.items():
+        captured = dict(
+            await asyncio.gather(
+                *(
+                    _capture_oracle_v1_phase(
+                        node_id, node.w3, block_number
+                    )
+                    for node_id, node in cluster.nodes.items()
+                )
+            )
+        )
+        block_hashes = {
+            node_id: snapshot["blockHash"]
+            for node_id, snapshot in captured.items()
+        }
+        assert len(set(block_hashes.values())) == 1, (
+            f"validators disagree on OracleV1 {phase} block: {block_hashes}"
+        )
+        accounts = {
+            node_id: snapshot["accounts"]
+            for node_id, snapshot in captured.items()
+        }
+        canonical_accounts = next(iter(accounts.values()))
+        assert all(
+            node_accounts == canonical_accounts
+            for node_accounts in accounts.values()
+        ), f"validators disagree on OracleV1 {phase} account state"
+        snapshots[phase] = {
+            "block": block_number,
+            "blockHash": next(iter(block_hashes.values())),
+            "accounts": canonical_accounts,
+        }
+
+    await asyncio.gather(
+        *(
+            _wait_for_block(
+                node_id,
+                node.w3,
+                activation_block + SNAPSHOT_CONFIRMATION_BLOCKS,
+                timeout=180,
+            )
+            for node_id, node in cluster.nodes.items()
+        )
+    )
+    for phase, snapshot in snapshots.items():
+        canonical_hashes = {
+            node_id: Web3.to_hex(
+                node.w3.eth.get_block(snapshot["block"])["hash"]
+            )
+            for node_id, node in cluster.nodes.items()
+        }
+        assert set(canonical_hashes.values()) == {snapshot["blockHash"]}, (
+            f"OracleV1 {phase} block changed before confirmation: "
+            f"{canonical_hashes}"
+        )
+
+    for contract in ORACLE_V1_CONTRACTS:
+        name = contract["name"]
+        before = snapshots["preFork"]["accounts"][name]
+        after = snapshots["postFork"]["accounts"][name]
+        assert before["codeHash"] == contract["preForkCodeHash"]
+        assert after["codeHash"] == contract["postForkCodeHash"]
+        assert before["codeLength"] > 0 and after["codeLength"] > 0
+        for preserved_field in ("balance", "nonce", "storageHash"):
+            assert before[preserved_field] == after[preserved_field], (
+                f"OracleV1 changed {name}.{preserved_field}"
+            )
+
+    return {
+        "activationBlock": activation_block,
+        "preFork": snapshots["preFork"],
+        "postFork": snapshots["postFork"],
+        "validatorCount": len(cluster.nodes),
+    }
 
 
 def _call_at_block_hash(function, block_hash: str):
@@ -1057,8 +1213,17 @@ async def test_governance_activated_price_feeds_soak_for_configured_duration(
 ):
     settings = _soak_settings()
     metadata = _metadata()
-    assert set(metadata) == {"binanceFeeds"}
+    assert set(metadata) == {"binanceFeeds", "oracleV1Hardfork"}
     binance_feeds = metadata["binanceFeeds"]
+    oracle_v1_metadata = metadata["oracleV1Hardfork"]
+    assert oracle_v1_metadata["fixture"] == "genesis/testnet/genesis.json"
+    assert oracle_v1_metadata["contracts"] == [
+        {
+            **contract,
+            "address": contract["address"].lower(),
+        }
+        for contract in ORACLE_V1_CONTRACTS
+    ]
     assert [feed["pair"] for feed in binance_feeds] == [
         "NVDAUSDT",
         "BTCUSDT",
@@ -1074,9 +1239,12 @@ async def test_governance_activated_price_feeds_soak_for_configured_duration(
     assert set(relayer_config["uri_mappings"]) == expected_uris
     assert all(uri.startswith("gravity://3/") for uri in expected_uris)
     with (SUITE_DIR / "genesis.toml").open("rb") as genesis_file:
-        oracle_config = tomllib.load(genesis_file)["genesis"]["oracle_config"]
+        genesis_config = tomllib.load(genesis_file)["genesis"]
+    oracle_config = genesis_config["oracle_config"]
     assert oracle_config["source_types"] == [1, 3]
     assert len(oracle_config["callbacks"]) == 2
+    activation_block = int(oracle_v1_metadata["activationBlock"])
+    assert genesis_config["hardforks"]["oracleV1Block"] == activation_block
 
     assert len(cluster.nodes) == 4
     assert await cluster.set_full_live(timeout=180)
@@ -1087,6 +1255,22 @@ async def test_governance_activated_price_feeds_soak_for_configured_duration(
     node1 = cluster.get_node("node1")
     assert node1 is not None and node1.w3.is_connected()
     w3 = node1.w3
+    try:
+        hardfork_evidence = await _verify_oracle_v1_hardfork(
+            cluster, activation_block
+        )
+    except BaseException as error:
+        _write_summary(
+            {
+                "status": "failed",
+                "phase": "oracleV1Hardfork",
+                "errorType": type(error).__name__,
+                "error": str(error),
+                "activationBlock": activation_block,
+            }
+        )
+        raise
+
     required = [
         ("PriceFeedResolver.sol", "PriceFeedResolver"),
         ("NativeOracle.sol", "NativeOracle"),
@@ -1274,6 +1458,7 @@ async def test_governance_activated_price_feeds_soak_for_configured_duration(
                 "binancePairs": [
                     feed["pair"] for feed in binance_feeds
                 ],
+                "oracleV1Hardfork": hardfork_evidence,
                 "lastHeartbeat": last_heartbeat,
             }
         )
@@ -1299,6 +1484,7 @@ async def test_governance_activated_price_feeds_soak_for_configured_duration(
         {
             "activationEpoch": activation_epoch,
             "governanceBlock": receipt["blockNumber"],
+            "oracleV1Hardfork": hardfork_evidence,
             "priceCallbackEvents": price_delivery_counts,
             "soakEpochIntervalSeconds": (
                 SOAK_EPOCH_INTERVAL_MICROS // 1_000_000
