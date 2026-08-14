@@ -73,9 +73,8 @@ pub(crate) const GRAVITY_MAINNET_ALPHA_TIME: u64 = 1_785_128_400;
 /// Both forks share this value: Beta (Gravity EIP-7702 lockdown release +
 /// block-gas last-gate) and Osaka (Ethereum hardfork) activate together.
 ///
-/// 2026-08-17 13:00:00 Beijing (UTC+08:00), which is
-/// 2026-08-17 05:00:00 UTC.
-pub(crate) const GRAVITY_MAINNET_BETA_OSAKA_TIME: u64 = 1_786_942_800;
+/// 2026-08-18 02:00:00 UTC.
+pub(crate) const GRAVITY_MAINNET_BETA_OSAKA_TIME: u64 = 1_787_018_400;
 
 /// Per-chain hardcoded override. Each field gates one fork.
 ///
@@ -113,8 +112,7 @@ const HARDCODED: &[(u64, GravityForkOverrides)] = &[
         GravityForkOverrides {
             // Pinned to deployed mainnet genesis (config.pragueTime).
             prague_time: Some(1_782_709_200),
-            // Mainnet Osaka activation coordinated for 2026-08-17 13:00:00
-            // Beijing (UTC+08:00), equivalent to 2026-08-17 05:00:00 UTC.
+            // Mainnet Osaka activation coordinated for 2026-08-18 02:00:00 UTC.
             osaka_time: Some(GRAVITY_MAINNET_BETA_OSAKA_TIME),
             // Mainnet Alpha activation coordinated for 2026-07-27 13:00:00
             // Beijing (UTC+08:00), equivalent to 2026-07-27 05:00:00 UTC.
@@ -643,15 +641,14 @@ mod tests {
         assert_eq!(table_alpha_timestamp(), 1_785_128_400);
     }
 
-    /// Consensus-affecting pin: 2026-08-17 13:00:00 Beijing (UTC+08:00),
-    /// equivalent to 2026-08-17 05:00:00 UTC. Beta and Osaka share this
-    /// wall-clock. Changing either value requires network-wide coordination.
+    /// Consensus-affecting pin: 2026-08-18 02:00:00 UTC. Beta and Osaka share
+    /// this wall-clock. Changing either value requires network-wide coordination.
     #[test]
     fn gravity_mainnet_beta_osaka_timestamp_pinned_to_coordinated_value() {
-        assert_eq!(table_beta_timestamp(), 1_786_942_800);
-        assert_eq!(table_osaka_timestamp(), 1_786_942_800);
+        assert_eq!(table_beta_timestamp(), 1_787_018_400);
+        assert_eq!(table_osaka_timestamp(), 1_787_018_400);
         assert_eq!(table_beta_timestamp(), table_osaka_timestamp());
-        assert_eq!(GRAVITY_MAINNET_BETA_OSAKA_TIME, 1_786_942_800);
+        assert_eq!(GRAVITY_MAINNET_BETA_OSAKA_TIME, 1_787_018_400);
     }
 
     // ---------- Mismatch-warning event emission ----------
