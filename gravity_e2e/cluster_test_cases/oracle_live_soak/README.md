@@ -7,6 +7,13 @@ three continuous Binance Futures testnet closed index-price kline feeds:
 - `BTCUSDT` (`sourceType=3`, feed ID `1002`);
 - `ETHUSDT` (`sourceType=3`, feed ID `1003`).
 
+Before enabling those feeds, the suite exercises the OracleV1 testnet
+hardfork. Genesis is generated from the packed-V1 contracts, then the
+`NativeOracle` and `OracleTaskConfig` runtimes are replaced with the exact
+pre-fork bytes signed into `genesis/testnet/genesis.json`. At
+`config.oracleV1Block`, gravity-reth must atomically install both packed-V1
+runtimes without changing either account's balance, nonce, or storage root.
+
 Each callback uses packed Price Feed V1: a canonical 32-byte big-endian body
 containing `version`, `feedId`, `roundId`, `resolvedAtMs`, fixed-8 `price`, and
 zero `flags`. The resolver exposes the latest round as
@@ -51,6 +58,29 @@ NativeOracle callback count must equal its independent final delivery nonce.
 Observed price changes remain informational because timely identical index
 closes are valid Oracle updates.
 
+## OracleV1 Startup Gate
+
+Before deploying the resolver or submitting governance, the test captures each
+adjacent state while it is still inside the RPC proof window, waits until all
+four validators pass `oracleV1Block + 16`, and then confirms that both captured
+block hashes remain canonical:
+
+- block `oracleV1Block - 1` has the two frozen testnet pre-fork codehashes;
+- block `oracleV1Block` has the two frozen packed-V1 codehashes;
+- all four RPC replicas agree on both canonical block hashes and account
+  proofs;
+- `eth_getCode` and `eth_getProof.codeHash` agree for every observation;
+- balance, nonce, and full `storageHash` are unchanged across activation.
+
+The suite-local reth template enables a 64-block historical proof window for
+this evidence capture. Production defaults and shared E2E templates remain
+unchanged.
+
+Only after this gate passes does the suite deploy `PriceFeedResolver`, register
+the three Binance tasks, wait for JWK quorum, and begin the configured soak.
+This ordering proves that the live price-feed path is running on contracts
+installed by the hardfork rather than contracts already present at genesis.
+
 For runs of at least one hour, `node4` becomes eligible to restart halfway
 through by default. A focused run can configure multiple restart times. The
 runner defers each restart while the chain is within five minutes of an epoch
@@ -77,7 +107,7 @@ suite. Do not run it beside another local Gravity cluster that must stay alive.
 From the SDK repository root:
 
 ```bash
-make MODE=quick-release gravity_node gravity_cli
+CARGO_BUILD_JOBS=2 make -j2 MODE=quick-release gravity_node gravity_cli
 export PATH="$HOME/.foundry/bin:$PWD/target/quick-release:$PATH"
 ```
 
@@ -186,4 +216,5 @@ Runtime evidence remains local and ignored by Git:
   recovery times.
 
 The summary is the acceptance artifact. A process that is still running has not
-yet passed the soak.
+yet passed the soak. Its `oracleV1Hardfork` section records both canonical
+blocks and the pre/post account proofs used by the startup gate.
