@@ -41,7 +41,7 @@ RUSTFLAGS='--cfg tokio_unstable' \
 
 The old baseline for this PR is SDK `90c78afdb5`, which pins gravity-reth
 `4372a103a42a862593fa8221814b3bcc8d47d0aa`. The candidate pins gravity-reth
-`43e57c22368385ee7ed551f6e4d96cf60f6f4f37`.
+`d0f59d5b664ee68cf1816e77e91bf6457fca1ae9`.
 
 ## Run
 
