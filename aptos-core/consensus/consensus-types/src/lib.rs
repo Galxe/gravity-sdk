@@ -10,6 +10,7 @@ pub mod block_retrieval;
 pub mod common;
 pub mod delayed_qc_msg;
 pub mod epoch_retrieval;
+pub mod forward_epoch_sync;
 pub mod order_vote;
 pub mod order_vote_msg;
 pub mod order_vote_proposal;

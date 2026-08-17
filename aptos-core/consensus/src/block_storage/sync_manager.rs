@@ -61,6 +61,10 @@ use sha3::digest::generic_array::typenum::Le;
 use std::{clone::Clone, cmp::min, hash::Hash, sync::Arc, time::Duration};
 use tokio::{time, time::timeout};
 
+#[path = "sync_manager/forward_epoch_sync.rs"]
+mod forward_epoch_sync;
+pub(super) use forward_epoch_sync::ForwardEpochSyncIndex;
+
 static CUR_BLOCK_SYNC_BLOCK_SUM_GAUGE: Lazy<IntGaugeVec> = Lazy::new(|| {
     register_int_gauge_vec!(
         "aptos_current_block_sync_block_sum",
@@ -350,24 +354,7 @@ impl BlockStore {
         Ok(())
     }
 
-    /// Fast-forwards the local consensus state by synchronizing blocks and ledger infos for a given
-    /// epoch.
-    ///
-    /// This function retrieves all blocks, quorum certificates, and ledger infos for the specified
-    /// epoch from a remote retriever. It then prefetches payload data for each block, saves the
-    /// blocks and certificates to local storage, and updates the ledger info in the database.
-    /// After updating storage, it attempts to recover the consensus state from the latest
-    /// ledger info and rebuilds the in-memory state. If the epoch ends, it sends an epoch
-    /// change proof to the network.
-    ///
-    /// # Arguments
-    /// * `retriever` - The block retriever used to fetch blocks and related data.
-    /// * `epoch` - The epoch to fast-forward to.
-    ///
-    /// # Returns
-    /// * `Ok(())` if the synchronization and state rebuild succeed.
-    /// * `Err` if any step fails.
-    pub async fn fast_forward_sync_by_epoch(
+    async fn fast_forward_sync_by_epoch_legacy(
         &self,
         mut retriever: BlockRetriever,
         epoch: u64,

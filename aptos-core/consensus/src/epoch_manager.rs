@@ -31,8 +31,8 @@ use crate::{
     monitor,
     network::{
         self, IncomingBatchRetrievalRequest, IncomingBlockRetrievalRequest, IncomingDAGRequest,
-        IncomingRandGenRequest, IncomingRpcRequest, IncomingSyncInfoRequest, NetworkReceivers,
-        NetworkSender,
+        IncomingForwardEpochSyncRequest, IncomingRandGenRequest, IncomingRpcRequest,
+        IncomingSyncInfoRequest, NetworkReceivers, NetworkSender,
     },
     network_interface::{ConsensusMsg, ConsensusNetworkClient},
     payload_client::{
@@ -59,6 +59,9 @@ use aptos_consensus_types::{
     common::{Author, Round},
     delayed_qc_msg::DelayedQcMsg,
     epoch_retrieval::EpochRetrievalRequest,
+    forward_epoch_sync::{
+        ForwardEpochSyncError, ForwardEpochSyncResponse, ForwardEpochSyncResponseV1,
+    },
     proof_of_store::ProofCache,
     sync_info::SyncInfo,
 };
@@ -134,6 +137,7 @@ const PROPOSER_ELECTION_CACHING_WINDOW_ADDITION: usize = 3;
 /// Number of rounds we expect storage to be ahead of the proposer round,
 /// used for fetching data from DB.
 const PROPOSER_ROUND_BEHIND_STORAGE_BUFFER: usize = 10;
+const FORWARD_EPOCH_SYNC_MAX_CONCURRENT_REQUESTS: usize = 4;
 
 #[allow(clippy::large_enum_variant)]
 pub enum LivenessStorageData {
@@ -171,6 +175,8 @@ pub struct EpochManager<P: OnChainConfigProvider> {
     epoch_state: Option<Arc<EpochState>>,
     block_retrieval_tx:
         Option<aptos_channel::Sender<AccountAddress, IncomingBlockRetrievalRequest>>,
+    forward_epoch_sync_tx:
+        Option<aptos_channel::Sender<AccountAddress, IncomingForwardEpochSyncRequest>>,
     sync_info_request_tx: Option<aptos_channel::Sender<AccountAddress, IncomingSyncInfoRequest>>,
     quorum_store_msg_tx: Option<aptos_channel::Sender<AccountAddress, VerifiedEvent>>,
     quorum_store_coordinator_tx: Option<Sender<CoordinatorCommand>>,
@@ -284,6 +290,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             buffered_proposal_tx: None,
             epoch_state: None,
             block_retrieval_tx: None,
+            forward_epoch_sync_tx: None,
             sync_info_request_tx: None,
             quorum_store_msg_tx: None,
             quorum_store_coordinator_tx: None,
@@ -626,6 +633,67 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         tokio::spawn(task);
     }
 
+    fn spawn_forward_epoch_sync_task(
+        &mut self,
+        epoch: u64,
+        block_store: Arc<BlockStore>,
+        max_blocks_allowed: u64,
+    ) {
+        let (request_tx, mut request_rx) =
+            aptos_channel::new::<_, IncomingForwardEpochSyncRequest>(QueueStyle::FIFO, 1, None);
+        let permits =
+            Arc::new(tokio::sync::Semaphore::new(FORWARD_EPOCH_SYNC_MAX_CONCURRENT_REQUESTS));
+        let task = async move {
+            info!(epoch = epoch, "Forward epoch sync task starts");
+            while let Some(request) = request_rx.next().await {
+                let permit = match permits.clone().try_acquire_owned() {
+                    Ok(permit) => permit,
+                    Err(_) => {
+                        warn!(
+                            epoch = epoch,
+                            remote_peer = request.sender,
+                            "Reject forward epoch sync request because the service is busy"
+                        );
+                        Self::respond_forward_epoch_sync_error(
+                            request,
+                            ForwardEpochSyncError::Busy,
+                        );
+                        continue;
+                    }
+                };
+                let block_store = block_store.clone();
+                tokio::spawn(async move {
+                    let _permit = permit;
+                    if let Err(error) =
+                        block_store.process_forward_epoch_sync(request, max_blocks_allowed).await
+                    {
+                        warn!(epoch = epoch, error = ?error, kind = error_kind(&error));
+                    }
+                });
+            }
+            info!(epoch = epoch, "Forward epoch sync task stops");
+        };
+        self.forward_epoch_sync_tx = Some(request_tx);
+        tokio::spawn(task);
+    }
+
+    fn respond_forward_epoch_sync_error(
+        request: IncomingForwardEpochSyncRequest,
+        error: ForwardEpochSyncError,
+    ) {
+        let response = ConsensusMsg::ForwardEpochSyncResponse(Box::new(
+            ForwardEpochSyncResponse::V1(ForwardEpochSyncResponseV1::Error(error)),
+        ));
+        match request.protocol.to_bytes(&response) {
+            Ok(bytes) => {
+                let _ = request.response_sender.send(Ok(bytes.into()));
+            }
+            Err(encode_error) => {
+                warn!(error = ?encode_error, "Failed to encode forward epoch sync error");
+            }
+        }
+    }
+
     fn spawn_sync_info_retrieval_task(&mut self, epoch: u64, block_store: Arc<BlockStore>) {
         let (request_tx, mut request_rx) =
             aptos_channel::new::<_, IncomingSyncInfoRequest>(QueueStyle::KLAST, 10, None);
@@ -671,6 +739,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
 
         // Shutdown the block retrieval task by dropping the sender
         self.block_retrieval_tx = None;
+        self.forward_epoch_sync_tx = None;
         self.batch_retrieval_tx = None;
 
         if let Some(mut quorum_store_coordinator_tx) = self.quorum_store_coordinator_tx.take() {
@@ -968,6 +1037,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         ));
 
         self.spawn_block_retrieval_task(epoch, block_store.clone(), max_blocks_allowed);
+        self.spawn_forward_epoch_sync_task(epoch, block_store.clone(), max_blocks_allowed);
         self.spawn_sync_info_retrieval_task(epoch, block_store);
     }
 
@@ -1774,6 +1844,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
     fn rpc_request_filter(&self, peer_id: &Author, request: &IncomingRpcRequest) -> bool {
         match request {
             IncomingRpcRequest::BlockRetrieval(_) |
+            IncomingRpcRequest::ForwardEpochSync(_) |
             IncomingRpcRequest::SyncInfoRequest(_) |
             IncomingRpcRequest::BatchRetrieval(_) => true,
             _ => self.is_current_epoch_validator,
@@ -1805,6 +1876,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             None => {
                 ensure!(
                     matches!(request, IncomingRpcRequest::BlockRetrieval(_)) ||
+                        matches!(request, IncomingRpcRequest::ForwardEpochSync(_)) ||
                         matches!(request, IncomingRpcRequest::BatchRetrieval(_)) ||
                         matches!(request, IncomingRpcRequest::SyncInfoRequest(_))
                 );
@@ -1818,6 +1890,25 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                     tx.push(peer_id, request)
                 } else {
                     error!("Round manager not started");
+                    Ok(())
+                }
+            }
+            IncomingRpcRequest::ForwardEpochSync(request) => {
+                if let Some(tx) = &self.forward_epoch_sync_tx {
+                    let (status_tx, status_rx) = oneshot::channel();
+                    tx.push_with_feedback(peer_id, request, Some(status_tx))?;
+                    tokio::spawn(async move {
+                        if let Ok(aptos_channel::ElementStatus::Dropped(request)) = status_rx.await
+                        {
+                            Self::respond_forward_epoch_sync_error(
+                                request,
+                                ForwardEpochSyncError::Busy,
+                            );
+                        }
+                    });
+                    Ok(())
+                } else {
+                    error!("Forward epoch sync service not started");
                     Ok(())
                 }
             }

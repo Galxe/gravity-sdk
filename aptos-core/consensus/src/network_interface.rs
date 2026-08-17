@@ -13,6 +13,7 @@ use crate::{
 use aptos_consensus_types::{
     block_retrieval::{BlockRetrievalRequest, BlockRetrievalResponse},
     epoch_retrieval::EpochRetrievalRequest,
+    forward_epoch_sync::{ForwardEpochSyncRequest, ForwardEpochSyncResponse},
     order_vote_msg::OrderVoteMsg,
     pipeline::{commit_decision::CommitDecision, commit_vote::CommitVote},
     proof_of_store::{ProofOfStoreMsg, SignedBatchInfoMsg},
@@ -84,6 +85,11 @@ pub enum ConsensusMsg {
     OrderVoteMsg(Box<OrderVoteMsg>),
     /// Request to get the sync info from the destination peer.
     SyncInfoRequest,
+    /// Versioned RPC for block-number anchored, forward epoch synchronization.
+    ///
+    /// Keep new variants at the end of this BCS enum for rolling-upgrade compatibility.
+    ForwardEpochSyncRequest(Box<ForwardEpochSyncRequest>),
+    ForwardEpochSyncResponse(Box<ForwardEpochSyncResponse>),
 }
 
 /// Network type for consensus
@@ -111,6 +117,8 @@ impl ConsensusMsg {
             ConsensusMsg::RandGenMessage(_) => "RandGenMessage",
             ConsensusMsg::BatchResponseV2(_) => "BatchResponseV2",
             ConsensusMsg::SyncInfoRequest => "SyncInfoRequest",
+            ConsensusMsg::ForwardEpochSyncRequest(_) => "ForwardEpochSyncRequest",
+            ConsensusMsg::ForwardEpochSyncResponse(_) => "ForwardEpochSyncResponse",
         }
     }
 }
@@ -205,5 +213,17 @@ impl<NetworkClient: NetworkClientInterface<ConsensusMsg>> ConsensusNetworkClient
 
     pub fn sort_peers_by_latency(&self, peers: &mut [PeerId]) {
         self.network_client.sort_peers_by_latency(NetworkId::Validator, peers);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ConsensusMsg;
+
+    #[test]
+    fn forward_sync_variants_are_appended_to_consensus_msg() {
+        // SyncInfoRequest was the last variant before forward sync was introduced. Its BCS tag
+        // must stay stable so old messages remain decodable during a rolling upgrade.
+        assert_eq!(bcs::to_bytes(&ConsensusMsg::SyncInfoRequest).unwrap(), vec![19]);
     }
 }
