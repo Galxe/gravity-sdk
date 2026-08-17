@@ -32,10 +32,7 @@ use gaptos::{
     aptos_crypto::{hash::CryptoHash, HashValue},
     aptos_logger::prelude::*,
     aptos_schemadb::batch::SchemaBatch,
-    aptos_types::{
-        account_address::AccountAddress, epoch_change::EpochChangeProof,
-        ledger_info::LedgerInfoWithSignatures,
-    },
+    aptos_types::{account_address::AccountAddress, ledger_info::LedgerInfoWithSignatures},
 };
 use std::{
     collections::{HashMap, HashSet},
@@ -591,6 +588,9 @@ impl BlockStore {
                     replay_anchor_block_id == manifest.target_block_id,
                 "Local replay root conflicts with forward manifest target"
             );
+            // The blocks and epoch-ending LI are durable, but the self-directed epoch-change
+            // message is not. Re-send it after restart before reporting the sync as complete.
+            self.send_committed_epoch_change(retriever, &manifest.target_ledger_info).await?;
             return Ok(true);
         }
 
@@ -656,18 +656,7 @@ impl BlockStore {
                 "Forward epoch sync batch persisted and replayed"
             );
             if batch.status == ForwardEpochSyncBatchStatus::Complete {
-                let latest_li = &manifest.target_ledger_info;
-                ensure!(
-                    self.is_epoch_change_li_boundary_locally_committed(latest_li),
-                    "Epoch-change boundary is not locally committed after final forward batch"
-                );
-                retriever
-                    .network
-                    .send_epoch_change(EpochChangeProof::new(
-                        vec![latest_li.clone()],
-                        /* more = */ false,
-                    ))
-                    .await;
+                self.send_committed_epoch_change(retriever, &manifest.target_ledger_info).await?;
                 return Ok(true);
             }
         }
