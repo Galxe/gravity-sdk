@@ -1,4 +1,4 @@
-"""Prepare old/new binaries and the OracleV1 pre-fork genesis state."""
+"""Prepare old/new binaries and the Gamma pre-fork genesis state."""
 
 import hashlib
 import json
@@ -6,6 +6,7 @@ import logging
 import os
 from pathlib import Path
 import shutil
+import time
 
 from web3 import Web3
 
@@ -18,10 +19,11 @@ except ImportError:
 LOG = logging.getLogger(__name__)
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 SIGNED_TESTNET_GENESIS = PROJECT_ROOT / "genesis" / "testnet" / "genesis.json"
-METADATA_FILE = "oracle_v1_rolling_upgrade_metadata.json"
-SUMMARY_FILE = "oracle_v1_rolling_upgrade_summary.json"
+METADATA_FILE = "gamma_rolling_upgrade_metadata.json"
+SUMMARY_FILE = "gamma_rolling_upgrade_summary.json"
+DEFAULT_ACTIVATION_DELAY_SECONDS = 900
 
-ORACLE_V1_CONTRACTS = (
+GAMMA_CONTRACTS = (
     {
         "name": "NativeOracle",
         "address": "0x00000000000000000000000000000001625f4000",
@@ -82,18 +84,26 @@ def _prepare_genesis(test_dir: Path, activation_override: str | None) -> dict:
     generated = json.loads(genesis_path.read_text())
     signed = json.loads(SIGNED_TESTNET_GENESIS.read_text())
 
-    if activation_override is not None:
-        activation_block = int(activation_override)
-        generated.setdefault("config", {})["oracleV1Block"] = activation_block
-    else:
-        activation_block = generated.get("config", {}).get("oracleV1Block")
-    if not isinstance(activation_block, int) or activation_block <= 0:
-        raise RuntimeError("config.oracleV1Block must be a positive integer")
+    delay = int(
+        os.environ.get(
+            "GAMMA_ROLLING_ACTIVATION_DELAY_SECONDS",
+            DEFAULT_ACTIVATION_DELAY_SECONDS,
+        )
+    )
+    activation_time = (
+        int(activation_override)
+        if activation_override is not None
+        else int(time.time()) + delay
+    )
+    if not isinstance(activation_time, int) or activation_time <= 0:
+        raise RuntimeError("config.gammaTime must be a positive Unix timestamp")
+    generated.setdefault("config", {}).pop("oracleV1Block", None)
+    generated["config"]["gammaTime"] = activation_time
 
     generated_alloc = generated.get("alloc", {})
     signed_alloc = signed.get("alloc", {})
     contracts = []
-    for contract in ORACLE_V1_CONTRACTS:
+    for contract in GAMMA_CONTRACTS:
         generated_key = _alloc_key(generated_alloc, contract["address"])
         signed_key = _alloc_key(signed_alloc, contract["address"])
         pre_fork_code = signed_alloc[signed_key].get("code", "")
@@ -109,7 +119,7 @@ def _prepare_genesis(test_dir: Path, activation_override: str | None) -> dict:
             contract["postForkCodeHash"],
         }:
             raise RuntimeError(
-                f"generated {contract['name']} is not a frozen OracleV1 state"
+                f"generated {contract['name']} is not a frozen Gamma state"
             )
         generated_alloc[generated_key]["code"] = pre_fork_code
         contracts.append(dict(contract))
@@ -117,7 +127,7 @@ def _prepare_genesis(test_dir: Path, activation_override: str | None) -> dict:
     temporary = genesis_path.with_suffix(".json.tmp")
     temporary.write_text(json.dumps(generated, indent=2) + "\n")
     os.replace(temporary, genesis_path)
-    return {"activationBlock": activation_block, "contracts": contracts}
+    return {"activationTime": activation_time, "contracts": contracts}
 
 
 def pre_deploy(test_dir: Path, env: dict, pytest_args: list[str]):
@@ -129,7 +139,7 @@ def pre_deploy(test_dir: Path, env: dict, pytest_args: list[str]):
         raise RuntimeError("old and new gravity_node binaries must differ")
 
     hardfork = _prepare_genesis(
-        test_dir, env.get("ORACLE_V1_ROLLING_ACTIVATION_BLOCK")
+        test_dir, env.get("GAMMA_ROLLING_ACTIVATION_TIME")
     )
     artifacts = test_dir / "artifacts"
     artifacts.mkdir(parents=True, exist_ok=True)
@@ -139,7 +149,7 @@ def pre_deploy(test_dir: Path, env: dict, pytest_args: list[str]):
             {
                 "oldBinarySha256": old_hash,
                 "newBinarySha256": new_hash,
-                "oracleV1Hardfork": hardfork,
+                "gammaHardfork": hardfork,
             },
             indent=2,
         )
@@ -148,10 +158,10 @@ def pre_deploy(test_dir: Path, env: dict, pytest_args: list[str]):
     env["GRAVITY_OLD_BINARY"] = str(old_binary)
     env["GRAVITY_NEW_BINARY"] = str(new_binary)
     LOG.info(
-        "Prepared OracleV1 rolling upgrade old=%s new=%s activation=%d",
+        "Prepared Gamma rolling upgrade old=%s new=%s activation=%d",
         old_hash[:12],
         new_hash[:12],
-        hardfork["activationBlock"],
+        hardfork["activationTime"],
     )
 
 

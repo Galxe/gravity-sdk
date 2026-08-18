@@ -22,9 +22,9 @@ repo = "https://github.com/Galxe/gravity_chain_core_contracts.git"
 ref = "gravity-testnet-v1.0.0"
 
 [hardforks]
-alphaBlock = 100
-betaBlock = 100
-gammaBlock = 10000
+alphaTime = 0
+betaTime = 0
+gammaTime = 1893456000
 ```
 
 ### 2. Render config files

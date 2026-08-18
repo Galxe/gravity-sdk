@@ -21,6 +21,7 @@ LOG = logging.getLogger(__name__)
 INTERVAL_MS = 60_000
 DEFAULT_GRACE_MS = 120_000
 DEFAULT_BINANCE_BASE_URL = "https://testnet.binancefuture.com"
+DEFAULT_GAMMA_ACTIVATION_DELAY_SECONDS = 300
 BINANCE_FEEDS = (
     {"feedId": 1001, "pair": "NVDAUSDT"},
     {"feedId": 1002, "pair": "BTCUSDT"},
@@ -34,7 +35,7 @@ _SUMMARY_FILE = "oracle_live_soak_summary.json"
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 SIGNED_TESTNET_GENESIS = PROJECT_ROOT / "genesis" / "testnet" / "genesis.json"
-ORACLE_V1_CONTRACTS = (
+GAMMA_CONTRACTS = (
     {
         "name": "NativeOracle",
         "address": "0x00000000000000000000000000000001625f4000",
@@ -64,11 +65,11 @@ def _runtime_hash(code: str) -> str:
     return Web3.to_hex(Web3.keccak(hexstr=code)).lower()
 
 
-def _install_oracle_v1_pre_fork_runtimes(test_dir: Path) -> dict:
+def _install_gamma_pre_fork_runtimes(test_dir: Path) -> dict:
     genesis_path = test_dir / "artifacts" / "genesis.json"
     if not genesis_path.exists():
         raise RuntimeError(
-            "OracleV1 soak requires generated artifacts/genesis.json; use --force-init"
+            "Gamma soak requires generated artifacts/genesis.json; use --force-init"
         )
     if not SIGNED_TESTNET_GENESIS.exists():
         raise RuntimeError(
@@ -77,16 +78,27 @@ def _install_oracle_v1_pre_fork_runtimes(test_dir: Path) -> dict:
 
     generated = json.loads(genesis_path.read_text())
     signed_testnet = json.loads(SIGNED_TESTNET_GENESIS.read_text())
-    activation_block = generated.get("config", {}).get("oracleV1Block")
-    if not isinstance(activation_block, int) or activation_block <= 0:
-        raise RuntimeError(
-            "generated genesis must configure a positive config.oracleV1Block"
+    configured = os.environ.get("GAMMA_SOAK_ACTIVATION_TIME")
+    delay = int(
+        os.environ.get(
+            "GAMMA_SOAK_ACTIVATION_DELAY_SECONDS",
+            DEFAULT_GAMMA_ACTIVATION_DELAY_SECONDS,
         )
+    )
+    activation_time = (
+        int(configured) if configured else int(time.time()) + delay
+    )
+    if not isinstance(activation_time, int) or activation_time <= 0:
+        raise RuntimeError(
+            "generated genesis must configure a positive config.gammaTime"
+        )
+    generated.setdefault("config", {}).pop("oracleV1Block", None)
+    generated["config"]["gammaTime"] = activation_time
 
     generated_alloc = generated.get("alloc", {})
     signed_alloc = signed_testnet.get("alloc", {})
     evidence = []
-    for contract in ORACLE_V1_CONTRACTS:
+    for contract in GAMMA_CONTRACTS:
         generated_key = _alloc_key(generated_alloc, contract["address"])
         signed_key = _alloc_key(signed_alloc, contract["address"])
         signed_code = signed_alloc[signed_key].get("code", "")
@@ -105,7 +117,7 @@ def _install_oracle_v1_pre_fork_runtimes(test_dir: Path) -> dict:
         }:
             raise RuntimeError(
                 f"generated {contract['name']} runtime hash {generated_hash} "
-                "matches neither frozen OracleV1 state"
+                "matches neither frozen Gamma state"
             )
         generated_alloc[generated_key]["code"] = signed_code
         evidence.append(dict(contract))
@@ -114,7 +126,7 @@ def _install_oracle_v1_pre_fork_runtimes(test_dir: Path) -> dict:
     temporary_path.write_text(json.dumps(generated, indent=2) + "\n")
     temporary_path.replace(genesis_path)
     return {
-        "activationBlock": activation_block,
+        "activationTime": activation_time,
         "contracts": evidence,
         "fixture": "genesis/testnet/genesis.json",
     }
@@ -167,7 +179,7 @@ def _price_uri(
 
 
 def pre_deploy(test_dir: Path, env: dict, pytest_args: list[str]):
-    oracle_v1_hardfork = _install_oracle_v1_pre_fork_runtimes(test_dir)
+    gamma_hardfork = _install_gamma_pre_fork_runtimes(test_dir)
     binance_base_url = _require_public_https_url(
         env.get("BINANCE_PRICE_FEED_BASE_URL", DEFAULT_BINANCE_BASE_URL),
         "BINANCE_PRICE_FEED_BASE_URL",
@@ -211,7 +223,7 @@ def pre_deploy(test_dir: Path, env: dict, pytest_args: list[str]):
         json.dumps(
             {
                 "binanceFeeds": binance_feeds,
-                "oracleV1Hardfork": oracle_v1_hardfork,
+                "gammaHardfork": gamma_hardfork,
             },
             indent=2,
             ensure_ascii=False,
@@ -220,8 +232,8 @@ def pre_deploy(test_dir: Path, env: dict, pytest_args: list[str]):
     )
     env["RELAYER_CONFIG_TPL"] = str(relayer_path)
     LOG.info(
-        "Prepared OracleV1 block=%s and live Binance pairs=%s anchor=%s",
-        oracle_v1_hardfork["activationBlock"],
+        "Prepared Gamma time=%s and live Binance pairs=%s anchor=%s",
+        gamma_hardfork["activationTime"],
         [feed["pair"] for feed in binance_feeds],
         bucket_start_ms,
     )

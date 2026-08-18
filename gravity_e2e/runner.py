@@ -447,7 +447,7 @@ def main():
         "long_test",
         "rolling_upgrade",
         "oracle_live_soak",
-        "oracle_v1_rolling_upgrade",
+        "gamma_rolling_upgrade",
     ]
 
     parser.add_argument(

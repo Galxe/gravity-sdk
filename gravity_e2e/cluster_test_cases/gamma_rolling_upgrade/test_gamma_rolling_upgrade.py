@@ -1,4 +1,4 @@
-"""Roll four validators from pre-OracleV1 reth to the activation binary."""
+"""Roll four validators from pre-Gamma reth to the activation binary."""
 
 import asyncio
 import hashlib
@@ -14,14 +14,18 @@ import pytest
 from web3 import Web3
 
 from gravity_e2e.cluster.manager import Cluster
+from gravity_e2e.utils.hardfork import (
+    block_timestamp,
+    wait_for_activation_block,
+)
 
 
 LOG = logging.getLogger(__name__)
 SUITE_DIR = Path(__file__).resolve().parent
-METADATA_FILE = "oracle_v1_rolling_upgrade_metadata.json"
-SUMMARY_FILE = "oracle_v1_rolling_upgrade_summary.json"
+METADATA_FILE = "gamma_rolling_upgrade_metadata.json"
+SUMMARY_FILE = "gamma_rolling_upgrade_summary.json"
 CONFIRMATION_BLOCKS = 16
-DEFAULT_MIN_BLOCKS_PER_REMAINING_NODE = 256
+DEFAULT_MIN_SECONDS_PER_REMAINING_NODE = 120
 DEFAULT_BLOCK_WAIT_TIMEOUT_SECONDS = 15 * 60
 RECONFIGURATION_ADDRESS = Web3.to_checksum_address(
     "0x00000000000000000000000000000001625F2003"
@@ -30,7 +34,7 @@ SEL_CURRENT_EPOCH = Web3.keccak(text="currentEpoch()")[:4]
 SEL_REMAINING_TIME = Web3.keccak(text="getRemainingTimeSeconds()")[:4]
 MIN_ROLLING_EPOCH_HEADROOM_SECONDS = 10 * 60
 
-ORACLE_V1_CONTRACTS = (
+GAMMA_CONTRACTS = (
     {
         "name": "NativeOracle",
         "address": Web3.to_checksum_address(
@@ -101,7 +105,7 @@ async def _wait_for_block(
     if timeout is None:
         timeout = int(
             os.environ.get(
-                "ORACLE_V1_ROLLING_BLOCK_TIMEOUT_SECONDS",
+                "GAMMA_ROLLING_BLOCK_TIMEOUT_SECONDS",
                 str(DEFAULT_BLOCK_WAIT_TIMEOUT_SECONDS),
             )
         )
@@ -227,7 +231,7 @@ async def _capture_phase(
                 contract["name"]: _account_snapshot(
                     node.w3, contract["address"], block_number
                 )
-                for contract in ORACLE_V1_CONTRACTS
+                for contract in GAMMA_CONTRACTS
             },
         }
     assert len({value["blockHash"] for value in replicas.values()}) == 1
@@ -245,7 +249,15 @@ async def _capture_phase(
     }
 
 
-async def _verify_hardfork(cluster: Cluster, activation_block: int) -> dict:
+async def _verify_hardfork(cluster: Cluster, activation_time: int) -> dict:
+    node1 = cluster.get_node("node1")
+    assert node1 is not None
+    activation_block = await wait_for_activation_block(
+        "node1",
+        node1.w3,
+        activation_time,
+        DEFAULT_BLOCK_WAIT_TIMEOUT_SECONDS,
+    )
     pre_fork = await _capture_phase(cluster, activation_block - 1)
     post_fork = await _capture_phase(cluster, activation_block)
     await asyncio.gather(
@@ -265,7 +277,7 @@ async def _verify_hardfork(cluster: Cluster, activation_block: int) -> dict:
         }
         assert hashes == {snapshot["blockHash"]}
 
-    for contract in ORACLE_V1_CONTRACTS:
+    for contract in GAMMA_CONTRACTS:
         before = pre_fork["accounts"][contract["name"]]
         after = post_fork["accounts"][contract["name"]]
         assert before["codeHash"] == contract["preForkCodeHash"]
@@ -273,22 +285,27 @@ async def _verify_hardfork(cluster: Cluster, activation_block: int) -> dict:
         assert before["codeLength"] > 0 and after["codeLength"] > 0
         for field in ("balance", "nonce", "storageHash"):
             assert before[field] == after[field]
-    return {"preFork": pre_fork, "postFork": post_fork}
+    return {
+        "activationTime": activation_time,
+        "activationBlock": activation_block,
+        "preFork": pre_fork,
+        "postFork": post_fork,
+    }
 
 
 @pytest.mark.asyncio
-async def test_oracle_v1_rolling_binary_upgrade(cluster: Cluster):
+async def test_gamma_rolling_binary_upgrade(cluster: Cluster):
     metadata = _metadata()
     old_hash = metadata["oldBinarySha256"]
     new_hash = metadata["newBinarySha256"]
-    activation_block = int(
-        metadata["oracleV1Hardfork"]["activationBlock"]
+    activation_time = int(
+        metadata["gammaHardfork"]["activationTime"]
     )
     new_binary = Path(os.environ["GRAVITY_NEW_BINARY"]).resolve()
-    min_blocks = int(
+    min_seconds = int(
         os.environ.get(
-            "ORACLE_V1_ROLLING_MIN_BLOCKS_PER_NODE",
-            str(DEFAULT_MIN_BLOCKS_PER_REMAINING_NODE),
+            "GAMMA_ROLLING_MIN_SECONDS_PER_NODE",
+            str(DEFAULT_MIN_SECONDS_PER_REMAINING_NODE),
         )
     )
     evidence = []
@@ -304,14 +321,14 @@ async def test_oracle_v1_rolling_binary_upgrade(cluster: Cluster):
         rollout_epoch = _epoch_snapshot(node1.w3)["epoch"]
 
         for node_id in sorted(cluster.nodes):
-            current_tip = max(
-                node.w3.eth.block_number for node in cluster.nodes.values()
+            current_timestamp = max(
+                block_timestamp(node.w3) for node in cluster.nodes.values()
             )
             remaining = len(cluster.nodes) - len(upgraded)
-            required_headroom = min_blocks * remaining + CONFIRMATION_BLOCKS
-            assert activation_block - current_tip > required_headroom, (
+            required_headroom = min_seconds * remaining + 30
+            assert activation_time - current_timestamp > required_headroom, (
                 f"insufficient pre-activation headroom before {node_id}: "
-                f"tip={current_tip} activation={activation_block} "
+                f"timestamp={current_timestamp} activation={activation_time} "
                 f"required={required_headroom}"
             )
             evidence.append(
@@ -326,11 +343,14 @@ async def test_oracle_v1_rolling_binary_upgrade(cluster: Cluster):
         final_upgrade_tip = max(
             node.w3.eth.block_number for node in cluster.nodes.values()
         )
-        assert final_upgrade_tip < activation_block
-        hardfork = await _verify_hardfork(cluster, activation_block)
+        final_upgrade_timestamp = max(
+            block_timestamp(node.w3) for node in cluster.nodes.values()
+        )
+        assert final_upgrade_timestamp < activation_time
+        hardfork = await _verify_hardfork(cluster, activation_time)
         assert _epoch_snapshot(cluster.get_node("node1").w3)["epoch"] == (
             rollout_epoch
-        ), "epoch changed before OracleV1 activation completed"
+        ), "epoch changed before Gamma activation completed"
 
         restart_node = cluster.get_node("node4")
         assert restart_node is not None
@@ -362,9 +382,10 @@ async def test_oracle_v1_rolling_binary_upgrade(cluster: Cluster):
 
         summary = {
             "status": "passed",
-            "activationBlock": activation_block,
+            "activationTime": activation_time,
             "rolloutEpoch": rollout_epoch,
             "allValidatorsUpgradedAtBlock": final_upgrade_tip,
+            "allValidatorsUpgradedAtTimestamp": final_upgrade_timestamp,
             "oldBinarySha256": old_hash,
             "newBinarySha256": new_hash,
             "upgrades": evidence,
@@ -372,12 +393,12 @@ async def test_oracle_v1_rolling_binary_upgrade(cluster: Cluster):
             "postForkRestart": restart_evidence,
         }
         _write_summary(summary)
-        LOG.info("OracleV1 rolling upgrade summary: %s", summary)
+        LOG.info("Gamma rolling upgrade summary: %s", summary)
     except BaseException as error:
         _write_summary(
             {
                 "status": "failed",
-                "activationBlock": activation_block,
+                "activationTime": activation_time,
                 "oldBinarySha256": old_hash,
                 "newBinarySha256": new_hash,
                 "upgrades": evidence,

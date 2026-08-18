@@ -4,7 +4,7 @@
 
 [dependencies.genesis_contracts]
 repo = "https://github.com/Galxe/gravity_chain_core_contracts.git"
-ref = "5772b210b19761439147ce0d17590a42cb978af8"
+ref = "e92e7d0254b20977c6ade7c5234f5b41051e4743"
 
 # Equal voting power means a JWK QC requires matching signatures from at least
 # three of the four validators.
@@ -58,9 +58,8 @@ initial_locked_until_micros = 1798848000000000
 governance_owner = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
 
 [genesis.hardforks]
-# Leave enough startup headroom for the test to capture the signed testnet
-# OracleV1 pre-state before the code-only migration executes.
-oracleV1Block = 600
+# Replaced with an absolute Unix timestamp by hooks.py before startup.
+gammaTime = 4102444800
 
 [genesis.faucet]
 address = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
