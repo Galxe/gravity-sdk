@@ -1,8 +1,8 @@
-# Four-validator OracleV1 bridge migration and replay test.
+# Four-validator Gamma bridge migration and replay test.
 
 [cluster]
-name = "gravity-devnet-oracle-v1-bridge-hardfork"
-base_dir = "/tmp/gravity-cluster-oracle-v1-bridge-hardfork"
+name = "gravity-devnet-gamma-bridge-hardfork"
+base_dir = "/tmp/gravity-cluster-gamma-bridge-hardfork"
 
 [genesis_source]
 genesis_path = "./artifacts/genesis.json"

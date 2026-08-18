@@ -1,10 +1,11 @@
-"""Install legacy Oracle runtimes and stage bridge events around OracleV1."""
+"""Install legacy Oracle runtimes and stage bridge events around Gamma."""
 
 import json
 import logging
 import os
 from pathlib import Path
 import sys
+import time
 
 from web3 import Web3
 
@@ -12,10 +13,11 @@ from web3 import Web3
 LOG = logging.getLogger(__name__)
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 SIGNED_TESTNET_GENESIS = PROJECT_ROOT / "genesis" / "testnet" / "genesis.json"
-METADATA_FILE = "oracle_v1_bridge_hardfork_metadata.json"
-SUMMARY_FILE = "oracle_v1_bridge_hardfork_summary.json"
+METADATA_FILE = "gamma_bridge_hardfork_metadata.json"
+SUMMARY_FILE = "gamma_bridge_hardfork_summary.json"
+DEFAULT_ACTIVATION_DELAY_SECONDS = 300
 
-ORACLE_V1_CONTRACTS = (
+GAMMA_CONTRACTS = (
     {
         "name": "NativeOracle",
         "address": "0x00000000000000000000000000000001625f4000",
@@ -52,17 +54,23 @@ def _install_legacy_runtimes(test_dir: Path) -> dict:
     generated = json.loads(genesis_path.read_text())
     signed = json.loads(SIGNED_TESTNET_GENESIS.read_text())
 
-    configured = generated.get("config", {}).get("oracleV1Block")
-    override = os.environ.get("ORACLE_V1_BRIDGE_ACTIVATION_BLOCK")
-    activation_block = int(override) if override else configured
-    if not isinstance(activation_block, int) or activation_block <= 0:
-        raise RuntimeError("config.oracleV1Block must be a positive integer")
-    generated.setdefault("config", {})["oracleV1Block"] = activation_block
+    override = os.environ.get("GAMMA_BRIDGE_ACTIVATION_TIME")
+    delay = int(
+        os.environ.get(
+            "GAMMA_BRIDGE_ACTIVATION_DELAY_SECONDS",
+            DEFAULT_ACTIVATION_DELAY_SECONDS,
+        )
+    )
+    activation_time = int(override) if override else int(time.time()) + delay
+    if not isinstance(activation_time, int) or activation_time <= 0:
+        raise RuntimeError("config.gammaTime must be a positive Unix timestamp")
+    generated.setdefault("config", {}).pop("oracleV1Block", None)
+    generated["config"]["gammaTime"] = activation_time
 
     generated_alloc = generated.get("alloc", {})
     signed_alloc = signed.get("alloc", {})
     evidence = []
-    for contract in ORACLE_V1_CONTRACTS:
+    for contract in GAMMA_CONTRACTS:
         generated_key = _alloc_key(generated_alloc, contract["address"])
         signed_key = _alloc_key(signed_alloc, contract["address"])
         signed_code = signed_alloc[signed_key].get("code", "")
@@ -88,7 +96,7 @@ def _install_legacy_runtimes(test_dir: Path) -> dict:
     temporary = genesis_path.with_suffix(".json.tmp")
     temporary.write_text(json.dumps(generated, indent=2) + "\n")
     temporary.replace(genesis_path)
-    return {"activationBlock": activation_block, "contracts": evidence}
+    return {"activationTime": activation_time, "contracts": evidence}
 
 
 def pre_deploy(test_dir: Path, env: dict, pytest_args: list[str]):
@@ -97,7 +105,7 @@ def pre_deploy(test_dir: Path, env: dict, pytest_args: list[str]):
     artifacts.mkdir(parents=True, exist_ok=True)
     (artifacts / SUMMARY_FILE).unlink(missing_ok=True)
     (artifacts / METADATA_FILE).write_text(
-        json.dumps({"oracleV1Hardfork": hardfork}, indent=2) + "\n"
+        json.dumps({"gammaHardfork": hardfork}, indent=2) + "\n"
     )
 
 

@@ -1,9 +1,9 @@
-# Four-validator OracleV1 binary rolling-upgrade test.
+# Four-validator Gamma binary rolling-upgrade test.
 # Keep fixed listeners below Linux's default ephemeral source-port range.
 
 [cluster]
-name = "gravity-devnet-oracle-v1-rolling-upgrade"
-base_dir = "/tmp/gravity-cluster-oracle-v1-rolling-upgrade"
+name = "gravity-devnet-gamma-rolling-upgrade"
+base_dir = "/tmp/gravity-cluster-gamma-rolling-upgrade"
 
 [genesis_source]
 genesis_path = "./artifacts/genesis.json"

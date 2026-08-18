@@ -25,6 +25,7 @@ from web3._utils.normalizers import BASE_RETURN_NORMALIZERS
 
 from gravity_e2e.cluster.manager import Cluster
 from gravity_e2e.utils import oracle_test_support as support
+from gravity_e2e.utils.hardfork import wait_for_activation_block
 
 
 LOG = logging.getLogger(__name__)
@@ -38,7 +39,7 @@ RECONFIGURATION_ADDRESS = Web3.to_checksum_address(
 EPOCH_CONFIG_ADDRESS = Web3.to_checksum_address(
     "0x00000000000000000000000000000001625F1005"
 )
-ORACLE_V1_CONTRACTS = (
+GAMMA_CONTRACTS = (
     {
         "name": "NativeOracle",
         "address": Web3.to_checksum_address(
@@ -225,14 +226,14 @@ def test_soak_settings_rejects_two_restart_controls(monkeypatch):
         _soak_settings()
 
 
-def test_signed_testnet_genesis_pins_oracle_v1_pre_fork_runtimes():
+def test_signed_testnet_genesis_pins_gamma_pre_fork_runtimes():
     path = SUITE_DIR.parents[2] / "genesis" / "testnet" / "genesis.json"
     alloc = json.loads(path.read_text())["alloc"]
     normalized_alloc = {
         key.removeprefix("0x").lower(): account
         for key, account in alloc.items()
     }
-    for contract in ORACLE_V1_CONTRACTS:
+    for contract in GAMMA_CONTRACTS:
         key = contract["address"].removeprefix("0x").lower()
         code = normalized_alloc[key]["code"]
         assert len(code) > 2
@@ -417,7 +418,7 @@ def _account_snapshot(w3: Web3, address: str, block_number: int) -> dict:
     }
 
 
-async def _capture_oracle_v1_phase(
+async def _capture_gamma_phase(
     node_id: str, w3: Web3, block_number: int
 ) -> tuple[str, dict]:
     await _wait_for_block(node_id, w3, block_number, timeout=180)
@@ -426,7 +427,7 @@ async def _capture_oracle_v1_phase(
         contract["name"]: _account_snapshot(
             w3, contract["address"], block_number
         )
-        for contract in ORACLE_V1_CONTRACTS
+        for contract in GAMMA_CONTRACTS
     }
     return node_id, {
         "block": block_number,
@@ -435,10 +436,18 @@ async def _capture_oracle_v1_phase(
     }
 
 
-async def _verify_oracle_v1_hardfork(
-    cluster: Cluster, activation_block: int
+async def _verify_gamma_hardfork(
+    cluster: Cluster, activation_time: int
 ) -> dict:
-    assert activation_block > 0
+    assert activation_time > 0
+    node1 = cluster.get_node("node1")
+    assert node1 is not None
+    activation_block = await wait_for_activation_block(
+        "node1",
+        node1.w3,
+        activation_time,
+        EPOCH_TIMEOUT_SECONDS,
+    )
     phase_blocks = {
         "preFork": activation_block - 1,
         "postFork": activation_block,
@@ -448,7 +457,7 @@ async def _verify_oracle_v1_hardfork(
         captured = dict(
             await asyncio.gather(
                 *(
-                    _capture_oracle_v1_phase(
+                    _capture_gamma_phase(
                         node_id, node.w3, block_number
                     )
                     for node_id, node in cluster.nodes.items()
@@ -460,7 +469,7 @@ async def _verify_oracle_v1_hardfork(
             for node_id, snapshot in captured.items()
         }
         assert len(set(block_hashes.values())) == 1, (
-            f"validators disagree on OracleV1 {phase} block: {block_hashes}"
+            f"validators disagree on Gamma {phase} block: {block_hashes}"
         )
         accounts = {
             node_id: snapshot["accounts"]
@@ -470,7 +479,7 @@ async def _verify_oracle_v1_hardfork(
         assert all(
             node_accounts == canonical_accounts
             for node_accounts in accounts.values()
-        ), f"validators disagree on OracleV1 {phase} account state"
+        ), f"validators disagree on Gamma {phase} account state"
         snapshots[phase] = {
             "block": block_number,
             "blockHash": next(iter(block_hashes.values())),
@@ -496,11 +505,11 @@ async def _verify_oracle_v1_hardfork(
             for node_id, node in cluster.nodes.items()
         }
         assert set(canonical_hashes.values()) == {snapshot["blockHash"]}, (
-            f"OracleV1 {phase} block changed before confirmation: "
+            f"Gamma {phase} block changed before confirmation: "
             f"{canonical_hashes}"
         )
 
-    for contract in ORACLE_V1_CONTRACTS:
+    for contract in GAMMA_CONTRACTS:
         name = contract["name"]
         before = snapshots["preFork"]["accounts"][name]
         after = snapshots["postFork"]["accounts"][name]
@@ -509,10 +518,11 @@ async def _verify_oracle_v1_hardfork(
         assert before["codeLength"] > 0 and after["codeLength"] > 0
         for preserved_field in ("balance", "nonce", "storageHash"):
             assert before[preserved_field] == after[preserved_field], (
-                f"OracleV1 changed {name}.{preserved_field}"
+                f"Gamma changed {name}.{preserved_field}"
             )
 
     return {
+        "activationTime": activation_time,
         "activationBlock": activation_block,
         "preFork": snapshots["preFork"],
         "postFork": snapshots["postFork"],
@@ -1213,16 +1223,16 @@ async def test_governance_activated_price_feeds_soak_for_configured_duration(
 ):
     settings = _soak_settings()
     metadata = _metadata()
-    assert set(metadata) == {"binanceFeeds", "oracleV1Hardfork"}
+    assert set(metadata) == {"binanceFeeds", "gammaHardfork"}
     binance_feeds = metadata["binanceFeeds"]
-    oracle_v1_metadata = metadata["oracleV1Hardfork"]
-    assert oracle_v1_metadata["fixture"] == "genesis/testnet/genesis.json"
-    assert oracle_v1_metadata["contracts"] == [
+    gamma_metadata = metadata["gammaHardfork"]
+    assert gamma_metadata["fixture"] == "genesis/testnet/genesis.json"
+    assert gamma_metadata["contracts"] == [
         {
             **contract,
             "address": contract["address"].lower(),
         }
-        for contract in ORACLE_V1_CONTRACTS
+        for contract in GAMMA_CONTRACTS
     ]
     assert [feed["pair"] for feed in binance_feeds] == [
         "NVDAUSDT",
@@ -1243,8 +1253,11 @@ async def test_governance_activated_price_feeds_soak_for_configured_duration(
     oracle_config = genesis_config["oracle_config"]
     assert oracle_config["source_types"] == [1, 3]
     assert len(oracle_config["callbacks"]) == 2
-    activation_block = int(oracle_v1_metadata["activationBlock"])
-    assert genesis_config["hardforks"]["oracleV1Block"] == activation_block
+    activation_time = int(gamma_metadata["activationTime"])
+    generated_genesis = json.loads(
+        (SUITE_DIR / "artifacts" / "genesis.json").read_text()
+    )
+    assert generated_genesis["config"]["gammaTime"] == activation_time
 
     assert len(cluster.nodes) == 4
     assert await cluster.set_full_live(timeout=180)
@@ -1256,17 +1269,17 @@ async def test_governance_activated_price_feeds_soak_for_configured_duration(
     assert node1 is not None and node1.w3.is_connected()
     w3 = node1.w3
     try:
-        hardfork_evidence = await _verify_oracle_v1_hardfork(
-            cluster, activation_block
+        hardfork_evidence = await _verify_gamma_hardfork(
+            cluster, activation_time
         )
     except BaseException as error:
         _write_summary(
             {
                 "status": "failed",
-                "phase": "oracleV1Hardfork",
+                "phase": "gammaHardfork",
                 "errorType": type(error).__name__,
                 "error": str(error),
-                "activationBlock": activation_block,
+                "activationTime": activation_time,
             }
         )
         raise
@@ -1458,7 +1471,7 @@ async def test_governance_activated_price_feeds_soak_for_configured_duration(
                 "binancePairs": [
                     feed["pair"] for feed in binance_feeds
                 ],
-                "oracleV1Hardfork": hardfork_evidence,
+                "gammaHardfork": hardfork_evidence,
                 "lastHeartbeat": last_heartbeat,
             }
         )
@@ -1484,7 +1497,7 @@ async def test_governance_activated_price_feeds_soak_for_configured_duration(
         {
             "activationEpoch": activation_epoch,
             "governanceBlock": receipt["blockNumber"],
-            "oracleV1Hardfork": hardfork_evidence,
+            "gammaHardfork": hardfork_evidence,
             "priceCallbackEvents": price_delivery_counts,
             "soakEpochIntervalSeconds": (
                 SOAK_EPOCH_INTERVAL_MICROS // 1_000_000

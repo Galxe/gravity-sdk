@@ -1,4 +1,4 @@
-"""Prove sourceType=0 bridge continuity across the OracleV1 hardfork."""
+"""Prove sourceType=0 bridge continuity across the Gamma hardfork."""
 
 import asyncio
 import json
@@ -19,18 +19,22 @@ from gravity_e2e.utils.bridge_utils import (
     NATIVE_MINTED_TOPIC0,
     poll_all_native_minted,
 )
+from gravity_e2e.utils.hardfork import (
+    block_timestamp,
+    wait_for_activation_block,
+)
 
 
 LOG = logging.getLogger(__name__)
 SUITE_DIR = Path(__file__).resolve().parent
-METADATA_FILE = "oracle_v1_bridge_hardfork_metadata.json"
-SUMMARY_FILE = "oracle_v1_bridge_hardfork_summary.json"
+METADATA_FILE = "gamma_bridge_hardfork_metadata.json"
+SUMMARY_FILE = "gamma_bridge_hardfork_summary.json"
 SOURCE_TYPE_BLOCKCHAIN = 0
 SOURCE_ID = 31337
 CONFIRMATION_BLOCKS = 16
 DEFAULT_TIMEOUT_SECONDS = 15 * 60
 
-ORACLE_V1_CONTRACTS = (
+GAMMA_CONTRACTS = (
     {
         "name": "NativeOracle",
         "address": Web3.to_checksum_address(
@@ -134,7 +138,7 @@ def _set_finalized(rpc_url: str, block_number: int) -> None:
 async def _wait_for_block(node_id: str, w3: Web3, target: int) -> None:
     timeout = int(
         os.environ.get(
-            "ORACLE_V1_BRIDGE_BLOCK_TIMEOUT_SECONDS",
+            "GAMMA_BRIDGE_BLOCK_TIMEOUT_SECONDS",
             str(DEFAULT_TIMEOUT_SECONDS),
         )
     )
@@ -179,7 +183,7 @@ async def _capture_phase(nodes: dict, block_number: int) -> dict:
                 contract["name"]: _account_snapshot(
                     node.w3, contract["address"], block_number
                 )
-                for contract in ORACLE_V1_CONTRACTS
+                for contract in GAMMA_CONTRACTS
             },
         }
         for node_id, node in nodes.items()
@@ -201,7 +205,7 @@ async def _capture_phase(nodes: dict, block_number: int) -> dict:
 
 def _oracle(w3: Web3):
     return w3.eth.contract(
-        address=ORACLE_V1_CONTRACTS[0]["address"],
+        address=GAMMA_CONTRACTS[0]["address"],
         abi=NATIVE_ORACLE_ABI,
     )
 
@@ -258,11 +262,11 @@ def _mint_counts(w3: Web3) -> dict[int, int]:
 @pytest.mark.cross_chain
 @pytest.mark.bridge
 @pytest.mark.asyncio
-async def test_oracle_v1_bridge_hardfork(cluster: Cluster):
+async def test_gamma_bridge_hardfork(cluster: Cluster):
     metadata = _metadata()
     bridge = metadata["bridge"]
-    activation_block = int(
-        metadata["oracleV1Hardfork"]["activationBlock"]
+    activation_time = int(
+        metadata["gammaHardfork"]["activationTime"]
     )
     evidence = {}
 
@@ -277,7 +281,7 @@ async def test_oracle_v1_bridge_hardfork(cluster: Cluster):
         recipient = Web3.to_checksum_address(bridge["recipient"])
         initial_balance = node1.w3.eth.get_balance(recipient)
 
-        assert activation_block - node1.w3.eth.block_number > 64, (
+        assert activation_time - block_timestamp(node1.w3) > 60, (
             "insufficient headroom for pre-fork bridge delivery"
         )
         _set_finalized(bridge["rpcUrl"], bridge["sourceBlocks"][0])
@@ -303,9 +307,10 @@ async def test_oracle_v1_bridge_hardfork(cluster: Cluster):
         assert pre_state["record"]["payloadLength"] > 0
         evidence["preForkBridge"] = pre_state
 
-        assert activation_block - node1.w3.eth.block_number > 32
+        assert activation_time - block_timestamp(node1.w3) > 30
         node4_height = node4.w3.eth.block_number
-        assert node4_height < activation_block
+        node4_timestamp = block_timestamp(node4.w3, node4_height)
+        assert node4_timestamp < activation_time
         assert await node4.stop(), "failed to stop node4 before hardfork"
 
         live_nodes = {
@@ -313,6 +318,12 @@ async def test_oracle_v1_bridge_hardfork(cluster: Cluster):
             for node_id, node in cluster.nodes.items()
             if node_id != "node4"
         }
+        activation_block = await wait_for_activation_block(
+            "node1",
+            node1.w3,
+            activation_time,
+            DEFAULT_TIMEOUT_SECONDS,
+        )
         pre_fork = await _capture_phase(live_nodes, activation_block - 1)
         post_fork = await _capture_phase(live_nodes, activation_block)
         await asyncio.gather(
@@ -326,7 +337,7 @@ async def test_oracle_v1_bridge_hardfork(cluster: Cluster):
             )
         )
 
-        for contract in ORACLE_V1_CONTRACTS:
+        for contract in GAMMA_CONTRACTS:
             before = pre_fork["accounts"][contract["name"]]
             after = post_fork["accounts"][contract["name"]]
             assert before["codeHash"] == contract["preForkCodeHash"]
@@ -357,6 +368,7 @@ async def test_oracle_v1_bridge_hardfork(cluster: Cluster):
         }
         evidence["node4Replay"] = {
             "stoppedAtBlock": node4_height,
+            "stoppedAtTimestamp": node4_timestamp,
             "peerTip": peer_tip,
             "recoverySeconds": replay_seconds,
             "bridgeState": replay_state,
@@ -385,7 +397,7 @@ async def test_oracle_v1_bridge_hardfork(cluster: Cluster):
             "latestPosition": bridge["sourceBlocks"][1],
         }
         records_preserved = post_state["record"]["recordedAt"] > 0
-        if os.environ.get("ORACLE_V1_REQUIRE_SOURCE0_RECORDS", "0") == "1":
+        if os.environ.get("GAMMA_REQUIRE_SOURCE0_RECORDS", "0") == "1":
             assert records_preserved, (
                 "sourceType=0 getRecord compatibility was required but nonce 2 "
                 "was not stored"
@@ -400,6 +412,7 @@ async def test_oracle_v1_bridge_hardfork(cluster: Cluster):
         _write_summary(
             {
                 "status": "passed",
+                "activationTime": activation_time,
                 "activationBlock": activation_block,
                 "evidence": evidence,
             }
@@ -408,7 +421,8 @@ async def test_oracle_v1_bridge_hardfork(cluster: Cluster):
         _write_summary(
             {
                 "status": "failed",
-                "activationBlock": activation_block,
+                "activationTime": activation_time,
+                "activationBlock": locals().get("activation_block"),
                 "evidence": evidence,
                 "errorType": type(error).__name__,
                 "error": str(error),

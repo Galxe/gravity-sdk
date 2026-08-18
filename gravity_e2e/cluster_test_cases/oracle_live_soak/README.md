@@ -7,11 +7,11 @@ three continuous Binance Futures testnet closed index-price kline feeds:
 - `BTCUSDT` (`sourceType=3`, feed ID `1002`);
 - `ETHUSDT` (`sourceType=3`, feed ID `1003`).
 
-Before enabling those feeds, the suite exercises the OracleV1 testnet
+Before enabling those feeds, the suite exercises the Gamma testnet
 hardfork. Genesis is generated from the packed-V1 contracts, then the
 `NativeOracle` and `OracleTaskConfig` runtimes are replaced with the exact
-pre-fork bytes signed into `genesis/testnet/genesis.json`. At
-`config.oracleV1Block`, gravity-reth must atomically install both packed-V1
+pre-fork bytes signed into `genesis/testnet/genesis.json`. At the first block
+whose timestamp is at least `config.gammaTime`, gravity-reth must atomically install both packed-V1
 runtimes without changing either account's balance, nonce, or storage root.
 
 Each callback uses packed Price Feed V1: a canonical 32-byte big-endian body
@@ -58,15 +58,16 @@ NativeOracle callback count must equal its independent final delivery nonce.
 Observed price changes remain informational because timely identical index
 closes are valid Oracle updates.
 
-## OracleV1 Startup Gate
+## Gamma Startup Gate
 
 Before deploying the resolver or submitting governance, the test captures each
 adjacent state while it is still inside the RPC proof window, waits until all
-four validators pass `oracleV1Block + 16`, and then confirms that both captured
+four validators pass the discovered activation block plus 16 confirmations,
+and then confirms that both captured
 block hashes remain canonical:
 
-- block `oracleV1Block - 1` has the two frozen testnet pre-fork codehashes;
-- block `oracleV1Block` has the two frozen packed-V1 codehashes;
+- the last block with `timestamp < gammaTime` has the frozen testnet pre-fork codehashes;
+- the first block with `timestamp >= gammaTime` has the frozen packed-V1 codehashes;
 - all four RPC replicas agree on both canonical block hashes and account
   proofs;
 - `eth_getCode` and `eth_getProof.codeHash` agree for every observation;
@@ -216,5 +217,5 @@ Runtime evidence remains local and ignored by Git:
   recovery times.
 
 The summary is the acceptance artifact. A process that is still running has not
-yet passed the soak. Its `oracleV1Hardfork` section records both canonical
+yet passed the soak. Its `gammaHardfork` section records both canonical
 blocks and the pre/post account proofs used by the startup gate.

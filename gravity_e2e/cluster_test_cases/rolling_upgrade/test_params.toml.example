@@ -10,9 +10,8 @@ repo = "https://github.com/Galxe/gravity_chain_core_contracts.git"
 ref = "gravity-testnet-v1.0.0"
 
 [hardforks]
-alphaBlock = 100
-betaBlock = 100
-# gammaBlock must activate AFTER all 6 nodes finish rolling upgrade.
-# Upgrade timeline: ~2 min warmup + 6 nodes * (1 min upgrade + 3 min wait) = ~26 min = ~7800 blocks @ 5 blocks/s.
-# 10000 blocks (~33 min) provides ~7 min safety margin.
-gammaBlock = 10000
+alphaTime = 0
+betaTime = 0
+# gammaTime is a Unix-seconds timestamp and must remain in the future until all
+# six nodes finish the rolling upgrade. Replace this example before running.
+gammaTime = 1893456000
