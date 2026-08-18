@@ -20,10 +20,10 @@ use anyhow::{anyhow, bail, ensure};
 use aptos_consensus_types::{
     block_retrieval::{NUM_RETRIES, RETRY_INTERVAL_MSEC, RPC_TIMEOUT_MSEC},
     forward_epoch_sync::{
-        ForwardEpochSyncBatch, ForwardEpochSyncBatchStatus, ForwardEpochSyncError,
-        ForwardEpochSyncFetchRequest, ForwardEpochSyncManifest, ForwardEpochSyncPrepareRequest,
-        ForwardEpochSyncRecord, ForwardEpochSyncRequest, ForwardEpochSyncRequestV1,
-        ForwardEpochSyncResponse, ForwardEpochSyncResponseV1,
+        ForwardEpochSyncBatch, ForwardEpochSyncError, ForwardEpochSyncFetchRequest,
+        ForwardEpochSyncManifest, ForwardEpochSyncPrepareRequest, ForwardEpochSyncRecord,
+        ForwardEpochSyncRequest, ForwardEpochSyncRequestV1, ForwardEpochSyncResponse,
+        ForwardEpochSyncResponseV1,
     },
 };
 use gaptos::{
@@ -41,6 +41,8 @@ use std::{
 };
 use tokio::time;
 
+const FORWARD_EPOCH_SYNC_PREPARE_TIMEOUT_MSEC: u64 = 5_000;
+
 #[derive(Clone)]
 struct ForwardEpochSyncIndexEntry {
     block_number: Option<u64>,
@@ -55,7 +57,6 @@ struct ForwardEpochSyncIndexEntry {
 struct ForwardEpochSyncBoundary {
     certifying_position: usize,
     target_block_number: u64,
-    target_block_id: HashValue,
     ledger_info: LedgerInfoWithSignatures,
 }
 
@@ -68,19 +69,13 @@ pub(in crate::block_storage::block_store) struct ForwardEpochSyncIndex {
     boundaries: Vec<ForwardEpochSyncBoundary>,
 }
 
-fn select_forward_batch_end(
-    start: usize,
-    requested: usize,
-    total: usize,
-    epoch_boundary_position: usize,
-) -> Option<usize> {
-    let mut end = start.saturating_add(requested).min(total);
-    // The epoch boundary and suffix must be fetched by one final batch. A non-final batch stops
-    // immediately before the boundary; if the final unit itself is too large, no valid end exists.
-    if start <= epoch_boundary_position && end > epoch_boundary_position && end < total {
-        end = epoch_boundary_position;
-    }
+fn select_forward_batch_end(start: usize, requested: usize, total: usize) -> Option<usize> {
+    let end = start.saturating_add(requested).min(total);
     (end > start).then_some(end)
+}
+
+fn certifying_position_in_batch(position: usize, start: usize, end: usize) -> bool {
+    position >= start && position < end
 }
 
 impl BlockStore {
@@ -242,17 +237,18 @@ impl BlockStore {
             if ledger_info.ledger_info().epoch() != epoch {
                 continue;
             }
-            let Some(certifying_qc) = qcs_by_certified_id
+            let Some((_, certifying_position)) = qcs_by_certified_id
                 .values()
                 .filter(|qc| {
                     qc.commit_info().id() == ledger_info.ledger_info().consensus_block_id()
                 })
-                .max_by_key(|qc| qc.certified_block().round())
-            else {
-                continue;
-            };
-            let Some(certifying_position) =
-                positions.get(&certifying_qc.certified_block().id()).copied()
+                .filter_map(|qc| {
+                    positions
+                        .get(&qc.certified_block().id())
+                        .copied()
+                        .map(|position| (qc, position))
+                })
+                .min_by_key(|(qc, _)| qc.certified_block().round())
             else {
                 continue;
             };
@@ -271,10 +267,12 @@ impl BlockStore {
             boundaries.push(ForwardEpochSyncBoundary {
                 certifying_position,
                 target_block_number: boundary_number,
-                target_block_id: boundary_id,
                 ledger_info,
             });
         }
+        boundaries.sort_unstable_by_key(|boundary| {
+            (boundary.certifying_position, boundary.target_block_number)
+        });
 
         let terminal = reverse_entries.last().expect("non-empty checked above");
         let manifest_bytes = bcs::to_bytes(&(
@@ -294,8 +292,6 @@ impl BlockStore {
             epoch,
             manifest_id: HashValue::sha3_256_of(&manifest_bytes),
             first_block_number,
-            terminal_block_number: terminal.anchor_block_number,
-            terminal_block_id: terminal.block_id,
             target_block_number,
             target_block_id,
             target_ledger_info,
@@ -382,42 +378,21 @@ impl BlockStore {
             Ok(start) => start,
             Err(error) => return ForwardEpochSyncResponseV1::Error(error),
         };
-        if Self::validate_forward_anchor(
-            &index,
-            request.replay_anchor_block_number,
-            request.replay_anchor_block_id,
-        )
-        .is_err()
-        {
-            return ForwardEpochSyncResponseV1::Error(ForwardEpochSyncError::AnchorMismatch);
-        }
         if start >= index.entries.len() {
             return ForwardEpochSyncResponseV1::Error(ForwardEpochSyncError::BatchBoundaryNotFound);
         }
         let requested = usize::try_from(request.batch_size_blocks).unwrap_or(usize::MAX);
-        let target_position = index
-            .positions
-            .get(&index.manifest.target_block_id)
-            .copied()
-            .expect("manifest target checked while building forward index");
-        let Some(end) =
-            select_forward_batch_end(start, requested, index.entries.len(), target_position)
-        else {
+        let Some(end) = select_forward_batch_end(start, requested, index.entries.len()) else {
             return ForwardEpochSyncResponseV1::Error(ForwardEpochSyncError::BatchBoundaryNotFound);
         };
-        let boundary = index
+        let ledger_infos = index
             .boundaries
             .iter()
             .filter(|boundary| {
-                boundary.certifying_position >= start &&
-                    boundary.certifying_position < end &&
-                    index.positions[&boundary.target_block_id] >= start &&
-                    boundary.target_block_number > request.replay_anchor_block_number
+                certifying_position_in_batch(boundary.certifying_position, start, end)
             })
-            .max_by_key(|boundary| (boundary.target_block_number, boundary.certifying_position));
-        let Some(boundary) = boundary else {
-            return ForwardEpochSyncResponseV1::Error(ForwardEpochSyncError::BatchBoundaryNotFound);
-        };
+            .map(|boundary| boundary.ledger_info.clone())
+            .collect::<Vec<_>>();
 
         let db = self.storage.consensus_db();
         let mut records = Vec::with_capacity(end - start);
@@ -466,16 +441,9 @@ impl BlockStore {
             anchor_block_number: request.anchor_block_number,
             anchor_block_id: request.anchor_block_id,
             records,
-            ledger_infos: vec![boundary.ledger_info.clone()],
-            replay_target_block_number: boundary.target_block_number,
-            replay_target_block_id: boundary.target_block_id,
+            ledger_infos,
             next_anchor_block_number: tail.anchor_block_number,
             next_anchor_block_id: tail.block_id,
-            status: if end == index.entries.len() {
-                ForwardEpochSyncBatchStatus::Complete
-            } else {
-                ForwardEpochSyncBatchStatus::More
-            },
         })
     }
 
@@ -555,21 +523,11 @@ impl BlockStore {
         batch_size_blocks: u64,
     ) -> anyhow::Result<bool> {
         let fetch_root = self.ordered_root();
-        let replay_root = self.commit_root();
         let mut fetch_anchor_block_number = fetch_root
             .block()
             .block_number()
             .ok_or_else(|| anyhow!("Ordered root has no block number"))?;
         let mut fetch_anchor_block_id = fetch_root.id();
-        let mut replay_anchor_block_number = replay_root
-            .block()
-            .block_number()
-            .ok_or_else(|| anyhow!("Commit root has no block number"))?;
-        let mut replay_anchor_block_id = replay_root.id();
-        ensure!(
-            fetch_anchor_block_number >= replay_anchor_block_number,
-            "Ordered root is behind commit root by block number"
-        );
 
         let Some((manifest, serving_peer)) = retriever
             .try_prepare_forward_epoch_sync(epoch, fetch_anchor_block_number, fetch_anchor_block_id)
@@ -581,24 +539,36 @@ impl BlockStore {
             epoch = epoch,
             manifest_id = manifest.manifest_id,
             first_block_number = manifest.first_block_number,
-            terminal_block_number = manifest.terminal_block_number,
             target_block_number = manifest.target_block_number,
             batch_size_blocks = batch_size_blocks,
             "Prepared forward epoch sync"
         );
 
-        if replay_anchor_block_number >= manifest.target_block_number &&
-            fetch_anchor_block_number >= manifest.terminal_block_number
-        {
-            ensure!(
-                replay_anchor_block_number > manifest.target_block_number ||
-                    replay_anchor_block_id == manifest.target_block_id,
-                "Local replay root conflicts with forward manifest target"
-            );
+        if self.forward_epoch_sync_target_committed(&manifest)? {
             // The blocks and epoch-ending LI are durable, but the self-directed epoch-change
             // message is not. Re-send it after restart before reporting the sync as complete.
             self.send_committed_epoch_change(retriever, &manifest.target_ledger_info).await?;
             return Ok(true);
+        }
+
+        // The live ordered pipeline can already contain the block targeted by the epoch-ending
+        // commit decision when sync starts. In that case Prepare supplied the missing signed
+        // decision, so commit the existing local path instead of fetching past the snapshot tail.
+        if self.forward_epoch_sync_commit_proof_target_is_ordered(&manifest) {
+            self.persist_forward_epoch_sync_ledger_infos(std::slice::from_ref(
+                &manifest.target_ledger_info,
+            ))?;
+            retriever.network.send_commit_proof(manifest.target_ledger_info.clone()).await;
+            if self.wait_for_forward_epoch_sync_target(&manifest).await? {
+                self.send_committed_epoch_change(retriever, &manifest.target_ledger_info).await?;
+                return Ok(true);
+            }
+            info!(
+                epoch = epoch,
+                target_block_number = manifest.target_block_number,
+                "Local ordered epoch target did not commit in time; use legacy fallback"
+            );
+            return Ok(false);
         }
 
         loop {
@@ -607,69 +577,110 @@ impl BlockStore {
                 manifest_id: manifest.manifest_id,
                 anchor_block_number: fetch_anchor_block_number,
                 anchor_block_id: fetch_anchor_block_id,
-                replay_anchor_block_number,
-                replay_anchor_block_id,
                 batch_size_blocks,
             };
             let batch =
                 retriever.fetch_forward_epoch_sync_batch(request.clone(), serving_peer).await?;
-            ensure!(
-                batch.next_anchor_block_number <= manifest.terminal_block_number,
-                "Forward batch passes manifest terminal"
-            );
-            match batch.status {
-                ForwardEpochSyncBatchStatus::More => ensure!(
-                    batch.next_anchor_block_id != manifest.terminal_block_id,
-                    "Non-final forward batch reaches manifest terminal ID"
-                ),
-                ForwardEpochSyncBatchStatus::Complete => ensure!(
-                    batch.next_anchor_block_number == manifest.terminal_block_number &&
-                        batch.next_anchor_block_id == manifest.terminal_block_id &&
-                        batch.replay_target_block_number == manifest.target_block_number &&
-                        batch.replay_target_block_id == manifest.target_block_id,
-                    "Final forward batch does not match manifest terminal/target"
-                ),
-            }
 
             BLOCKS_FETCHED_FROM_NETWORK_WHILE_FAST_FORWARD_SYNC.inc_by(batch.records.len() as u64);
-            self.persist_and_replay_forward_epoch_sync_batch(&batch).await?;
+            self.persist_and_process_forward_epoch_sync_batch(&batch).await?;
 
             let committed = self.commit_root();
             let committed_number = committed
                 .block()
                 .block_number()
                 .ok_or_else(|| anyhow!("Commit root has no block number after forward replay"))?;
-            ensure!(
-                committed_number > batch.replay_target_block_number ||
-                    (committed_number == batch.replay_target_block_number &&
-                        committed.id() == batch.replay_target_block_id),
-                "Forward batch replay was not durably confirmed: expected {}:{}, got {}:{}",
-                batch.replay_target_block_number,
-                batch.replay_target_block_id,
-                committed_number,
-                committed.id()
-            );
 
             fetch_anchor_block_number = batch.next_anchor_block_number;
             fetch_anchor_block_id = batch.next_anchor_block_id;
-            replay_anchor_block_number = batch.replay_target_block_number;
-            replay_anchor_block_id = batch.replay_target_block_id;
 
             info!(
                 epoch = epoch,
                 fetch_anchor_block_number = fetch_anchor_block_number,
-                replay_anchor_block_number = replay_anchor_block_number,
-                status = ?batch.status,
-                "Forward epoch sync batch persisted and replayed"
+                committed_block_number = committed_number,
+                ledger_info_count = batch.ledger_infos.len(),
+                "Forward epoch sync batch persisted and processed"
             );
-            if batch.status == ForwardEpochSyncBatchStatus::Complete {
+            if self.forward_epoch_sync_target_committed(&manifest)? {
                 self.send_committed_epoch_change(retriever, &manifest.target_ledger_info).await?;
                 return Ok(true);
             }
         }
     }
 
-    async fn persist_and_replay_forward_epoch_sync_batch(
+    fn forward_epoch_sync_target_committed(
+        &self,
+        manifest: &ForwardEpochSyncManifest,
+    ) -> anyhow::Result<bool> {
+        let committed = self.commit_root();
+        let committed_number = committed
+            .block()
+            .block_number()
+            .ok_or_else(|| anyhow!("Commit root has no block number during forward epoch sync"))?;
+        if committed_number == manifest.target_block_number {
+            ensure!(
+                committed.id() == manifest.target_block_id,
+                "Forward epoch sync target conflicts with local commit root"
+            );
+        }
+        Ok(committed_number >= manifest.target_block_number)
+    }
+
+    fn forward_epoch_sync_commit_proof_target_is_ordered(
+        &self,
+        manifest: &ForwardEpochSyncManifest,
+    ) -> bool {
+        // For a non-blocking epoch change the signed commit decision can point at a suffix block,
+        // while `target_block_id` is the earlier epoch-change boundary. The buffer manager indexes
+        // commit decisions by `commit_info().id()`, so only take this recovery path after that
+        // exact block is already present on the local ordered path. Otherwise ordinary
+        // paging must keep fetching the suffix until the proof can be applied.
+        let commit_proof_target = manifest.target_ledger_info.ledger_info().commit_info().id();
+        self.path_from_commit_root(self.ordered_root().id())
+            .is_some_and(|path| path.iter().any(|block| block.id() == commit_proof_target))
+    }
+
+    async fn wait_for_forward_epoch_sync_target(
+        &self,
+        manifest: &ForwardEpochSyncManifest,
+    ) -> anyhow::Result<bool> {
+        match time::timeout(Duration::from_millis(RPC_TIMEOUT_MSEC), async {
+            loop {
+                if self.forward_epoch_sync_target_committed(manifest)? {
+                    return Ok::<(), anyhow::Error>(());
+                }
+                time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        {
+            Ok(result) => {
+                result?;
+                Ok(true)
+            }
+            Err(_) => Ok(false),
+        }
+    }
+
+    fn persist_forward_epoch_sync_ledger_infos(
+        &self,
+        ledger_infos: &[LedgerInfoWithSignatures],
+    ) -> anyhow::Result<()> {
+        if ledger_infos.is_empty() {
+            return Ok(());
+        }
+        let consensus_db = self.storage.consensus_db();
+        let metadata_db = consensus_db.ledger_db.metadata_db();
+        let mut ledger_info_batch = SchemaBatch::new();
+        for ledger_info in ledger_infos {
+            metadata_db.put_ledger_info(ledger_info, &mut ledger_info_batch)?;
+        }
+        metadata_db.write_schemas(ledger_info_batch)?;
+        metadata_db.update_latest_ledger_info()?;
+        Ok(())
+    }
+
+    async fn persist_and_process_forward_epoch_sync_batch(
         &self,
         batch: &ForwardEpochSyncBatch,
     ) -> anyhow::Result<()> {
@@ -699,16 +710,7 @@ impl BlockStore {
                 .collect::<Vec<_>>(),
         )?;
 
-        let mut ledger_info_batch = SchemaBatch::new();
-        for ledger_info in &batch.ledger_infos {
-            self.storage
-                .consensus_db()
-                .ledger_db
-                .metadata_db()
-                .put_ledger_info(ledger_info, &mut ledger_info_batch)?;
-        }
-        self.storage.consensus_db().ledger_db.metadata_db().write_schemas(ledger_info_batch)?;
-        self.storage.consensus_db().ledger_db.metadata_db().update_latest_ledger_info()?;
+        self.persist_forward_epoch_sync_ledger_infos(&batch.ledger_infos)?;
 
         let sync_blocks = batch
             .records
@@ -814,7 +816,7 @@ impl BlockRetriever {
             .request_forward_epoch_sync(
                 request,
                 self.available_peers.clone(),
-                Duration::from_millis(1_000),
+                Duration::from_millis(FORWARD_EPOCH_SYNC_PREPARE_TIMEOUT_MSEC),
                 2,
             )
             .await
@@ -853,8 +855,7 @@ impl BlockRetriever {
                     "Forward manifest target mismatch"
                 );
                 ensure!(
-                    manifest.first_block_number <= manifest.terminal_block_number &&
-                        manifest.target_block_number <= manifest.terminal_block_number,
+                    manifest.first_block_number <= manifest.target_block_number,
                     "Forward manifest block range is invalid"
                 );
                 Ok(Some((manifest, serving_peer)))
@@ -953,42 +954,18 @@ impl BlockRetriever {
                 batch.next_anchor_block_number == anchor_block_number,
             "Forward batch next anchor is not its tail"
         );
-        ensure!(
-            batch.replay_target_block_number > request.replay_anchor_block_number,
-            "Forward batch does not advance replay progress"
-        );
-        ensure!(
-            batch.replay_target_block_number <= batch.next_anchor_block_number,
-            "Forward replay target is after the response tail"
-        );
-        ensure!(batch.ledger_infos.len() == 1, "Forward batch must carry exactly one replay proof");
-        let replay_proof = &batch.ledger_infos[0];
-        replay_proof.verify_signatures(self.network.validators())?;
-        ensure!(
-            batch.records.iter().any(|record| {
-                record.quorum_cert.commit_info().id() ==
-                    replay_proof.ledger_info().consensus_block_id()
-            }),
-            "Forward replay proof has no certifying QC in its batch"
-        );
-        let epoch_info = replay_proof.ledger_info().commit_info().epoch_block_info();
-        let expected_replay_id = epoch_info
-            .map(|info| info.block_id)
-            .unwrap_or_else(|| replay_proof.ledger_info().consensus_block_id());
-        let replay_record = batch
-            .records
-            .iter()
-            .find(|record| record.block.id() == expected_replay_id)
-            .ok_or_else(|| anyhow!("Forward replay target block is not in its batch"))?;
-        ensure!(
-            batch.replay_target_block_id == expected_replay_id &&
-                replay_record.block_number == Some(batch.replay_target_block_number),
-            "Forward replay target does not match its signed proof"
-        );
-        if let Some(epoch_info) = epoch_info {
+        for ledger_info in &batch.ledger_infos {
             ensure!(
-                batch.replay_target_block_number == epoch_info.block_number,
-                "Forward epoch-change target number does not match its signed proof"
+                ledger_info.ledger_info().epoch() == request.epoch,
+                "Forward ledger info belongs to a different epoch"
+            );
+            ledger_info.verify_signatures(self.network.validators())?;
+            ensure!(
+                batch.records.iter().any(|record| {
+                    record.quorum_cert.commit_info().id() ==
+                        ledger_info.ledger_info().consensus_block_id()
+                }),
+                "Forward ledger info has no certifying QC in its batch"
             );
         }
         Ok(())
@@ -997,21 +974,25 @@ impl BlockRetriever {
 
 #[cfg(test)]
 mod forward_epoch_sync_tests {
-    use super::select_forward_batch_end;
+    use super::{certifying_position_in_batch, select_forward_batch_end};
 
     #[test]
-    fn forward_batch_stays_before_epoch_boundary() {
-        assert_eq!(select_forward_batch_end(0, 3, 10, 8), Some(3));
-        assert_eq!(select_forward_batch_end(3, 4, 10, 5), Some(5));
+    fn forward_batches_are_regular_pages() {
+        assert_eq!(select_forward_batch_end(0, 3, 10), Some(3));
+        assert_eq!(select_forward_batch_end(3, 4, 10), Some(7));
+        assert_eq!(select_forward_batch_end(7, 4, 10), Some(10));
     }
 
     #[test]
-    fn final_batch_contains_boundary_and_suffix() {
-        assert_eq!(select_forward_batch_end(4, 6, 10, 5), Some(10));
+    fn forward_batch_has_no_page_after_end() {
+        assert_eq!(select_forward_batch_end(10, 4, 10), None);
     }
 
     #[test]
-    fn rejects_batch_too_small_for_boundary_suffix_unit() {
-        assert_eq!(select_forward_batch_end(5, 2, 10, 5), None);
+    fn proof_is_attached_by_certifying_position_only() {
+        assert!(!certifying_position_in_batch(4, 5, 8));
+        assert!(certifying_position_in_batch(5, 5, 8));
+        assert!(certifying_position_in_batch(7, 5, 8));
+        assert!(!certifying_position_in_batch(8, 5, 8));
     }
 }

@@ -51,9 +51,6 @@ pub struct ForwardEpochSyncFetchRequest {
     pub manifest_id: HashValue,
     pub anchor_block_number: u64,
     pub anchor_block_id: HashValue,
-    /// Last boundary durably replayed by the client. It can lag the fetch anchor.
-    pub replay_anchor_block_number: u64,
-    pub replay_anchor_block_id: HashValue,
     pub batch_size_blocks: u64,
 }
 
@@ -75,11 +72,8 @@ pub struct ForwardEpochSyncManifest {
     pub manifest_id: HashValue,
     /// First block available for this epoch on the canonical path.
     pub first_block_number: u64,
-    /// Tail block included in the epoch snapshot. This can be later than the committed target
-    /// when an epoch-change suffix is present.
-    pub terminal_block_number: u64,
-    pub terminal_block_id: HashValue,
-    /// Signed epoch-ending commit target.
+    /// The block-number target for this epoch sync. Fetch batches are ordinary pages; the client
+    /// stops once this block has a verified ledger info and is durably committed.
     pub target_block_number: u64,
     pub target_block_id: HashValue,
     pub target_ledger_info: LedgerInfoWithSignatures,
@@ -95,12 +89,6 @@ pub struct ForwardEpochSyncRecord {
     pub quorum_cert: QuorumCert,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub enum ForwardEpochSyncBatchStatus {
-    More,
-    Complete,
-}
-
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct ForwardEpochSyncBatch {
     pub epoch: u64,
@@ -109,15 +97,12 @@ pub struct ForwardEpochSyncBatch {
     pub anchor_block_number: u64,
     pub anchor_block_id: HashValue,
     pub records: Vec<ForwardEpochSyncRecord>,
+    /// Zero or more proofs whose certifying QC is present in this batch. A proof target may have
+    /// been persisted by an earlier batch; batch boundaries have no consensus meaning.
     pub ledger_infos: Vec<LedgerInfoWithSignatures>,
-    /// Authenticated boundary that can be replayed after this batch is persisted. It can lag the
-    /// response tail because the tail QC commits an ancestor.
-    pub replay_target_block_number: u64,
-    pub replay_target_block_id: HashValue,
-    /// Cursor for the next fetch. This is always the response tail, not the replay target.
+    /// Cursor for the next ordinary page. This is always the response tail.
     pub next_anchor_block_number: u64,
     pub next_anchor_block_id: HashValue,
-    pub status: ForwardEpochSyncBatchStatus,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
