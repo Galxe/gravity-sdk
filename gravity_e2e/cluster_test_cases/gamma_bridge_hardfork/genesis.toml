@@ -1,6 +1,6 @@
 [dependencies.genesis_contracts]
 repo = "https://github.com/Galxe/gravity_chain_core_contracts.git"
-ref = "9739dd98b503f4465ef14c4fd8aca9e4ce9b3c29"
+ref = "e92e7d0254b20977c6ade7c5234f5b41051e4743"
 
 [[genesis_validators]]
 id = "node1"

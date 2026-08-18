@@ -496,7 +496,7 @@ debug-assertions = true
 debug = true
 
 [patch.crates-io]
-reth-primitives-traits = { git = "https://github.com/Galxe/gravity-reth", rev = "193279c53720178e468883a41f7cc7383231c1f5" }
+reth-primitives-traits = { git = "https://github.com/Galxe/gravity-reth", rev = "9952514731d630a29bf341df56acb710ea9a19dd" }
 serde-reflection = { git = "https://github.com/aptos-labs/serde-reflection", rev = "73b6bbf748334b71ff6d7d09d06a29e3062ca075" }
 merlin = { git = "https://github.com/aptos-labs/merlin" }
 tonic = { git = "https://github.com/aptos-labs/tonic.git", rev = "0da1ba8b1751d6e19eb55be24cccf9ae933c666e" }
