@@ -1037,7 +1037,11 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
         ));
 
         self.spawn_block_retrieval_task(epoch, block_store.clone(), max_blocks_allowed);
-        self.spawn_forward_epoch_sync_task(epoch, block_store.clone(), max_blocks_allowed);
+        if crate::forward_epoch_sync_enabled() {
+            self.spawn_forward_epoch_sync_task(epoch, block_store.clone(), max_blocks_allowed);
+        } else {
+            info!(epoch = epoch, "Forward epoch sync service is not enabled");
+        }
         self.spawn_sync_info_retrieval_task(epoch, block_store);
     }
 
@@ -1908,7 +1912,14 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                     });
                     Ok(())
                 } else {
-                    error!("Forward epoch sync service not started");
+                    warn!(
+                        remote_peer = peer_id,
+                        "Reject forward epoch sync request because the service is disabled or not started"
+                    );
+                    Self::respond_forward_epoch_sync_error(
+                        request,
+                        ForwardEpochSyncError::Internal,
+                    );
                     Ok(())
                 }
             }

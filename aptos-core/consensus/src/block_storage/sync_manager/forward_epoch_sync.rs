@@ -527,6 +527,13 @@ impl BlockStore {
         epoch: u64,
         batch_size_blocks: u64,
     ) -> anyhow::Result<()> {
+        if !crate::forward_epoch_sync_enabled() {
+            info!(
+                epoch = epoch,
+                "Forward epoch sync is not enabled; using legacy reverse epoch sync"
+            );
+            return self.fast_forward_sync_by_epoch_legacy(retriever, epoch).await;
+        }
         ensure!(batch_size_blocks > 0, "Forward epoch sync batch size must be positive");
         match self
             .fast_forward_sync_by_epoch_forward(&mut retriever, epoch, batch_size_blocks)
