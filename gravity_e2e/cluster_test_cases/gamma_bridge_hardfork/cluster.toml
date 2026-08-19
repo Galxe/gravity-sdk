@@ -1,0 +1,72 @@
+# Four-validator Gamma bridge migration and replay test.
+
+[cluster]
+name = "gravity-devnet-gamma-bridge-hardfork"
+base_dir = "/tmp/gravity-cluster-gamma-bridge-hardfork"
+
+[genesis_source]
+genesis_path = "./artifacts/genesis.json"
+waypoint_path = "./artifacts/waypoint.txt"
+
+[[nodes]]
+id = "node1"
+role = "genesis"
+source = { project_path = "../" }
+host = "127.0.0.1"
+validator_port = 27880
+vfn_port = 27890
+rpc_port = 27900
+api_port = 27910
+metrics_port = 27920
+inspection_port = 27930
+https_port = 27940
+authrpc_port = 27950
+reth_p2p_port = 27960
+
+[[nodes]]
+id = "node2"
+role = "genesis"
+source = { project_path = "../" }
+host = "127.0.0.1"
+validator_port = 27881
+vfn_port = 27891
+rpc_port = 27901
+api_port = 27911
+metrics_port = 27921
+inspection_port = 27931
+https_port = 27941
+authrpc_port = 27951
+reth_p2p_port = 27961
+
+[[nodes]]
+id = "node3"
+role = "genesis"
+source = { project_path = "../" }
+host = "127.0.0.1"
+validator_port = 27882
+vfn_port = 27892
+rpc_port = 27902
+api_port = 27912
+metrics_port = 27922
+inspection_port = 27932
+https_port = 27942
+authrpc_port = 27952
+reth_p2p_port = 27962
+
+[[nodes]]
+id = "node4"
+role = "genesis"
+source = { project_path = "../" }
+host = "127.0.0.1"
+validator_port = 27883
+vfn_port = 27893
+rpc_port = 27903
+api_port = 27913
+metrics_port = 27923
+inspection_port = 27933
+https_port = 27943
+authrpc_port = 27953
+reth_p2p_port = 27963
+
+[faucet_init]
+num_accounts = 0

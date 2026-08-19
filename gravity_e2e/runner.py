@@ -443,7 +443,12 @@ def main():
     )
     # Long-running suites excluded from CI by default.
     # Run them explicitly: runner.py long_test
-    DEFAULT_EXCLUDES = ["long_test", "rolling_upgrade", "oracle_live_soak"]
+    DEFAULT_EXCLUDES = [
+        "long_test",
+        "rolling_upgrade",
+        "oracle_live_soak",
+        "gamma_rolling_upgrade",
+    ]
 
     parser.add_argument(
         "--exclude",
