@@ -21,7 +21,7 @@ futures-util = "0.3.30"
 clap = { version = "4.5.17", features = ["derive", "env"] }
 futures = "0.3.30"
 dirs = "5.0.1"
-tokio = { version = "=1.52.3", features = ["taskdump"] }
+tokio = { version = "=1.52.3" }
 tokio-stream = "0.1.16"
 eyre = "0.6.12"
 tracing = "0.1.40"
@@ -34,7 +34,7 @@ sha2.workspace = true
 bincode = "1.3"
 time = "0.3.36"
 anyhow = "1.0.87"
-greth = { git = "https://github.com/Galxe/gravity-reth", rev = "9952514731d630a29bf341df56acb710ea9a19dd" }
+greth = { git = "https://github.com/Galxe/gravity-reth", rev = "556a5fd4f8d7fa246cb53929a8585bbaf9dc6323" }
 reqwest = "0.12.9"
 alloy-primitives = { version = "=1.6.0", default-features = false, features = ["map-foldhash"] }
 alloy-eips = { version = "=2.0.5", default-features = false }
@@ -77,3 +77,6 @@ bcs.workspace = true
 
 [build-dependencies]
 shadow-rs.workspace = true
+
+[target.'cfg(all(target_os = "linux", any(target_arch = "aarch64", target_arch = "x86", target_arch = "x86_64")))'.dependencies]
+tokio = { version = "=1.52.3", features = ["taskdump"] }
