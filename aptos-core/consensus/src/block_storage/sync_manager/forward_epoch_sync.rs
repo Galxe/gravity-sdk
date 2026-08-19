@@ -78,6 +78,24 @@ fn certifying_position_in_batch(position: usize, start: usize, end: usize) -> bo
     position >= start && position < end
 }
 
+/// A validated fetch cursor at the end of the server index has no page to return. Keep that
+/// condition distinct from protocol and verification failures so the caller can wait for the
+/// already-fetched epoch target to commit instead of failing the whole forward-sync attempt.
+fn decode_forward_epoch_sync_fetch_response(
+    response: ForwardEpochSyncResponseV1,
+) -> anyhow::Result<Option<ForwardEpochSyncBatch>> {
+    match response {
+        ForwardEpochSyncResponseV1::Batch(batch) => Ok(Some(batch)),
+        ForwardEpochSyncResponseV1::Error(ForwardEpochSyncError::BatchBoundaryNotFound) => Ok(None),
+        ForwardEpochSyncResponseV1::Error(error) => {
+            bail!("Forward epoch sync fetch rejected: {error:?}")
+        }
+        ForwardEpochSyncResponseV1::Prepared(_) => {
+            bail!("Forward epoch sync fetch returned a manifest")
+        }
+    }
+}
+
 impl BlockStore {
     fn build_forward_epoch_sync_index(
         &self,
@@ -579,8 +597,35 @@ impl BlockStore {
                 anchor_block_id: fetch_anchor_block_id,
                 batch_size_blocks,
             };
-            let batch =
-                retriever.fetch_forward_epoch_sync_batch(request.clone(), serving_peer).await?;
+            let Some(batch) =
+                retriever.fetch_forward_epoch_sync_batch(request.clone(), serving_peer).await?
+            else {
+                if self.forward_epoch_sync_target_committed(&manifest)? {
+                    self.send_committed_epoch_change(retriever, &manifest.target_ledger_info)
+                        .await?;
+                    return Ok(true);
+                }
+                self.ensure_forward_epoch_sync_target_fetched(&manifest)?;
+                // All server pages have been consumed and the authenticated epoch target is
+                // local. Re-submit its decision to unblock an ordered-but-not-committed pipeline,
+                // then give execution a bounded window to advance the commit root.
+                self.persist_forward_epoch_sync_ledger_infos(std::slice::from_ref(
+                    &manifest.target_ledger_info,
+                ))?;
+                retriever.network.send_commit_proof(manifest.target_ledger_info.clone()).await;
+                if self.wait_for_forward_epoch_sync_target(&manifest).await? {
+                    self.send_committed_epoch_change(retriever, &manifest.target_ledger_info)
+                        .await?;
+                    return Ok(true);
+                }
+                info!(
+                    epoch = epoch,
+                    target_block_number = manifest.target_block_number,
+                    fetch_anchor_block_number = fetch_anchor_block_number,
+                    "Forward epoch sync reached end of data before target committed; use legacy fallback"
+                );
+                return Ok(false);
+            };
 
             BLOCKS_FETCHED_FROM_NETWORK_WHILE_FAST_FORWARD_SYNC.inc_by(batch.records.len() as u64);
             self.persist_and_process_forward_epoch_sync_batch(&batch).await?;
@@ -606,6 +651,29 @@ impl BlockStore {
                 return Ok(true);
             }
         }
+    }
+
+    fn ensure_forward_epoch_sync_target_fetched(
+        &self,
+        manifest: &ForwardEpochSyncManifest,
+    ) -> anyhow::Result<()> {
+        let target = self.get_block(manifest.target_block_id).ok_or_else(|| {
+            anyhow!(
+                "Forward epoch sync source exhausted before target block {} was fetched",
+                manifest.target_block_id
+            )
+        })?;
+        ensure!(
+            target.block().block_number() == Some(manifest.target_block_number),
+            "Forward epoch sync target block number does not match manifest"
+        );
+        let commit_proof_target = manifest.target_ledger_info.ledger_info().commit_info().id();
+        ensure!(
+            self.block_exists(commit_proof_target),
+            "Forward epoch sync source exhausted before commit-proof target {} was fetched",
+            commit_proof_target
+        );
+        Ok(())
     }
 
     fn forward_epoch_sync_target_committed(
@@ -870,11 +938,13 @@ impl BlockRetriever {
         }
     }
 
+    /// Returns `Ok(None)` only when the server accepted the cursor and reported that no page
+    /// remains. All other server and verification failures remain hard errors.
     async fn fetch_forward_epoch_sync_batch(
         &self,
         request: ForwardEpochSyncFetchRequest,
         serving_peer: AccountAddress,
-    ) -> anyhow::Result<ForwardEpochSyncBatch> {
+    ) -> anyhow::Result<Option<ForwardEpochSyncBatch>> {
         let response = self
             .request_forward_epoch_sync_from_peer(
                 ForwardEpochSyncRequest::V1(ForwardEpochSyncRequestV1::Fetch(request.clone())),
@@ -884,17 +954,11 @@ impl BlockRetriever {
             )
             .await?;
         let ForwardEpochSyncResponse::V1(response) = response;
-        let batch = match response {
-            ForwardEpochSyncResponseV1::Batch(batch) => batch,
-            ForwardEpochSyncResponseV1::Error(error) => {
-                bail!("Forward epoch sync fetch rejected: {error:?}")
-            }
-            ForwardEpochSyncResponseV1::Prepared(_) => {
-                bail!("Forward epoch sync fetch returned a manifest")
-            }
+        let Some(batch) = decode_forward_epoch_sync_fetch_response(response)? else {
+            return Ok(None);
         };
         self.verify_forward_epoch_sync_batch(&request, &batch)?;
-        Ok(batch)
+        Ok(Some(batch))
     }
 
     fn verify_forward_epoch_sync_batch(
@@ -974,7 +1038,13 @@ impl BlockRetriever {
 
 #[cfg(test)]
 mod forward_epoch_sync_tests {
-    use super::{certifying_position_in_batch, select_forward_batch_end};
+    use super::{
+        certifying_position_in_batch, decode_forward_epoch_sync_fetch_response,
+        select_forward_batch_end,
+    };
+    use aptos_consensus_types::forward_epoch_sync::{
+        ForwardEpochSyncError, ForwardEpochSyncResponseV1,
+    };
 
     #[test]
     fn forward_batches_are_regular_pages() {
@@ -986,6 +1056,19 @@ mod forward_epoch_sync_tests {
     #[test]
     fn forward_batch_has_no_page_after_end() {
         assert_eq!(select_forward_batch_end(10, 4, 10), None);
+    }
+
+    #[test]
+    fn batch_boundary_not_found_is_end_of_data() {
+        let response =
+            ForwardEpochSyncResponseV1::Error(ForwardEpochSyncError::BatchBoundaryNotFound);
+        assert!(decode_forward_epoch_sync_fetch_response(response).unwrap().is_none());
+    }
+
+    #[test]
+    fn other_fetch_errors_are_not_end_of_data() {
+        let response = ForwardEpochSyncResponseV1::Error(ForwardEpochSyncError::AnchorMismatch);
+        assert!(decode_forward_epoch_sync_fetch_response(response).is_err());
     }
 
     #[test]
