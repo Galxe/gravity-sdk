@@ -51,16 +51,20 @@ jobs:
           # Candidates are workflow runs on the same branch, but "same branch"
           # alone is not a safe duplicate key: a reused branch name (e.g. a
           # prior PR's branch that was force-pushed for a new PR) would match
-          # stale runs from a different PR. So for each candidate run we ask
-          # `commits/{head_sha}/pulls` whether the current PR number is
-          # associated with that SHA — only then is it a real duplicate of
-          # this PR.
+          # stale runs from a different PR. Verify each candidate head_sha is
+          # actually in this PR's commit list.
+          #
+          # Use pulls/{n}/commits — not commits/{sha}/pulls. The latter returns
+          # [] for commits that only exist on open PRs, which disables PR-wide
+          # dedup after the first successful run (every re-approve re-runs CI).
+          PR_COMMIT_SHAS=$(gh api \
+            "repos/${REPO}/pulls/${PR_NUMBER}/commits?per_page=100" \
+            --paginate --jq '.[].sha' 2>/dev/null || true)
+
           belongs_to_pr() {
             local sha="$1"
-            local count
-            count=$(gh api "repos/${REPO}/commits/${sha}/pulls" \
-              --jq "[.[]? | select(.number == ${PR_NUMBER})] | length" 2>/dev/null || echo 0)
-            [ "${count:-0}" -gt 0 ]
+            [ -n "$sha" ] || return 1
+            printf '%s\n' "$PR_COMMIT_SHAS" | grep -Fxq -- "$sha"
           }
 
           # In-progress runs whose head_sha belongs to this PR
