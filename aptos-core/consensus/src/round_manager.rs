@@ -1721,7 +1721,15 @@ impl RoundManager {
                         ),
                         VerifiedEvent::EpochChange(epoch) => {
                             if !self.wait_change_epoch_flag {
-                                if let Err(e) = self.block_store.fast_forward_sync_by_epoch(self.create_block_retriever(peer_id), epoch).await {
+                                let batch_size_blocks = self.local_config
+                                    .max_blocks_per_sending_request(
+                                        self.onchain_config.quorum_store_enabled(),
+                                    );
+                                if let Err(e) = self.block_store.fast_forward_sync_by_epoch(
+                                    self.create_block_retriever(peer_id),
+                                    epoch,
+                                    batch_size_blocks,
+                                ).await {
                                     Err(e)
                                 } else {
                                     self.wait_change_epoch_flag = true;

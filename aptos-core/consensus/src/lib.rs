@@ -79,6 +79,17 @@ pub use quorum_store::quorum_store_db::QUORUM_STORE_DB_NAME;
 #[cfg(feature = "fuzzing")]
 pub use round_manager::round_manager_fuzzing;
 
+pub(crate) const ENABLE_FORWARD_EPOCH_SYNC_ENV: &str = "ENABLE_FORWARD_EPOCH_SYNC";
+
+/// Opt-in switch for the block-number anchored epoch sync path. Nodes use the legacy reverse sync
+/// path unless operators explicitly set `ENABLE_FORWARD_EPOCH_SYNC=true`.
+pub(crate) fn forward_epoch_sync_enabled() -> bool {
+    std::env::var(ENABLE_FORWARD_EPOCH_SYNC_ENV)
+        .ok()
+        .and_then(|value| value.parse::<bool>().ok())
+        .unwrap_or(false)
+}
+
 struct IntGaugeGuard {
     gauge: IntGauge,
 }

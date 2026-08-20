@@ -19,7 +19,7 @@ use crate::{
     payload_manager::TPayloadManager,
     persistent_liveness_storage::PersistentLivenessStorage,
 };
-use anyhow::{anyhow, bail};
+use anyhow::{anyhow, bail, ensure};
 use aptos_consensus_types::{
     block::Block,
     block_retrieval::{
@@ -60,6 +60,10 @@ use rand::{prelude::*, Rng};
 use sha3::digest::generic_array::typenum::Le;
 use std::{clone::Clone, cmp::min, hash::Hash, sync::Arc, time::Duration};
 use tokio::{time, time::timeout};
+
+#[path = "sync_manager/forward_epoch_sync.rs"]
+mod forward_epoch_sync;
+pub(super) use forward_epoch_sync::ForwardEpochSyncIndex;
 
 static CUR_BLOCK_SYNC_BLOCK_SUM_GAUGE: Lazy<IntGaugeVec> = Lazy::new(|| {
     register_int_gauge_vec!(
@@ -119,6 +123,33 @@ impl BlockStore {
         }
 
         committed
+    }
+
+    /// Replays the non-durable completion signal for an epoch whose blocks and ledger info are
+    /// already durable. This must be safe to call after restart: `send_epoch_change` only queues a
+    /// message to the local EpochManager, so a crash can lose that message after the epoch boundary
+    /// itself has been committed.
+    async fn send_committed_epoch_change(
+        &self,
+        retriever: &BlockRetriever,
+        ledger_info: &LedgerInfoWithSignatures,
+    ) -> anyhow::Result<()> {
+        ensure!(
+            ledger_info.ledger_info().ends_epoch(),
+            "Cannot complete epoch sync with a non-epoch-ending ledger info"
+        );
+        ensure!(
+            self.is_epoch_change_li_boundary_locally_committed(ledger_info),
+            "Epoch-change boundary is not locally committed"
+        );
+        retriever
+            .network
+            .send_epoch_change(EpochChangeProof::new(
+                vec![ledger_info.clone()],
+                /* more = */ false,
+            ))
+            .await;
+        Ok(())
     }
 
     /// Check if we're far away from this ledger info and need to sync.
@@ -350,24 +381,7 @@ impl BlockStore {
         Ok(())
     }
 
-    /// Fast-forwards the local consensus state by synchronizing blocks and ledger infos for a given
-    /// epoch.
-    ///
-    /// This function retrieves all blocks, quorum certificates, and ledger infos for the specified
-    /// epoch from a remote retriever. It then prefetches payload data for each block, saves the
-    /// blocks and certificates to local storage, and updates the ledger info in the database.
-    /// After updating storage, it attempts to recover the consensus state from the latest
-    /// ledger info and rebuilds the in-memory state. If the epoch ends, it sends an epoch
-    /// change proof to the network.
-    ///
-    /// # Arguments
-    /// * `retriever` - The block retriever used to fetch blocks and related data.
-    /// * `epoch` - The epoch to fast-forward to.
-    ///
-    /// # Returns
-    /// * `Ok(())` if the synchronization and state rebuild succeed.
-    /// * `Err` if any step fails.
-    pub async fn fast_forward_sync_by_epoch(
+    async fn fast_forward_sync_by_epoch_legacy(
         &self,
         mut retriever: BlockRetriever,
         epoch: u64,
@@ -404,6 +418,17 @@ impl BlockStore {
                 "[Fast_Forward_sync] all fetched blocks at or below local HCC round {}, nothing to sync",
                 hcc_round
             );
+            let latest_li = ledger_infos
+                .iter()
+                .filter(|ledger_info| ledger_info.ledger_info().ends_epoch())
+                .max_by_key(|ledger_info| ledger_info.ledger_info().version())
+                .ok_or_else(|| {
+                    anyhow!(
+                        "No epoch-ending ledger info available to resume completed epoch {}",
+                        epoch
+                    )
+                })?;
+            self.send_committed_epoch_change(&retriever, latest_li).await?;
             return Ok(());
         }
 
@@ -463,16 +488,8 @@ impl BlockStore {
         self.rebuild(root, blocks, quorum_certs).await;
 
         let latest_li = ledger_infos.last().unwrap();
-        if latest_li.ledger_info().ends_epoch() &&
-            self.is_epoch_change_li_boundary_locally_committed(latest_li)
-        {
-            retriever
-                .network
-                .send_epoch_change(EpochChangeProof::new(
-                    vec![latest_li.clone()],
-                    /* more = */ false,
-                ))
-                .await;
+        if latest_li.ledger_info().ends_epoch() {
+            self.send_committed_epoch_change(&retriever, latest_li).await?;
         }
         Ok(())
     }
