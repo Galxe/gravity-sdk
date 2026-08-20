@@ -61,7 +61,7 @@ pub enum ForwardEpochSyncResponse {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum ForwardEpochSyncResponseV1 {
-    Prepared(ForwardEpochSyncManifest),
+    Prepared(Box<ForwardEpochSyncManifest>),
     Batch(ForwardEpochSyncBatch),
     Error(ForwardEpochSyncError),
 }

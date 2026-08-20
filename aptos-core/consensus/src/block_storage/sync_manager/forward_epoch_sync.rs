@@ -368,7 +368,7 @@ impl BlockStore {
             request.anchor_block_number,
             request.anchor_block_id,
         ) {
-            Ok(_) => ForwardEpochSyncResponseV1::Prepared(index.manifest.clone()),
+            Ok(_) => ForwardEpochSyncResponseV1::Prepared(Box::new(index.manifest.clone())),
             Err(error) => ForwardEpochSyncResponseV1::Error(error),
         }
     }
@@ -926,7 +926,7 @@ impl BlockRetriever {
                     manifest.first_block_number <= manifest.target_block_number,
                     "Forward manifest block range is invalid"
                 );
-                Ok(Some((manifest, serving_peer)))
+                Ok(Some((*manifest, serving_peer)))
             }
             ForwardEpochSyncResponseV1::Error(error) => {
                 info!(epoch = epoch, error = ?error, "Forward epoch sync prepare rejected; use legacy fallback");
