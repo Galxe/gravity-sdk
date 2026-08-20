@@ -22,6 +22,7 @@ use anyhow::{anyhow, bail, ensure};
 use aptos_consensus_types::{
     block_retrieval::{BlockRetrievalRequest, BlockRetrievalResponse},
     common::Author,
+    forward_epoch_sync::{ForwardEpochSyncRequest, ForwardEpochSyncResponse},
     order_vote_msg::OrderVoteMsg,
     pipeline::{commit_decision::CommitDecision, commit_vote::CommitVote},
     proof_of_store::{ProofOfStore, ProofOfStoreMsg, SignedBatchInfo, SignedBatchInfoMsg},
@@ -103,6 +104,16 @@ pub struct IncomingBlockRetrievalRequest {
     pub response_sender: oneshot::Sender<Result<Bytes, RpcError>>,
 }
 
+/// A forward-sync RPC together with the authenticated network peer identity. The sender is kept
+/// through the whole ingress path so admission control cannot be bypassed by request contents.
+#[derive(Debug)]
+pub struct IncomingForwardEpochSyncRequest {
+    pub req: ForwardEpochSyncRequest,
+    pub sender: Author,
+    pub protocol: ProtocolId,
+    pub response_sender: oneshot::Sender<Result<Bytes, RpcError>>,
+}
+
 #[derive(Debug)]
 pub struct IncomingBatchRetrievalRequest {
     pub req: BatchRequest,
@@ -141,6 +152,7 @@ pub struct IncomingSyncInfoRequest {
 #[derive(Debug)]
 pub enum IncomingRpcRequest {
     BlockRetrieval(IncomingBlockRetrievalRequest),
+    ForwardEpochSync(IncomingForwardEpochSyncRequest),
     BatchRetrieval(IncomingBatchRetrievalRequest),
     DAGRequest(IncomingDAGRequest),
     CommitRequest(IncomingCommitRequest),
@@ -156,6 +168,7 @@ impl IncomingRpcRequest {
             IncomingRpcRequest::RandGenRequest(req) => Some(req.req.epoch()),
             IncomingRpcRequest::CommitRequest(req) => req.req.epoch(),
             IncomingRpcRequest::BlockRetrieval(_) => None,
+            IncomingRpcRequest::ForwardEpochSync(_) => None,
             IncomingRpcRequest::SyncInfoRequest(_) => None,
         }
     }
@@ -231,6 +244,10 @@ impl NetworkSender {
         }
     }
 
+    pub(crate) fn validators(&self) -> &ValidatorVerifier {
+        &self.validators
+    }
+
     /// Tries to retrieve num of blocks backwards starting from id from the given peer: the function
     /// returns a future that is fulfilled with BlockRetrievalResponse.
     pub async fn request_block(
@@ -285,6 +302,28 @@ impl NetworkSender {
         }
 
         Ok(response)
+    }
+
+    pub async fn request_forward_epoch_sync(
+        &self,
+        request: ForwardEpochSyncRequest,
+        from: PeerNetworkId,
+        rpc_timeout: Duration,
+    ) -> anyhow::Result<ForwardEpochSyncResponse> {
+        ensure!(from.peer_id() != self.author, "Retrieve epoch from self");
+        let msg = ConsensusMsg::ForwardEpochSyncRequest(Box::new(request));
+        counters::CONSENSUS_SENT_MSGS.with_label_values(&[msg.name()]).inc();
+        let response = monitor!(
+            "forward_epoch_sync",
+            self.consensus_network_client
+                .network_client
+                .send_to_peer_rpc(msg, rpc_timeout, from)
+                .await
+        )?;
+        match response {
+            ConsensusMsg::ForwardEpochSyncResponse(response) => Ok(*response),
+            _ => Err(anyhow!("Invalid forward epoch sync response")),
+        }
     }
 
     pub async fn send_rpc_to_self(
@@ -825,6 +864,21 @@ impl NetworkTask {
                                     protocol,
                                     response_sender: callback,
                                 })
+                            }
+                            ConsensusMsg::ForwardEpochSyncRequest(request) => {
+                                debug!(
+                                    remote_peer = peer_id,
+                                    epoch = request.epoch(),
+                                    "Receive forward epoch sync request"
+                                );
+                                IncomingRpcRequest::ForwardEpochSync(
+                                    IncomingForwardEpochSyncRequest {
+                                        req: *request,
+                                        sender: peer_id,
+                                        protocol,
+                                        response_sender: callback,
+                                    },
+                                )
                             }
                             ConsensusMsg::BatchRequestMsg(request) => {
                                 debug!(
