@@ -42,7 +42,6 @@ use gaptos::{
     aptos_channels::{self, aptos_channel, message_queues::QueueStyle},
     aptos_config::network_id::{NetworkId, PeerNetworkId},
     aptos_consensus::counters,
-    aptos_crypto::HashValue,
     aptos_logger::prelude::*,
     aptos_network::{
         application::interface::{NetworkClient, NetworkClientInterface, NetworkServiceEvents},
@@ -274,32 +273,22 @@ impl NetworkSender {
             ConsensusMsg::BlockRetrievalResponse(resp) => *resp,
             _ => return Err(anyhow!("Invalid response to request")),
         };
-        // TODO(next release): Re-enable this after LedgerInfo exposes the committed suffix block
-        // number separately from the epoch-change anchor number. For an epoch-change suffix LI,
-        // `LedgerInfo::block_number()` intentionally returns `EpochBlockInfo::block_number`, while
-        // the retrieval response associates the LI's commit block ID with the suffix block number.
-        // The current verifier therefore rejects valid responses (for example, suffix block 2557
-        // carrying epoch-change anchor 2556), which prevents nodes from catching up across an epoch
-        // boundary during a rolling upgrade.
-        //
-        // response.verify_ledger_infos(&retrieval_request, &self.validators).map_err(|e| {
-        //     error!(
-        //         SecurityEvent::InvalidRetrievedBlock,
-        //         request_block_response = response,
-        //         error = ?e,
-        //     );
-        //     e
-        // })?;
-        if retrieval_request.block_id() != HashValue::zero() {
-            response.verify(retrieval_request, &self.validators).map_err(|e| {
-                error!(
-                    SecurityEvent::InvalidRetrievedBlock,
-                    request_block_response = response,
-                    error = ?e,
-                );
-                e
-            })?;
-        }
+        response.verify(retrieval_request.clone(), &self.validators).map_err(|e| {
+            error!(
+                SecurityEvent::InvalidRetrievedBlock,
+                request_block_response = response,
+                error = ?e,
+            );
+            e
+        })?;
+        response.verify_ledger_infos(&retrieval_request, &self.validators).map_err(|e| {
+            error!(
+                SecurityEvent::InvalidRetrievedBlock,
+                request_block_response = response,
+                error = ?e,
+            );
+            e
+        })?;
 
         Ok(response)
     }
