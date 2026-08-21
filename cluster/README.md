@@ -41,9 +41,14 @@ make genesis
 ```
 *This generates `genesis.json` and `waypoint.txt` in `./output`.*
 
-> ⚠️ **Important**: The `genesis.sh` script will clone `gravity_chain_core_contracts` to `external/` if it doesn't exist, but will **NOT** automatically update it. To update:
+> ⚠️ **Important**: The `genesis.sh` script will clone `gravity_chain_core_contracts` to `external/` if it doesn't exist, but will **NOT** automatically update it. Keep the contracts checkout in sync with the SDK (a stale `ref` in `genesis.toml` can make `genesis-tool` reject the generated config, e.g. `missing field minimumProposalStake`). To update:
 > ```bash
 > cd external/gravity_chain_core_contracts && git pull origin main
+> ```
+
+> ⚠️ **Always regenerate from scratch**: do not reuse a leftover `./output/` from a previous (or partial) run — an incomplete genesis makes every node fail to bootstrap (`The genesis transaction was not found`, stuck at block 0). For a fresh chain:
+> ```bash
+> make clean && make init && make genesis
 > ```
 
 ### 5. Deploy and Start
