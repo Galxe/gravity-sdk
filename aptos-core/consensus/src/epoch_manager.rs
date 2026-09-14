@@ -1904,6 +1904,10 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                     tokio::spawn(async move {
                         if let Ok(aptos_channel::ElementStatus::Dropped(request)) = status_rx.await
                         {
+                            warn!(
+                                remote_peer = request.sender,
+                                "Reject forward epoch sync request because the queue is full"
+                            );
                             Self::respond_forward_epoch_sync_error(
                                 request,
                                 ForwardEpochSyncError::Busy,

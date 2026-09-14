@@ -9,9 +9,12 @@
 
 use super::{BlockReader, BlockRetriever, BlockStore};
 use crate::{
-    consensusdb::schema::{
-        block::BlockNumberSchema, epoch_by_block_number::EpochByBlockNumberSchema,
-        ledger_info::LedgerInfoSchema,
+    consensusdb::{
+        schema::{
+            block::BlockNumberSchema, epoch_by_block_number::EpochByBlockNumberSchema,
+            ledger_info::LedgerInfoSchema,
+        },
+        ConsensusDB,
     },
     network::IncomingForwardEpochSyncRequest,
     network_interface::ConsensusMsg,
@@ -19,6 +22,7 @@ use crate::{
 use anyhow::{anyhow, bail, ensure};
 use aptos_consensus_types::{
     block_retrieval::{NUM_RETRIES, RETRY_INTERVAL_MSEC, RPC_TIMEOUT_MSEC},
+    common::Round,
     forward_epoch_sync::{
         ForwardEpochSyncBatch, ForwardEpochSyncError, ForwardEpochSyncFetchRequest,
         ForwardEpochSyncManifest, ForwardEpochSyncPrepareRequest, ForwardEpochSyncRecord,
@@ -37,11 +41,9 @@ use gaptos::{
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
-    time::Duration,
+    time::{Duration, Instant},
 };
 use tokio::time;
-
-const FORWARD_EPOCH_SYNC_PREPARE_TIMEOUT_MSEC: u64 = 5_000;
 
 #[derive(Clone)]
 struct ForwardEpochSyncIndexEntry {
@@ -98,10 +100,9 @@ fn decode_forward_epoch_sync_fetch_response(
 
 impl BlockStore {
     fn build_forward_epoch_sync_index(
-        &self,
+        db: &ConsensusDB,
         epoch: u64,
     ) -> Result<ForwardEpochSyncIndex, ForwardEpochSyncError> {
-        let db = self.storage.consensus_db();
         let epoch_end_block_number = db
             .get_all::<EpochByBlockNumberSchema>()
             .map_err(|error| {
@@ -246,27 +247,40 @@ impl BlockStore {
                 ForwardEpochSyncError::Internal
             })?;
 
-        let persisted_ledger_infos = db.get_all::<LedgerInfoSchema>().map_err(|error| {
-            error!(epoch = epoch, error = ?error, "Failed to scan ledger infos for forward sync");
-            ForwardEpochSyncError::Internal
-        })?;
+        // Ledger infos are keyed by block number and the consensus DB is never pruned, so a
+        // whole-table scan grows with chain height (tens of millions of rows on a mature node)
+        // even though this epoch only spans [first_block_number, target_block_number].
+        let persisted_ledger_infos = db
+            .ledger_db
+            .metadata_db()
+            .get_ledger_infos_by_range((first_block_number, target_block_number + 1))
+            .map_err(|error| {
+                error!(epoch = epoch, error = ?error, "Failed to read ledger infos for forward sync");
+                ForwardEpochSyncError::Internal
+            })?;
+        // A ledger info is attached at the earliest canonical position whose QC commits it.
+        // Resolve that once per commit id instead of rescanning every QC per ledger info.
+        let mut certifying_position_by_commit_id: HashMap<HashValue, (Round, usize)> =
+            HashMap::new();
+        for qc in qcs_by_certified_id.values() {
+            let Some(&position) = positions.get(&qc.certified_block().id()) else { continue };
+            let candidate = (qc.certified_block().round(), position);
+            certifying_position_by_commit_id
+                .entry(qc.commit_info().id())
+                .and_modify(|best| {
+                    if candidate.0 < best.0 {
+                        *best = candidate;
+                    }
+                })
+                .or_insert(candidate);
+        }
         let mut boundaries = Vec::new();
-        for (stored_block_number, ledger_info) in persisted_ledger_infos {
+        for ledger_info in persisted_ledger_infos {
             if ledger_info.ledger_info().epoch() != epoch {
                 continue;
             }
-            let Some((_, certifying_position)) = qcs_by_certified_id
-                .values()
-                .filter(|qc| {
-                    qc.commit_info().id() == ledger_info.ledger_info().consensus_block_id()
-                })
-                .filter_map(|qc| {
-                    positions
-                        .get(&qc.certified_block().id())
-                        .copied()
-                        .map(|position| (qc, position))
-                })
-                .min_by_key(|(qc, _)| qc.certified_block().round())
+            let Some(&(_, certifying_position)) = certifying_position_by_commit_id
+                .get(&ledger_info.ledger_info().consensus_block_id())
             else {
                 continue;
             };
@@ -280,8 +294,7 @@ impl BlockStore {
             if target_position > certifying_position {
                 continue;
             }
-            let boundary_number =
-                epoch_info.map(|info| info.block_number).unwrap_or(stored_block_number);
+            let boundary_number = ledger_info.ledger_info().block_number();
             boundaries.push(ForwardEpochSyncBoundary {
                 certifying_position,
                 target_block_number: boundary_number,
@@ -325,7 +338,18 @@ impl BlockStore {
         if let Some(index) = indexes.get(&epoch) {
             return Ok(index.clone());
         }
-        let index = Arc::new(self.build_forward_epoch_sync_index(epoch)?);
+        // Index build is synchronous and holds this mutex; cold builds can dominate Prepare latency.
+        let build_start = Instant::now();
+        let index =
+            Arc::new(Self::build_forward_epoch_sync_index(&self.storage.consensus_db(), epoch)?);
+        let build_elapsed_ms = build_start.elapsed().as_millis() as u64;
+        info!(
+            epoch = epoch,
+            entries = index.entries.len(),
+            boundaries = index.boundaries.len(),
+            build_elapsed_ms = build_elapsed_ms,
+            "Built forward epoch sync index"
+        );
         // A BlockStore only needs to serve the epoch it currently owns. Bounding this map avoids
         // retaining historical path metadata after unusual cross-epoch requests.
         indexes.clear();
@@ -470,6 +494,22 @@ impl BlockStore {
         request: IncomingForwardEpochSyncRequest,
         max_blocks_allowed: u64,
     ) -> anyhow::Result<()> {
+        let remote_peer = request.sender;
+        let (kind, epoch) = match &request.req {
+            ForwardEpochSyncRequest::V1(ForwardEpochSyncRequestV1::Prepare(prepare)) => {
+                ("Prepare", prepare.epoch)
+            }
+            ForwardEpochSyncRequest::V1(ForwardEpochSyncRequestV1::Fetch(fetch)) => {
+                ("Fetch", fetch.epoch)
+            }
+        };
+        info!(
+            remote_peer = remote_peer,
+            epoch = epoch,
+            kind = kind,
+            "Received forward epoch sync request"
+        );
+        let started = Instant::now();
         let response = match request.req {
             ForwardEpochSyncRequest::V1(ForwardEpochSyncRequestV1::Prepare(prepare)) => {
                 self.prepare_forward_epoch_sync(prepare)
@@ -478,6 +518,35 @@ impl BlockStore {
                 self.fetch_forward_epoch_sync(fetch, max_blocks_allowed)
             }
         };
+        let elapsed_ms = started.elapsed().as_millis() as u64;
+        let (result, detail) = match &response {
+            ForwardEpochSyncResponseV1::Prepared(manifest) => (
+                "Prepared",
+                format!(
+                    "manifest_id={} first_bn={} target_bn={}",
+                    manifest.manifest_id, manifest.first_block_number, manifest.target_block_number
+                ),
+            ),
+            ForwardEpochSyncResponseV1::Batch(batch) => (
+                "Batch",
+                format!(
+                    "records={} ledger_infos={} next_anchor_bn={}",
+                    batch.records.len(),
+                    batch.ledger_infos.len(),
+                    batch.next_anchor_block_number
+                ),
+            ),
+            ForwardEpochSyncResponseV1::Error(error) => ("Error", format!("{error:?}")),
+        };
+        info!(
+            remote_peer = remote_peer,
+            epoch = epoch,
+            kind = kind,
+            result = result,
+            detail = %detail,
+            elapsed_ms = elapsed_ms,
+            "Responded forward epoch sync request"
+        );
         let response = ConsensusMsg::ForwardEpochSyncResponse(Box::new(
             ForwardEpochSyncResponse::V1(response),
         ));
@@ -877,21 +946,34 @@ impl BlockRetriever {
         let request = ForwardEpochSyncRequest::V1(ForwardEpochSyncRequestV1::Prepare(
             ForwardEpochSyncPrepareRequest { epoch, anchor_block_number, anchor_block_id },
         ));
-        // Capability probing is deliberately short and bounded. During a rolling upgrade an old
-        // peer cannot decode the appended enum variant, so the caller must quickly fall back to
-        // the legacy reverse retrieval path.
+        // Default Prepare timeout is sized for cold index builds on a mature serving peer
+        // (see FORWARD_EPOCH_SYNC_PREPARE_TIMEOUT_MSEC_DEFAULT). Override via
+        // FORWARD_EPOCH_SYNC_PREPARE_TIMEOUT_MSEC if needed; peers that cannot decode the
+        // appended enum variant still fail fast via RpcError and fall back to legacy.
+        let prepare_timeout_msec = crate::forward_epoch_sync_prepare_timeout_msec();
+        info!(
+            epoch = epoch,
+            prepare_timeout_msec = prepare_timeout_msec,
+            max_attempts = 2,
+            "Trying forward epoch sync Prepare"
+        );
         let (response, serving_peer) = match self
             .request_forward_epoch_sync(
                 request,
                 self.available_peers.clone(),
-                Duration::from_millis(FORWARD_EPOCH_SYNC_PREPARE_TIMEOUT_MSEC),
+                Duration::from_millis(prepare_timeout_msec),
                 2,
             )
             .await
         {
             Ok(response) => response,
             Err(error) => {
-                info!(epoch = epoch, error = ?error, "Forward epoch sync unavailable; use legacy fallback");
+                info!(
+                    epoch = epoch,
+                    prepare_timeout_msec = prepare_timeout_msec,
+                    error = ?error,
+                    "Forward epoch sync unavailable; use legacy fallback"
+                );
                 return Ok(None);
             }
         };
@@ -1040,11 +1122,30 @@ impl BlockRetriever {
 mod forward_epoch_sync_tests {
     use super::{
         certifying_position_in_batch, decode_forward_epoch_sync_fetch_response,
-        select_forward_batch_end,
+        select_forward_batch_end, BlockStore,
     };
-    use aptos_consensus_types::forward_epoch_sync::{
-        ForwardEpochSyncError, ForwardEpochSyncResponseV1,
+    use crate::consensusdb::{
+        schema::{epoch_by_block_number::EpochByBlockNumberSchema, ledger_info::LedgerInfoSchema},
+        ConsensusDB,
     };
+    use aptos_consensus_types::{
+        block::{block_test_utils::certificate_for_genesis, Block},
+        common::Payload,
+        forward_epoch_sync::{ForwardEpochSyncError, ForwardEpochSyncResponseV1},
+        quorum_cert::QuorumCert,
+        vote_data::VoteData,
+    };
+    use gaptos::{
+        aptos_crypto::HashValue,
+        aptos_temppath::TempPath,
+        aptos_types::{
+            aggregate_signature::AggregateSignature,
+            block_info::BlockInfo,
+            ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
+            validator_signer::ValidatorSigner,
+        },
+    };
+    use std::path::PathBuf;
 
     #[test]
     fn forward_batches_are_regular_pages() {
@@ -1077,5 +1178,101 @@ mod forward_epoch_sync_tests {
         assert!(certifying_position_in_batch(5, 5, 8));
         assert!(certifying_position_in_batch(7, 5, 8));
         assert!(!certifying_position_in_batch(8, 5, 8));
+    }
+
+    fn ledger_info_committing(
+        commit_info: BlockInfo,
+        block_number: u64,
+    ) -> LedgerInfoWithSignatures {
+        LedgerInfoWithSignatures::new(
+            LedgerInfo::new_with_block_info(
+                commit_info,
+                HashValue::zero(),
+                HashValue::zero(),
+                block_number,
+            ),
+            AggregateSignature::empty(),
+        )
+    }
+
+    #[test]
+    fn index_build_spans_only_the_requested_epoch() {
+        let tmp_dir = TempPath::new();
+        let db = ConsensusDB::new(&tmp_dir, &PathBuf::new());
+        let signer = ValidatorSigner::random(None);
+        let block_info = |block: &Block| block.gen_block_info(HashValue::zero(), 0, None);
+
+        // Canonical chain G <- B1 <- ... <- B5 numbered 1..=5. QC_i certifies B_i and commits its
+        // parent, so ledger infos exist for B1..=B4 and the epoch ends at B4 (block number 4).
+        let genesis = Block::make_genesis_block();
+        let epoch = genesis.epoch();
+        let mut parent = genesis;
+        let mut parent_qc = certificate_for_genesis();
+        let mut blocks = Vec::new();
+        let mut qcs = Vec::new();
+        for number in 1..=5u64 {
+            let block = Block::new_proposal(
+                Payload::empty(false, true),
+                number,
+                number,
+                parent_qc.clone(),
+                &signer,
+                Vec::new(),
+            )
+            .unwrap();
+            block.set_block_number(number);
+            let commit = ledger_info_committing(block_info(&parent), number - 1);
+            let qc = QuorumCert::new(
+                VoteData::new(block_info(&block), block_info(&parent)),
+                commit.clone(),
+            );
+            if number > 1 {
+                db.put::<LedgerInfoSchema>(&(number - 1), &commit).unwrap();
+            }
+            db.save_block_numbers(vec![(epoch, number, block.id())]).unwrap();
+            blocks.push(block.clone());
+            qcs.push(qc.clone());
+            parent = block;
+            parent_qc = qc;
+        }
+        db.save_blocks_and_quorum_certificates(blocks.clone(), qcs).unwrap();
+        db.put::<EpochByBlockNumberSchema>(&4, &epoch).unwrap();
+
+        // Neighbouring epochs' ledger infos sit right outside this epoch's block-number span.
+        let foreign = |epoch: u64, number: u64| {
+            ledger_info_committing(
+                BlockInfo::new(epoch, number, HashValue::random(), HashValue::zero(), 0, 0, None),
+                number,
+            )
+        };
+        db.put::<LedgerInfoSchema>(&0, &foreign(epoch - 1, 0)).unwrap();
+        for number in 5..=8u64 {
+            db.put::<LedgerInfoSchema>(&number, &foreign(epoch + 1, number)).unwrap();
+        }
+
+        let index = BlockStore::build_forward_epoch_sync_index(&db, epoch).unwrap();
+
+        assert_eq!(index.manifest.first_block_number, 1);
+        assert_eq!(index.manifest.target_block_number, 4);
+        assert_eq!(index.manifest.target_block_id, blocks[3].id());
+        assert_eq!(
+            index.entries.iter().map(|entry| entry.block_id).collect::<Vec<_>>(),
+            blocks.iter().map(|block| block.id()).collect::<Vec<_>>()
+        );
+        // Ledger info k is committed by QC_{k+1}, whose certified block sits at position k.
+        assert_eq!(
+            index
+                .boundaries
+                .iter()
+                .map(|boundary| {
+                    (
+                        boundary.certifying_position,
+                        boundary.target_block_number,
+                        boundary.ledger_info.ledger_info().consensus_block_id(),
+                    )
+                })
+                .collect::<Vec<_>>(),
+            (1..=4usize).map(|k| (k, k as u64, blocks[k - 1].id())).collect::<Vec<_>>()
+        );
     }
 }
