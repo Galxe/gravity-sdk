@@ -946,10 +946,10 @@ impl BlockRetriever {
         let request = ForwardEpochSyncRequest::V1(ForwardEpochSyncRequestV1::Prepare(
             ForwardEpochSyncPrepareRequest { epoch, anchor_block_number, anchor_block_id },
         ));
-        // Capability probing is deliberately bounded so rolling-upgrade peers that cannot decode
-        // the appended enum variant fall back to legacy reverse retrieval quickly. Operators may
-        // raise the per-attempt timeout via FORWARD_EPOCH_SYNC_PREPARE_TIMEOUT_MSEC when the
-        // serving peer is under load (cold index build).
+        // Default Prepare timeout is sized for cold index builds on a mature serving peer
+        // (see FORWARD_EPOCH_SYNC_PREPARE_TIMEOUT_MSEC_DEFAULT). Override via
+        // FORWARD_EPOCH_SYNC_PREPARE_TIMEOUT_MSEC if needed; peers that cannot decode the
+        // appended enum variant still fail fast via RpcError and fall back to legacy.
         let prepare_timeout_msec = crate::forward_epoch_sync_prepare_timeout_msec();
         info!(
             epoch = epoch,

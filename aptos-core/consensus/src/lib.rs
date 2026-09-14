@@ -82,7 +82,12 @@ pub use round_manager::round_manager_fuzzing;
 pub(crate) const ENABLE_FORWARD_EPOCH_SYNC_ENV: &str = "ENABLE_FORWARD_EPOCH_SYNC";
 pub(crate) const FORWARD_EPOCH_SYNC_PREPARE_TIMEOUT_MSEC_ENV: &str =
     "FORWARD_EPOCH_SYNC_PREPARE_TIMEOUT_MSEC";
-pub(crate) const FORWARD_EPOCH_SYNC_PREPARE_TIMEOUT_MSEC_DEFAULT: u64 = 5_000;
+/// Default client-side Prepare timeout.
+///
+/// Sized from testnet serving measurements: cold index builds for ~29k-block epochs took
+/// ~4.5–5.7s on a loaded VFN. 30s (~5× that peak) leaves headroom for larger epochs, slower
+/// disks, and concurrent handler load without immediately falling back to legacy reverse sync.
+pub(crate) const FORWARD_EPOCH_SYNC_PREPARE_TIMEOUT_MSEC_DEFAULT: u64 = 30_000;
 
 /// Opt-in switch for the block-number anchored epoch sync path. Nodes use the legacy reverse sync
 /// path unless operators explicitly set `ENABLE_FORWARD_EPOCH_SYNC=true`.
@@ -96,7 +101,7 @@ pub(crate) fn forward_epoch_sync_enabled() -> bool {
 /// Client-side timeout for a single forward-epoch-sync Prepare RPC attempt.
 ///
 /// Operators can override via `FORWARD_EPOCH_SYNC_PREPARE_TIMEOUT_MSEC`. Unset, unparsable, or
-/// values `< 1` fall back to [`FORWARD_EPOCH_SYNC_PREPARE_TIMEOUT_MSEC_DEFAULT`] (5000).
+/// values `< 1` fall back to [`FORWARD_EPOCH_SYNC_PREPARE_TIMEOUT_MSEC_DEFAULT`] (30000).
 pub(crate) fn forward_epoch_sync_prepare_timeout_msec() -> u64 {
     match std::env::var(FORWARD_EPOCH_SYNC_PREPARE_TIMEOUT_MSEC_ENV) {
         Err(_) => FORWARD_EPOCH_SYNC_PREPARE_TIMEOUT_MSEC_DEFAULT,
