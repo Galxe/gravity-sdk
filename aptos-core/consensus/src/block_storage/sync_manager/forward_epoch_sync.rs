@@ -98,6 +98,82 @@ fn decode_forward_epoch_sync_fetch_response(
     }
 }
 
+const FORWARD_EPOCH_SYNC_BUSY_BACKOFF_BASE_MSEC: u64 = 500;
+const FORWARD_EPOCH_SYNC_BUSY_BACKOFF_MAX_MSEC: u64 = 8_000;
+const FORWARD_EPOCH_SYNC_BUSY_BUDGET_MSEC: u64 = 60_000;
+
+/// Bounded exponential backoff for `Busy` replies within one sync call.
+///
+/// `Busy` is transient by construction: the serving side releases its permit as soon as the
+/// handler returns, and a handler is bounded by one cold index build. The client therefore waits
+/// it out instead of degrading to legacy sync; the budget only keeps the round manager from
+/// blocking indefinitely on a peer that stays saturated.
+struct BusyBackoff {
+    attempt: u32,
+    budget_left: Duration,
+}
+
+impl BusyBackoff {
+    fn new() -> Self {
+        Self { attempt: 0, budget_left: Duration::from_millis(FORWARD_EPOCH_SYNC_BUSY_BUDGET_MSEC) }
+    }
+
+    /// Delay before the next attempt, or `None` once the budget is spent.
+    fn next_delay(&mut self) -> Option<Duration> {
+        let scale = 2u64.saturating_pow(self.attempt);
+        let delay = Duration::from_millis(
+            FORWARD_EPOCH_SYNC_BUSY_BACKOFF_BASE_MSEC
+                .saturating_mul(scale)
+                .min(FORWARD_EPOCH_SYNC_BUSY_BACKOFF_MAX_MSEC),
+        );
+        if self.budget_left < delay {
+            return None;
+        }
+        self.budget_left -= delay;
+        self.attempt += 1;
+        Some(delay)
+    }
+}
+
+/// What one Prepare attempt tells the client to do next.
+enum PrepareStep {
+    Prepared(Box<ForwardEpochSyncManifest>),
+    /// `Busy` within budget: wait, then ask the same peer again.
+    RetrySamePeer(Duration),
+    /// `Busy` past the budget: forward sync exists on this peer but is saturated, so retry on
+    /// the next epoch-change trigger instead of degrading to legacy sync.
+    BusyExhausted,
+    /// Explicit rejection (`Disabled`, missing data, internal error): this peer cannot serve
+    /// forward sync for this epoch.
+    PeerRejected(ForwardEpochSyncError),
+    /// No reply. An old binary drops the unknown message without answering, and a stalled cold
+    /// index build looks the same from here, so neither is worth waiting on.
+    PeerUnreachable(anyhow::Error),
+}
+
+fn classify_prepare_attempt(
+    result: anyhow::Result<ForwardEpochSyncResponse>,
+    backoff: &mut BusyBackoff,
+) -> anyhow::Result<PrepareStep> {
+    let ForwardEpochSyncResponse::V1(response) = match result {
+        Ok(response) => response,
+        Err(error) => return Ok(PrepareStep::PeerUnreachable(error)),
+    };
+    Ok(match response {
+        ForwardEpochSyncResponseV1::Prepared(manifest) => PrepareStep::Prepared(manifest),
+        ForwardEpochSyncResponseV1::Error(ForwardEpochSyncError::Busy) => {
+            match backoff.next_delay() {
+                Some(delay) => PrepareStep::RetrySamePeer(delay),
+                None => PrepareStep::BusyExhausted,
+            }
+        }
+        ForwardEpochSyncResponseV1::Error(error) => PrepareStep::PeerRejected(error),
+        ForwardEpochSyncResponseV1::Batch(_) => {
+            bail!("Forward epoch sync prepare returned a batch")
+        }
+    })
+}
+
 impl BlockStore {
     fn build_forward_epoch_sync_index(
         db: &ConsensusDB,
@@ -859,45 +935,64 @@ impl BlockStore {
 }
 
 impl BlockRetriever {
-    async fn request_forward_epoch_sync(
+    /// Asks peers in turn (preferred first, then random order) until one returns a manifest.
+    ///
+    /// `Ok(None)` means no peer can serve forward sync for this epoch, so legacy sync is the
+    /// right fallback. `Err` means a peer does support it but is saturated; the caller should
+    /// give up this attempt and let the next epoch-change trigger retry rather than degrade.
+    async fn prepare_forward_epoch_sync_from_any_peer(
         &mut self,
         request: ForwardEpochSyncRequest,
-        peers: Vec<AccountAddress>,
         rpc_timeout: Duration,
-        max_attempts: usize,
-    ) -> anyhow::Result<(ForwardEpochSyncResponse, AccountAddress)> {
-        ensure!(!peers.is_empty(), "No peers available for forward epoch sync");
-        let mut candidates = peers;
-        let attempts = max_attempts.max(1);
-        let mut last_error = None;
-        for attempt in 0..attempts {
-            if candidates.is_empty() && attempt > 0 {
-                break;
-            }
-            let peer = self.pick_peer(attempt == 0, &mut candidates);
-            match self
-                .network
-                .request_forward_epoch_sync(
-                    request.clone(),
-                    PeerNetworkId::new(self.network_id, peer),
-                    rpc_timeout,
-                )
-                .await
-            {
-                Ok(ForwardEpochSyncResponse::V1(ForwardEpochSyncResponseV1::Error(
-                    ForwardEpochSyncError::Busy,
-                ))) => {
-                    last_error = Some(anyhow!("Forward epoch sync peer {peer} is busy"));
-                    time::sleep(Duration::from_millis(RETRY_INTERVAL_MSEC)).await;
-                }
-                Ok(response) => return Ok((response, peer)),
-                Err(error) => {
-                    warn!(remote_peer = peer, error = ?error, "Forward epoch sync RPC failed");
-                    last_error = Some(error);
+    ) -> anyhow::Result<Option<(Box<ForwardEpochSyncManifest>, AccountAddress)>> {
+        ensure!(!self.available_peers.is_empty(), "No peers available for forward epoch sync");
+        let mut candidates = self.available_peers.clone();
+        let mut backoff = BusyBackoff::new();
+        let mut first_attempt = true;
+        while !candidates.is_empty() {
+            let peer = self.pick_peer(first_attempt, &mut candidates);
+            first_attempt = false;
+            // With no other peer to move on to, one silent failure is worth a second try: a cold
+            // index build that overran the timeout is usually cached by the time we ask again.
+            let mut unreachable_retry_left = candidates.is_empty();
+            loop {
+                let result = self
+                    .network
+                    .request_forward_epoch_sync(
+                        request.clone(),
+                        PeerNetworkId::new(self.network_id, peer),
+                        rpc_timeout,
+                    )
+                    .await;
+                match classify_prepare_attempt(result, &mut backoff)? {
+                    PrepareStep::Prepared(manifest) => return Ok(Some((manifest, peer))),
+                    PrepareStep::RetrySamePeer(delay) => {
+                        info!(
+                            remote_peer = peer,
+                            delay_ms = delay.as_millis() as u64,
+                            "Forward epoch sync peer is busy; backing off"
+                        );
+                        time::sleep(delay).await;
+                    }
+                    PrepareStep::BusyExhausted => {
+                        bail!("Forward epoch sync peer {peer} stayed busy for the whole budget")
+                    }
+                    PrepareStep::PeerRejected(error) => {
+                        info!(remote_peer = peer, error = ?error, "Forward epoch sync prepare rejected");
+                        break;
+                    }
+                    PrepareStep::PeerUnreachable(error) if unreachable_retry_left => {
+                        warn!(remote_peer = peer, error = ?error, "Forward epoch sync RPC failed; retrying last peer once");
+                        unreachable_retry_left = false;
+                    }
+                    PrepareStep::PeerUnreachable(error) => {
+                        warn!(remote_peer = peer, error = ?error, "Forward epoch sync RPC failed");
+                        break;
+                    }
                 }
             }
         }
-        Err(last_error.unwrap_or_else(|| anyhow!("No forward epoch sync peer available")))
+        Ok(None)
     }
 
     async fn request_forward_epoch_sync_from_peer(
@@ -908,8 +1003,9 @@ impl BlockRetriever {
         max_attempts: usize,
     ) -> anyhow::Result<ForwardEpochSyncResponse> {
         let attempts = max_attempts.max(1);
-        let mut last_error = None;
-        for attempt in 0..attempts {
+        let mut backoff = BusyBackoff::new();
+        let mut rpc_failures = 0;
+        loop {
             match self
                 .network
                 .request_forward_epoch_sync(
@@ -922,19 +1018,32 @@ impl BlockRetriever {
                 Ok(ForwardEpochSyncResponse::V1(ForwardEpochSyncResponseV1::Error(
                     ForwardEpochSyncError::Busy,
                 ))) => {
-                    last_error = Some(anyhow!("Forward epoch sync peer {peer} is busy"));
+                    let Some(delay) = backoff.next_delay() else {
+                        bail!("Forward epoch sync peer {peer} stayed busy for the whole budget")
+                    };
+                    info!(
+                        remote_peer = peer,
+                        delay_ms = delay.as_millis() as u64,
+                        "Forward epoch sync peer is busy; backing off"
+                    );
+                    time::sleep(delay).await;
                 }
                 Ok(response) => return Ok(response),
                 Err(error) => {
-                    warn!(remote_peer = peer, error = ?error, "Forward epoch sync RPC failed");
-                    last_error = Some(error);
+                    rpc_failures += 1;
+                    warn!(
+                        remote_peer = peer,
+                        error = ?error,
+                        attempt = rpc_failures,
+                        "Forward epoch sync RPC failed"
+                    );
+                    if rpc_failures >= attempts {
+                        return Err(error);
+                    }
+                    time::sleep(Duration::from_millis(RETRY_INTERVAL_MSEC)).await;
                 }
             }
-            if attempt + 1 < attempts {
-                time::sleep(Duration::from_millis(RETRY_INTERVAL_MSEC)).await;
-            }
         }
-        Err(last_error.unwrap_or_else(|| anyhow!("Forward epoch sync peer {peer} unavailable")))
     }
 
     async fn try_prepare_forward_epoch_sync(
@@ -948,76 +1057,52 @@ impl BlockRetriever {
         ));
         // Default Prepare timeout is sized for cold index builds on a mature serving peer
         // (see FORWARD_EPOCH_SYNC_PREPARE_TIMEOUT_MSEC_DEFAULT). Override via
-        // FORWARD_EPOCH_SYNC_PREPARE_TIMEOUT_MSEC if needed; peers that cannot decode the
-        // appended enum variant still fail fast via RpcError and fall back to legacy.
+        // FORWARD_EPOCH_SYNC_PREPARE_TIMEOUT_MSEC if needed. A peer that cannot decode the
+        // appended message variant drops it silently, so an old binary also shows up as a timeout.
         let prepare_timeout_msec = crate::forward_epoch_sync_prepare_timeout_msec();
         info!(
             epoch = epoch,
             prepare_timeout_msec = prepare_timeout_msec,
-            max_attempts = 2,
             "Trying forward epoch sync Prepare"
         );
-        let (response, serving_peer) = match self
-            .request_forward_epoch_sync(
+        let Some((manifest, serving_peer)) = self
+            .prepare_forward_epoch_sync_from_any_peer(
                 request,
-                self.available_peers.clone(),
                 Duration::from_millis(prepare_timeout_msec),
-                2,
             )
-            .await
-        {
-            Ok(response) => response,
-            Err(error) => {
-                info!(
-                    epoch = epoch,
-                    prepare_timeout_msec = prepare_timeout_msec,
-                    error = ?error,
-                    "Forward epoch sync unavailable; use legacy fallback"
-                );
-                return Ok(None);
-            }
+            .await?
+        else {
+            info!(epoch = epoch, "No peer can serve forward epoch sync; use legacy fallback");
+            return Ok(None);
         };
-        let ForwardEpochSyncResponse::V1(response) = response;
-        match response {
-            ForwardEpochSyncResponseV1::Prepared(manifest) => {
-                ensure!(manifest.epoch == epoch, "Forward manifest epoch mismatch");
-                ensure!(
-                    manifest.target_ledger_info.ledger_info().epoch() == epoch,
-                    "Forward manifest target LI epoch mismatch"
-                );
-                ensure!(
-                    manifest.target_ledger_info.ledger_info().ends_epoch(),
-                    "Forward manifest target does not end epoch"
-                );
-                manifest.target_ledger_info.verify_signatures(self.network.validators())?;
-                let epoch_info =
-                    manifest.target_ledger_info.ledger_info().commit_info().epoch_block_info();
-                let expected_target_id =
-                    epoch_info.map(|info| info.block_id).unwrap_or_else(|| {
-                        manifest.target_ledger_info.ledger_info().consensus_block_id()
-                    });
-                let expected_target_number = epoch_info
-                    .map(|info| info.block_number)
-                    .unwrap_or_else(|| manifest.target_ledger_info.ledger_info().block_number());
-                ensure!(
-                    manifest.target_block_id == expected_target_id &&
-                        manifest.target_block_number == expected_target_number,
-                    "Forward manifest target mismatch"
-                );
-                ensure!(
-                    manifest.first_block_number <= manifest.target_block_number,
-                    "Forward manifest block range is invalid"
-                );
-                Ok(Some((*manifest, serving_peer)))
-            }
-            ForwardEpochSyncResponseV1::Error(error) => {
-                info!(epoch = epoch, error = ?error, "Forward epoch sync prepare rejected; use legacy fallback");
-                Ok(None)
-            }
-            ForwardEpochSyncResponseV1::Batch(_) => {
-                bail!("Forward epoch sync prepare returned a batch")
-            }
-        }
+
+        ensure!(manifest.epoch == epoch, "Forward manifest epoch mismatch");
+        ensure!(
+            manifest.target_ledger_info.ledger_info().epoch() == epoch,
+            "Forward manifest target LI epoch mismatch"
+        );
+        ensure!(
+            manifest.target_ledger_info.ledger_info().ends_epoch(),
+            "Forward manifest target does not end epoch"
+        );
+        manifest.target_ledger_info.verify_signatures(self.network.validators())?;
+        let epoch_info = manifest.target_ledger_info.ledger_info().commit_info().epoch_block_info();
+        let expected_target_id = epoch_info
+            .map(|info| info.block_id)
+            .unwrap_or_else(|| manifest.target_ledger_info.ledger_info().consensus_block_id());
+        let expected_target_number = epoch_info
+            .map(|info| info.block_number)
+            .unwrap_or_else(|| manifest.target_ledger_info.ledger_info().block_number());
+        ensure!(
+            manifest.target_block_id == expected_target_id &&
+                manifest.target_block_number == expected_target_number,
+            "Forward manifest target mismatch"
+        );
+        ensure!(
+            manifest.first_block_number <= manifest.target_block_number,
+            "Forward manifest block range is invalid"
+        );
+        Ok(Some((*manifest, serving_peer)))
     }
 
     /// Returns `Ok(None)` only when the server accepted the cursor and reported that no page
@@ -1121,8 +1206,9 @@ impl BlockRetriever {
 #[cfg(test)]
 mod forward_epoch_sync_tests {
     use super::{
-        certifying_position_in_batch, decode_forward_epoch_sync_fetch_response,
-        select_forward_batch_end, BlockStore,
+        certifying_position_in_batch, classify_prepare_attempt,
+        decode_forward_epoch_sync_fetch_response, select_forward_batch_end, BlockStore,
+        BusyBackoff, PrepareStep,
     };
     use crate::consensusdb::{
         schema::{epoch_by_block_number::EpochByBlockNumberSchema, ledger_info::LedgerInfoSchema},
@@ -1131,7 +1217,10 @@ mod forward_epoch_sync_tests {
     use aptos_consensus_types::{
         block::{block_test_utils::certificate_for_genesis, Block},
         common::Payload,
-        forward_epoch_sync::{ForwardEpochSyncError, ForwardEpochSyncResponseV1},
+        forward_epoch_sync::{
+            ForwardEpochSyncError, ForwardEpochSyncManifest, ForwardEpochSyncResponse,
+            ForwardEpochSyncResponseV1,
+        },
         quorum_cert::QuorumCert,
         vote_data::VoteData,
     };
@@ -1145,7 +1234,7 @@ mod forward_epoch_sync_tests {
             validator_signer::ValidatorSigner,
         },
     };
-    use std::path::PathBuf;
+    use std::{path::PathBuf, time::Duration};
 
     #[test]
     fn forward_batches_are_regular_pages() {
@@ -1274,5 +1363,93 @@ mod forward_epoch_sync_tests {
                 .collect::<Vec<_>>(),
             (1..=4usize).map(|k| (k, k as u64, blocks[k - 1].id())).collect::<Vec<_>>()
         );
+    }
+
+    fn busy_reply() -> anyhow::Result<ForwardEpochSyncResponse> {
+        Ok(ForwardEpochSyncResponse::V1(ForwardEpochSyncResponseV1::Error(
+            ForwardEpochSyncError::Busy,
+        )))
+    }
+
+    #[test]
+    fn busy_backoff_doubles_and_caps_at_eight_seconds() {
+        let mut backoff = BusyBackoff::new();
+        let delays: Vec<_> = (0..6).map(|_| backoff.next_delay().unwrap()).collect();
+        assert_eq!(delays, [500, 1_000, 2_000, 4_000, 8_000, 8_000].map(Duration::from_millis));
+    }
+
+    #[test]
+    fn busy_backoff_exhausts_after_sixty_second_budget() {
+        let mut backoff = BusyBackoff::new();
+        let mut waited = Duration::ZERO;
+        let mut delays = 0;
+        while let Some(delay) = backoff.next_delay() {
+            waited += delay;
+            delays += 1;
+        }
+        // 0.5 + 1 + 2 + 4 + 8 + 5 * 8 = 55.5 s; the eleventh 8 s delay would overrun 60 s.
+        assert_eq!(delays, 10);
+        assert_eq!(waited, Duration::from_millis(55_500));
+        assert!(backoff.next_delay().is_none(), "budget stays exhausted");
+    }
+
+    #[test]
+    fn prepare_busy_retries_same_peer_within_budget() {
+        let mut backoff = BusyBackoff::new();
+        let step = classify_prepare_attempt(busy_reply(), &mut backoff).unwrap();
+        assert!(
+            matches!(step, PrepareStep::RetrySamePeer(delay) if delay == Duration::from_millis(500))
+        );
+    }
+
+    #[test]
+    fn prepare_busy_is_exhausted_once_budget_is_spent() {
+        let mut backoff = BusyBackoff::new();
+        while backoff.next_delay().is_some() {}
+        let step = classify_prepare_attempt(busy_reply(), &mut backoff).unwrap();
+        assert!(matches!(step, PrepareStep::BusyExhausted));
+    }
+
+    #[test]
+    fn prepare_explicit_rejection_moves_to_next_peer() {
+        for error in [
+            ForwardEpochSyncError::Disabled,
+            ForwardEpochSyncError::Internal,
+            ForwardEpochSyncError::EpochNotFound,
+            ForwardEpochSyncError::AnchorMismatch,
+        ] {
+            let mut backoff = BusyBackoff::new();
+            let reply = Ok(ForwardEpochSyncResponse::V1(ForwardEpochSyncResponseV1::Error(error)));
+            let step = classify_prepare_attempt(reply, &mut backoff).unwrap();
+            assert!(matches!(step, PrepareStep::PeerRejected(got) if got == error), "{error:?}");
+        }
+    }
+
+    #[test]
+    fn prepare_rpc_failure_is_peer_unreachable() {
+        let mut backoff = BusyBackoff::new();
+        let step =
+            classify_prepare_attempt(Err(anyhow::anyhow!("timed out")), &mut backoff).unwrap();
+        assert!(
+            matches!(step, PrepareStep::PeerUnreachable(error) if error.to_string() == "timed out")
+        );
+    }
+
+    #[test]
+    fn prepare_success_returns_manifest() {
+        let mut backoff = BusyBackoff::new();
+        let manifest = ForwardEpochSyncManifest {
+            epoch: 3,
+            manifest_id: HashValue::random(),
+            first_block_number: 10,
+            target_block_number: 20,
+            target_block_id: HashValue::random(),
+            target_ledger_info: ledger_info_committing(BlockInfo::empty(), 20),
+        };
+        let reply = Ok(ForwardEpochSyncResponse::V1(ForwardEpochSyncResponseV1::Prepared(
+            Box::new(manifest.clone()),
+        )));
+        let step = classify_prepare_attempt(reply, &mut backoff).unwrap();
+        assert!(matches!(step, PrepareStep::Prepared(got) if *got == manifest));
     }
 }

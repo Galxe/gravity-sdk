@@ -1916,14 +1916,19 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                     });
                     Ok(())
                 } else {
+                    // Switched off is permanent for this node; not started only lasts until the
+                    // next round manager is up (epoch transition), so it is worth waiting on.
+                    let error = if crate::forward_epoch_sync_enabled() {
+                        ForwardEpochSyncError::Busy
+                    } else {
+                        ForwardEpochSyncError::Disabled
+                    };
                     warn!(
                         remote_peer = peer_id,
+                        error = ?error,
                         "Reject forward epoch sync request because the service is disabled or not started"
                     );
-                    Self::respond_forward_epoch_sync_error(
-                        request,
-                        ForwardEpochSyncError::Internal,
-                    );
+                    Self::respond_forward_epoch_sync_error(request, error);
                     Ok(())
                 }
             }

@@ -114,4 +114,20 @@ pub enum ForwardEpochSyncError {
     BatchBoundaryNotFound,
     Busy,
     Internal,
+    /// The serving node runs without `ENABLE_FORWARD_EPOCH_SYNC`; unlike `Busy` this does not
+    /// clear up by waiting, so the client should move on to another peer.
+    Disabled,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ForwardEpochSyncError;
+
+    /// `Disabled` was added after v1.9.2 shipped; it must stay appended so the BCS tags of the
+    /// variants older peers already know remain stable.
+    #[test]
+    fn disabled_error_is_appended_after_internal() {
+        assert_eq!(bcs::to_bytes(&ForwardEpochSyncError::Internal).unwrap(), [6]);
+        assert_eq!(bcs::to_bytes(&ForwardEpochSyncError::Disabled).unwrap(), [7]);
+    }
 }
