@@ -137,6 +137,9 @@ pub struct BlockStore {
     /// Mapping from validator address to their index in the ordered validator set.
     /// Used during recovery to compute proposer_index for blocks.
     validator_indices: HashMap<AccountAddress, usize>,
+    /// Ephemeral, bounded metadata cache used by forward epoch sync. It is deliberately not
+    /// persisted: restart recovery is derived from the existing ConsensusDB schemas.
+    forward_epoch_sync_indexes: Mutex<HashMap<u64, Arc<sync_manager::ForwardEpochSyncIndex>>>,
 }
 
 impl BlockStore {
@@ -247,7 +250,7 @@ impl BlockStore {
     /// epoch change was in progress), recovery stops at the epoch change block's round.
     /// Suffix blocks beyond that point would never receive execution results from reth,
     /// so attempting to recover them would cause the pipeline to hang.
-    async fn recover_blocks(&self) {
+    async fn recover_blocks_checked(&self) -> anyhow::Result<()> {
         RECOVERY_GAUGE.set_with(&[], 1);
 
         let mut certs = self.inner.read().get_all_quorum_certs_with_commit_info();
@@ -287,16 +290,24 @@ impl BlockStore {
                 commit_round,
                 self.commit_root().round(),
             );
-            if let Err(e) = self
+            if let Err(error) = self
                 .send_for_execution(qc.into_wrapped_ledger_info(), true, epoch_change_block_number)
                 .await
             {
-                error!("recover_blocks: failed to commit blocks: {e}");
-                break;
+                RECOVERY_GAUGE.set_with(&[], 0);
+                return Err(error).context("recover_blocks: failed to commit blocks");
             }
         }
 
         RECOVERY_GAUGE.set_with(&[], 0);
+        Ok(())
+    }
+
+    async fn recover_blocks(&self) {
+        if let Err(error) = self.recover_blocks_checked().await {
+            RECOVERY_GAUGE.set_with(&[], 0);
+            error!(error = ?error, "Failed to recover consensus blocks");
+        }
     }
 
     pub(crate) async fn replay_ordered_path_if_needed(&self) -> anyhow::Result<()> {
@@ -452,6 +463,7 @@ impl BlockStore {
             enable_randomness,
             require_block_randomness,
             validator_indices,
+            forward_epoch_sync_indexes: Mutex::new(HashMap::new()),
         };
 
         // Skip ancestors of the root. They can appear in recovery data when an
@@ -869,6 +881,25 @@ impl BlockStore {
             }
         }
         self.recover_blocks().await;
+    }
+
+    pub async fn append_blocks_for_sync_checked(
+        &self,
+        blocks: Vec<(Block, Option<u64>, Option<Vec<u8>>)>,
+        quorum_certs: Vec<QuorumCert>,
+    ) -> anyhow::Result<()> {
+        for (block, block_number, _) in blocks {
+            if let Some(num) = block_number {
+                if block.block_number().is_none() {
+                    block.set_block_number(num);
+                }
+            }
+            self.insert_block(block, true).await.context("Failed to append forward-sync block")?;
+        }
+        for qc in quorum_certs {
+            self.insert_single_quorum_cert(qc, true).context("Failed to append forward-sync QC")?;
+        }
+        self.recover_blocks_checked().await
     }
 
     pub async fn rebuild(&self, root: RootInfo, blocks: Vec<Block>, quorum_certs: Vec<QuorumCert>) {
