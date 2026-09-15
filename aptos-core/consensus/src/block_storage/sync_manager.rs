@@ -63,6 +63,7 @@ use tokio::{time, time::timeout};
 
 #[path = "sync_manager/forward_epoch_sync.rs"]
 mod forward_epoch_sync;
+pub use forward_epoch_sync::EpochSyncOutcome;
 pub(super) use forward_epoch_sync::ForwardEpochSyncIndex;
 
 static CUR_BLOCK_SYNC_BLOCK_SUM_GAUGE: Lazy<IntGaugeVec> = Lazy::new(|| {
