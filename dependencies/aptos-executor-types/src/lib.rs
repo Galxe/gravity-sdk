@@ -58,7 +58,8 @@ impl ExecutorError {
 pub type ExecutorResult<T> = Result<T, ExecutorError>;
 
 #[derive(Clone, Debug, serde::Deserialize, Eq, PartialEq, serde::Serialize)]
-#[serde(rename_all = "snake_case")] // cannot use tag = "type" as nested enums cannot work, and bcs doesn't support it
+#[serde(rename_all = "snake_case")] // cannot use tag = "type" as nested enums cannot work, and bcs
+                                    // doesn't support it
 pub enum BlockGasLimitType {
     NoLimit,
     Limit(u64),

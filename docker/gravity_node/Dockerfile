@@ -91,8 +91,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && mkdir -p /gravity/config /gravity/data /gravity/logs \
     && chown -R gravity:gravity /gravity
 
-COPY docker/gravity_node/entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh
+COPY --chmod=755 docker/gravity_node/entrypoint.sh /usr/local/bin/entrypoint.sh
 
 WORKDIR /gravity
 
