@@ -112,6 +112,10 @@ pub struct IncomingForwardEpochSyncRequest {
     pub sender: Author,
     pub protocol: ProtocolId,
     pub response_sender: oneshot::Sender<Result<Bytes, RpcError>>,
+    /// When consensus took the request off the network. The network layer drops the reply
+    /// channel `INBOUND_RPC_TIMEOUT_MS` after it read the frame, so a handler that wants to
+    /// answer in time must count from here, not from when it started running.
+    pub received_at: tokio::time::Instant,
 }
 
 #[derive(Debug)]
@@ -877,6 +881,7 @@ impl NetworkTask {
                                         sender: peer_id,
                                         protocol,
                                         response_sender: callback,
+                                        received_at: tokio::time::Instant::now(),
                                     },
                                 )
                             }

@@ -30,21 +30,31 @@ use aptos_consensus_types::{
         ForwardEpochSyncResponseV1,
     },
 };
+use futures::{future::Shared, FutureExt};
 use gaptos::{
     aptos_config::network_id::PeerNetworkId,
     aptos_consensus::counters::BLOCKS_FETCHED_FROM_NETWORK_WHILE_FAST_FORWARD_SYNC,
     aptos_crypto::{hash::CryptoHash, HashValue},
+    aptos_infallible::Mutex,
     aptos_logger::prelude::*,
+    aptos_network::{
+        application::error::Error as NetworkError, constants::INBOUND_RPC_TIMEOUT_MS,
+        protocols::network::RpcError,
+    },
     aptos_schemadb::batch::SchemaBatch,
     aptos_types::{account_address::AccountAddress, ledger_info::LedgerInfoWithSignatures},
 };
+use lru::LruCache;
 use std::{
     collections::{HashMap, HashSet},
     future::Future,
     sync::Arc,
     time::{Duration, Instant},
 };
-use tokio::time;
+use tokio::{
+    sync::{oneshot, OwnedSemaphorePermit, Semaphore, SemaphorePermit},
+    time,
+};
 
 #[derive(Clone)]
 struct ForwardEpochSyncIndexEntry {
@@ -65,7 +75,7 @@ struct ForwardEpochSyncBoundary {
 
 /// Immutable metadata snapshot for one epoch. Blocks, payloads, QCs, and randomness stay in the
 /// existing databases and are loaded only for the requested batch.
-pub(in crate::block_storage::block_store) struct ForwardEpochSyncIndex {
+struct ForwardEpochSyncIndex {
     manifest: ForwardEpochSyncManifest,
     entries: Vec<ForwardEpochSyncIndexEntry>,
     positions: HashMap<HashValue, usize>,
@@ -104,11 +114,23 @@ const FORWARD_EPOCH_SYNC_BUSY_BACKOFF_MAX_MSEC: u64 = 8_000;
 /// How many times one Prepare attempt sleeps and re-asks the peers that answered `Busy` before
 /// it hands the retry to the next epoch-change trigger (which arrives within about a second).
 const FORWARD_EPOCH_SYNC_MAX_BUSY_RETRIES: u32 = 3;
-/// Wall-clock cap on one Prepare attempt: three probes at the default 30 s timeout, i.e. a cold
-/// index build that overran the network layer's inbound cap, its cached retry, and one more
-/// peer. Old binaries never answer, so without the cap a mixed fleet would cost two probes per
-/// old peer before legacy sync, and a peer answering `Busy` slowly could stretch every pass.
+/// Wall-clock cap on one Prepare attempt (nine probes at the 10 s timeout). Old binaries never
+/// answer, so without the cap a mixed fleet would cost two probes per old peer before legacy
+/// sync, and a peer answering `Busy` slowly could stretch every pass.
 const FORWARD_EPOCH_SYNC_PREPARE_ATTEMPT_MSEC: u64 = 90_000;
+/// Client-side timeout of one Prepare probe. The network layer drops an inbound RPC after
+/// `INBOUND_RPC_TIMEOUT_MS` without writing a frame, so waiting any longer only idles.
+const FORWARD_EPOCH_SYNC_PREPARE_TIMEOUT_MSEC: u64 = INBOUND_RPC_TIMEOUT_MS;
+/// Pause before re-probing a peer whose Prepare timed out. A serving peer without early-`Busy`
+/// (an older binary) finishes the cold build it started even though the network layer already
+/// discarded its reply, so the second probe is usually a cache hit.
+const FORWARD_EPOCH_SYNC_REPROBE_DELAY_MSEC: u64 = 5_000;
+/// Serving side: a Prepare whose cold build is still running this long after the request was
+/// received answers `Busy` while the RPC is still open, leaving 2 s for the reply to get out
+/// before the network layer tears the RPC down. The build carries on in the background.
+const FORWARD_EPOCH_SYNC_SLOW_BUILD_REPLY_MSEC: u64 = INBOUND_RPC_TIMEOUT_MS - 2_000;
+/// How many epochs' metadata indexes a serving node keeps (5-8 MiB each for a 30k-block epoch).
+const FORWARD_EPOCH_SYNC_INDEX_CACHE_EPOCHS: usize = 4;
 /// Fetch progress watchdog: a serving peer that delivers fewer than
 /// `FORWARD_EPOCH_SYNC_MIN_BLOCKS_PER_WINDOW` blocks in one window is abandoned so the next
 /// trigger can pick another peer. 10 blocks/s is about half the throughput measured for an honest
@@ -118,9 +140,9 @@ const FORWARD_EPOCH_SYNC_MIN_BLOCKS_PER_WINDOW: u64 = 600;
 
 /// Exponential backoff between `Busy` replies: 0.5 s doubling up to 8 s.
 ///
-/// `Busy` is transient by construction: the serving side releases its permit as soon as the
-/// handler returns, and a handler is bounded by one cold index build. The client therefore waits
-/// it out instead of degrading to legacy sync.
+/// `Busy` is transient by construction: a serving quota is saturated or a cold index build is
+/// still running, and both clear on their own. The client therefore waits it out instead of
+/// degrading to legacy sync.
 struct BusyBackoff {
     attempt: u32,
 }
@@ -186,10 +208,20 @@ enum PrepareStep {
     /// Explicit rejection (`Disabled`, missing data, internal error): this peer cannot serve
     /// forward sync for this epoch.
     Rejected(ForwardEpochSyncError),
-    /// No reply. An old binary drops the unknown message without answering. A cold index build
-    /// that overran the network layer's 10 s inbound cap is discarded by the server too, but the
-    /// build still completes and is cached, so one more probe is worth it.
+    /// No reply within the probe timeout. An old binary drops the unknown message without
+    /// answering. A serving peer without early-`Busy` still finishes and caches the cold build
+    /// whose reply the network layer discarded, so one more probe after a pause is worth it.
+    TimedOut,
+    /// Failed without waiting (not connected, send error): one more probe, without a pause.
     Unreachable(anyhow::Error),
+}
+
+/// The application layer stringifies `RpcError`, so a timeout is recognisable only by its message.
+fn is_rpc_timeout(error: &anyhow::Error) -> bool {
+    matches!(
+        error.downcast_ref::<NetworkError>(),
+        Some(NetworkError::RpcError(message)) if *message == RpcError::TimedOut.to_string()
+    )
 }
 
 fn classify_prepare_reply(
@@ -197,6 +229,7 @@ fn classify_prepare_reply(
 ) -> anyhow::Result<PrepareStep> {
     let ForwardEpochSyncResponse::V1(response) = match result {
         Ok(response) => response,
+        Err(error) if is_rpc_timeout(&error) => return Ok(PrepareStep::TimedOut),
         Err(error) => return Ok(PrepareStep::Unreachable(error)),
     };
     Ok(match response {
@@ -224,9 +257,10 @@ enum PrepareOutcome {
 ///
 /// A pass always runs to the end before anyone is re-asked, so a healthy candidate is reached
 /// without waiting on a busy one. Peers that answer `Busy` stay for the next pass, peers that
-/// reject leave, peers that do not answer get exactly one more probe. A pass that saw `Busy` is
-/// followed by a backoff sleep, at most `FORWARD_EPOCH_SYNC_MAX_BUSY_RETRIES` times. Each probe
-/// gets `rpc_timeout` or whatever is left before the deadline, whichever is shorter.
+/// reject leave, peers that do not answer get exactly one more probe. Between passes the client
+/// pauses once, for as long as the longest wait any re-asked peer needs: the `Busy` backoff (at
+/// most `FORWARD_EPOCH_SYNC_MAX_BUSY_RETRIES` times) or the re-probe delay of a timed-out peer.
+/// Each probe gets `rpc_timeout` or whatever is left before the deadline, whichever is shorter.
 async fn prepare_from_candidates<F, Fut>(
     mut request: F,
     candidates: Vec<AccountAddress>,
@@ -252,6 +286,7 @@ where
     loop {
         let mut next_pass = Vec::with_capacity(queue.len());
         let mut busy_peers = 0usize;
+        let mut timed_out_peers = 0usize;
         for (peer, probe_again) in queue {
             let remaining = deadline.saturating_duration_since(time::Instant::now());
             if remaining.is_zero() {
@@ -269,6 +304,17 @@ where
                 PrepareStep::Rejected(error) => {
                     info!(remote_peer = peer, error = ?error, "Forward epoch sync prepare rejected");
                 }
+                PrepareStep::TimedOut => {
+                    warn!(
+                        remote_peer = peer,
+                        probe_again = probe_again,
+                        "Forward epoch sync prepare timed out"
+                    );
+                    if probe_again {
+                        timed_out_peers += 1;
+                        next_pass.push((peer, false));
+                    }
+                }
                 PrepareStep::Unreachable(error) => {
                     warn!(
                         remote_peer = peer,
@@ -285,17 +331,24 @@ where
         if next_pass.is_empty() {
             return Ok(PrepareOutcome::NoServingPeer);
         }
+        let mut delay = Duration::ZERO;
         if busy_peers > 0 {
             if busy_retries >= FORWARD_EPOCH_SYNC_MAX_BUSY_RETRIES {
                 return Ok(PrepareOutcome::StillBusy);
             }
             busy_retries += 1;
-            let remaining = deadline.saturating_duration_since(time::Instant::now());
-            let delay = backoff.next_delay().min(remaining);
+            delay = backoff.next_delay();
+        }
+        if timed_out_peers > 0 {
+            delay = delay.max(Duration::from_millis(FORWARD_EPOCH_SYNC_REPROBE_DELAY_MSEC));
+        }
+        let delay = delay.min(deadline.saturating_duration_since(time::Instant::now()));
+        if !delay.is_zero() {
             info!(
                 delay_ms = delay.as_millis() as u64,
                 busy_peers = busy_peers,
-                "Forward epoch sync peers are busy; backing off"
+                timed_out_peers = timed_out_peers,
+                "Forward epoch sync pausing before the next Prepare pass"
             );
             time::sleep(delay).await;
         }
@@ -384,6 +437,178 @@ where
                 time::sleep(Duration::from_millis(RETRY_INTERVAL_MSEC)).await;
             }
         }
+    }
+}
+
+type IndexBuildResult = Result<Arc<ForwardEpochSyncIndex>, ForwardEpochSyncError>;
+type PendingIndexBuild = Shared<oneshot::Receiver<IndexBuildResult>>;
+
+/// Serving-side state of forward epoch sync, shared by every `BlockStore` of the node: the index
+/// cache, the cold builds in flight, and the two admission quotas.
+///
+/// Indexes describe finished epochs, which never change, so the cache outlives the epoch the
+/// node itself is in.
+pub struct ForwardEpochSyncService {
+    indexes: Mutex<ForwardEpochSyncIndexes>,
+    cold_build_quota: Arc<Semaphore>,
+    fetch_quota: Semaphore,
+}
+
+struct ForwardEpochSyncIndexes {
+    ready: LruCache<u64, Arc<ForwardEpochSyncIndex>>,
+    in_flight: HashMap<u64, PendingIndexBuild>,
+    /// Peers with a cold build running. Cache hits and joiners of a running build are not
+    /// counted, so an honest client (sequential, one epoch at a time) never needs a second slot.
+    cold_build_peers: HashSet<AccountAddress>,
+}
+
+enum IndexLookup {
+    Ready(Arc<ForwardEpochSyncIndex>),
+    Building(PendingIndexBuild),
+}
+
+impl ForwardEpochSyncService {
+    pub fn from_env() -> Self {
+        Self::new(
+            crate::forward_epoch_sync_cold_build_quota(),
+            crate::forward_epoch_sync_fetch_quota(),
+        )
+    }
+
+    fn new(cold_build_quota: usize, fetch_quota: usize) -> Self {
+        Self {
+            indexes: Mutex::new(ForwardEpochSyncIndexes {
+                ready: LruCache::new(FORWARD_EPOCH_SYNC_INDEX_CACHE_EPOCHS),
+                in_flight: HashMap::new(),
+                cold_build_peers: HashSet::new(),
+            }),
+            cold_build_quota: Arc::new(Semaphore::new(cold_build_quota)),
+            fetch_quota: Semaphore::new(fetch_quota),
+        }
+    }
+
+    /// A Fetch handler runs only while holding one of these.
+    fn try_acquire_fetch(&self) -> Option<SemaphorePermit<'_>> {
+        self.fetch_quota.try_acquire().ok()
+    }
+
+    /// The index for `epoch`: cached, or built by `build` on a cold miss.
+    ///
+    /// A cache hit or a build already running for the epoch costs `peer` nothing. Starting a
+    /// cold build takes the peer's single slot and a `cold_build_quota` permit, both held until
+    /// the build finishes; if either is unavailable the answer is `Busy`. A running build is
+    /// awaited until `reply_by` (not at all when `None`), after which the answer is `Busy` too;
+    /// the build keeps running and the next request for the epoch joins it or finds it cached.
+    async fn index(
+        self: &Arc<Self>,
+        epoch: u64,
+        peer: AccountAddress,
+        reply_by: Option<time::Instant>,
+        build: impl Future<Output = Result<ForwardEpochSyncIndex, ForwardEpochSyncError>>
+            + Send
+            + 'static,
+    ) -> IndexBuildResult {
+        let pending = match self.lookup_or_start_build(epoch, peer, build)? {
+            IndexLookup::Ready(index) => return Ok(index),
+            IndexLookup::Building(pending) => pending,
+        };
+        let waited = time::Instant::now();
+        let reported = match reply_by {
+            Some(reply_by) => time::timeout_at(reply_by, pending).await.ok(),
+            None => pending.now_or_never(),
+        };
+        match reported {
+            Some(Ok(result)) => result,
+            // The build task was dropped before it could report: the runtime is shutting down.
+            Some(Err(_)) => Err(ForwardEpochSyncError::Internal),
+            None => {
+                info!(
+                    epoch = epoch,
+                    remote_peer = peer,
+                    waited_ms = waited.elapsed().as_millis() as u64,
+                    reason = "build_running",
+                    "Forward epoch sync index is still building; answering Busy"
+                );
+                Err(ForwardEpochSyncError::Busy)
+            }
+        }
+    }
+
+    fn lookup_or_start_build(
+        self: &Arc<Self>,
+        epoch: u64,
+        peer: AccountAddress,
+        build: impl Future<Output = Result<ForwardEpochSyncIndex, ForwardEpochSyncError>>
+            + Send
+            + 'static,
+    ) -> Result<IndexLookup, ForwardEpochSyncError> {
+        let mut indexes = self.indexes.lock();
+        if let Some(index) = indexes.ready.get(&epoch) {
+            return Ok(IndexLookup::Ready(index.clone()));
+        }
+        if let Some(pending) = indexes.in_flight.get(&epoch) {
+            return Ok(IndexLookup::Building(pending.clone()));
+        }
+        if indexes.cold_build_peers.contains(&peer) {
+            warn!(
+                epoch = epoch,
+                remote_peer = peer,
+                reason = "cold_build_per_peer",
+                "Reject forward epoch sync cold build"
+            );
+            return Err(ForwardEpochSyncError::Busy);
+        }
+        let Ok(permit) = self.cold_build_quota.clone().try_acquire_owned() else {
+            warn!(
+                epoch = epoch,
+                remote_peer = peer,
+                reason = "cold_build_quota",
+                "Reject forward epoch sync cold build"
+            );
+            return Err(ForwardEpochSyncError::Busy);
+        };
+        indexes.cold_build_peers.insert(peer);
+        let (report, pending) = oneshot::channel();
+        let pending = pending.shared();
+        indexes.in_flight.insert(epoch, pending.clone());
+        // The build outlives the request that started it: a requester that answered `Busy`
+        // meanwhile comes back to the cache or joins here.
+        let service = self.clone();
+        tokio::spawn(async move {
+            let build_start = Instant::now();
+            let result = build.await.map(Arc::new);
+            if let Ok(index) = &result {
+                info!(
+                    epoch = epoch,
+                    entries = index.entries.len(),
+                    boundaries = index.boundaries.len(),
+                    build_elapsed_ms = build_start.elapsed().as_millis() as u64,
+                    "Built forward epoch sync index"
+                );
+            }
+            service.finish_cold_build(epoch, peer, permit, &result);
+            // Nobody may be listening: the initiator answered `Busy` and no request joined since.
+            let _ = report.send(result);
+        });
+        Ok(IndexLookup::Building(pending))
+    }
+
+    /// Publishes the outcome and frees the slot and the permit in one critical section, so a
+    /// peer never finds its slot free while its permit is still held.
+    fn finish_cold_build(
+        &self,
+        epoch: u64,
+        peer: AccountAddress,
+        permit: OwnedSemaphorePermit,
+        result: &IndexBuildResult,
+    ) {
+        let mut indexes = self.indexes.lock();
+        indexes.in_flight.remove(&epoch);
+        indexes.cold_build_peers.remove(&peer);
+        if let Ok(index) = result {
+            indexes.ready.put(epoch, index.clone());
+        }
+        drop(permit);
     }
 }
 
@@ -619,31 +844,29 @@ impl BlockStore {
         Ok(ForwardEpochSyncIndex { manifest, entries: reverse_entries, positions, boundaries })
     }
 
-    fn forward_epoch_sync_index(
+    async fn forward_epoch_sync_index(
         &self,
+        peer: AccountAddress,
         epoch: u64,
-    ) -> Result<Arc<ForwardEpochSyncIndex>, ForwardEpochSyncError> {
-        let mut indexes = self.forward_epoch_sync_indexes.lock();
-        if let Some(index) = indexes.get(&epoch) {
-            return Ok(index.clone());
-        }
-        // Index build is synchronous and holds this mutex; cold builds can dominate Prepare latency.
-        let build_start = Instant::now();
-        let index =
-            Arc::new(Self::build_forward_epoch_sync_index(&self.storage.consensus_db(), epoch)?);
-        let build_elapsed_ms = build_start.elapsed().as_millis() as u64;
-        info!(
-            epoch = epoch,
-            entries = index.entries.len(),
-            boundaries = index.boundaries.len(),
-            build_elapsed_ms = build_elapsed_ms,
-            "Built forward epoch sync index"
-        );
-        // A BlockStore only needs to serve the epoch it currently owns. Bounding this map avoids
-        // retaining historical path metadata after unusual cross-epoch requests.
-        indexes.clear();
-        indexes.insert(epoch, index.clone());
-        Ok(index)
+        reply_by: Option<time::Instant>,
+    ) -> IndexBuildResult {
+        let db = self.storage.consensus_db();
+        self.forward_epoch_sync_service
+            .index(epoch, peer, reply_by, async move {
+                // The build scans RocksDB; keep it off the async workers.
+                match tokio::task::spawn_blocking(move || {
+                    Self::build_forward_epoch_sync_index(&db, epoch)
+                })
+                .await
+                {
+                    Ok(result) => result,
+                    Err(error) => {
+                        error!(epoch = epoch, error = ?error, "Forward epoch sync index build task failed");
+                        Err(ForwardEpochSyncError::Internal)
+                    }
+                }
+            })
+            .await
     }
 
     fn validate_forward_anchor(
@@ -668,11 +891,13 @@ impl BlockStore {
         }
     }
 
-    fn prepare_forward_epoch_sync(
+    async fn prepare_forward_epoch_sync(
         &self,
+        peer: AccountAddress,
         request: ForwardEpochSyncPrepareRequest,
+        reply_by: time::Instant,
     ) -> ForwardEpochSyncResponseV1 {
-        let index = match self.forward_epoch_sync_index(request.epoch) {
+        let index = match self.forward_epoch_sync_index(peer, request.epoch, Some(reply_by)).await {
             Ok(index) => index,
             Err(error) => return ForwardEpochSyncResponseV1::Error(error),
         };
@@ -686,15 +911,28 @@ impl BlockStore {
         }
     }
 
-    fn fetch_forward_epoch_sync(
+    async fn fetch_forward_epoch_sync(
         &self,
+        peer: AccountAddress,
         request: ForwardEpochSyncFetchRequest,
         max_blocks_allowed: u64,
     ) -> ForwardEpochSyncResponseV1 {
         if request.batch_size_blocks == 0 || request.batch_size_blocks > max_blocks_allowed {
             return ForwardEpochSyncResponseV1::Error(ForwardEpochSyncError::InvalidBatchSize);
         }
-        let index = match self.forward_epoch_sync_index(request.epoch) {
+        let Some(_permit) = self.forward_epoch_sync_service.try_acquire_fetch() else {
+            warn!(
+                remote_peer = peer,
+                epoch = request.epoch,
+                reason = "fetch_quota",
+                "Reject forward epoch sync fetch because the service is busy"
+            );
+            return ForwardEpochSyncResponseV1::Error(ForwardEpochSyncError::Busy);
+        };
+        // A Fetch never waits for a cold build (a miss here means the serving node restarted or
+        // evicted the epoch): its client times out after `RPC_TIMEOUT_MSEC`, well inside the
+        // inbound cap, and its `Busy` backoff polls until the index is ready.
+        let index = match self.forward_epoch_sync_index(peer, request.epoch, None).await {
             Ok(index) => index,
             Err(error) => return ForwardEpochSyncResponseV1::Error(error),
         };
@@ -796,15 +1034,18 @@ impl BlockStore {
             remote_peer = remote_peer,
             epoch = epoch,
             kind = kind,
+            queued_ms = request.received_at.elapsed().as_millis() as u64,
             "Received forward epoch sync request"
         );
         let started = Instant::now();
         let response = match request.req {
             ForwardEpochSyncRequest::V1(ForwardEpochSyncRequestV1::Prepare(prepare)) => {
-                self.prepare_forward_epoch_sync(prepare)
+                let reply_by = request.received_at +
+                    Duration::from_millis(FORWARD_EPOCH_SYNC_SLOW_BUILD_REPLY_MSEC);
+                self.prepare_forward_epoch_sync(remote_peer, prepare, reply_by).await
             }
             ForwardEpochSyncRequest::V1(ForwardEpochSyncRequestV1::Fetch(fetch)) => {
-                self.fetch_forward_epoch_sync(fetch, max_blocks_allowed)
+                self.fetch_forward_epoch_sync(remote_peer, fetch, max_blocks_allowed).await
             }
         };
         let elapsed_ms = started.elapsed().as_millis() as u64;
@@ -1233,20 +1474,17 @@ impl BlockRetriever {
         let request = ForwardEpochSyncRequest::V1(ForwardEpochSyncRequestV1::Prepare(
             ForwardEpochSyncPrepareRequest { epoch, anchor_block_number, anchor_block_id },
         ));
-        // Default Prepare timeout is sized for cold index builds on a mature serving peer
-        // (see FORWARD_EPOCH_SYNC_PREPARE_TIMEOUT_MSEC_DEFAULT). Override via
-        // FORWARD_EPOCH_SYNC_PREPARE_TIMEOUT_MSEC if needed. A peer that cannot decode the
-        // appended message variant drops it silently, so an old binary also shows up as a timeout.
-        let prepare_timeout_msec = crate::forward_epoch_sync_prepare_timeout_msec();
+        // A peer that cannot decode the appended message variant drops it silently, so an old
+        // binary also shows up as a timeout.
         info!(
             epoch = epoch,
-            prepare_timeout_msec = prepare_timeout_msec,
+            prepare_timeout_msec = FORWARD_EPOCH_SYNC_PREPARE_TIMEOUT_MSEC,
             "Trying forward epoch sync Prepare"
         );
         let (manifest, serving_peer) = match self
             .prepare_forward_epoch_sync_from_any_peer(
                 request,
-                Duration::from_millis(prepare_timeout_msec),
+                Duration::from_millis(FORWARD_EPOCH_SYNC_PREPARE_TIMEOUT_MSEC),
             )
             .await?
         {
@@ -1415,9 +1653,11 @@ mod forward_epoch_sync_tests {
     use super::{
         certifying_position_in_batch, decode_forward_epoch_sync_fetch_response, fetch_from_peer,
         prepare_from_candidates, select_forward_batch_end, BlockStore, BusyBackoff, FetchStep,
-        PrepareOutcome, ProgressWatchdog, FORWARD_EPOCH_SYNC_MAX_BUSY_RETRIES,
+        ForwardEpochSyncIndex, ForwardEpochSyncService, PrepareOutcome, ProgressWatchdog,
+        FORWARD_EPOCH_SYNC_INDEX_CACHE_EPOCHS, FORWARD_EPOCH_SYNC_MAX_BUSY_RETRIES,
         FORWARD_EPOCH_SYNC_MIN_BLOCKS_PER_WINDOW, FORWARD_EPOCH_SYNC_PREPARE_ATTEMPT_MSEC,
-        FORWARD_EPOCH_SYNC_PROGRESS_WINDOW_MSEC,
+        FORWARD_EPOCH_SYNC_PREPARE_TIMEOUT_MSEC, FORWARD_EPOCH_SYNC_PROGRESS_WINDOW_MSEC,
+        FORWARD_EPOCH_SYNC_REPROBE_DELAY_MSEC, FORWARD_EPOCH_SYNC_SLOW_BUILD_REPLY_MSEC,
     };
     use crate::consensusdb::{
         schema::{epoch_by_block_number::EpochByBlockNumberSchema, ledger_info::LedgerInfoSchema},
@@ -1436,6 +1676,7 @@ mod forward_epoch_sync_tests {
     };
     use gaptos::{
         aptos_crypto::HashValue,
+        aptos_network::{application::error::Error as NetworkError, protocols::network::RpcError},
         aptos_temppath::TempPath,
         aptos_types::{
             account_address::AccountAddress,
@@ -1445,7 +1686,18 @@ mod forward_epoch_sync_tests {
             validator_signer::ValidatorSigner,
         },
     };
-    use std::{cell::RefCell, path::PathBuf, rc::Rc, time::Duration};
+    use std::{
+        cell::RefCell,
+        collections::HashMap,
+        future::{self, Future},
+        path::PathBuf,
+        rc::Rc,
+        sync::{
+            atomic::{AtomicUsize, Ordering},
+            Arc,
+        },
+        time::Duration,
+    };
     use tokio::time;
 
     #[test]
@@ -1606,10 +1858,17 @@ mod forward_epoch_sync_tests {
         }
     }
 
-    const PREPARE_TIMEOUT: Duration = Duration::from_secs(30);
+    const PREPARE_TIMEOUT: Duration =
+        Duration::from_millis(FORWARD_EPOCH_SYNC_PREPARE_TIMEOUT_MSEC);
+    const REPROBE_DELAY: Duration = Duration::from_millis(FORWARD_EPOCH_SYNC_REPROBE_DELAY_MSEC);
 
     fn attempt_deadline() -> time::Instant {
         time::Instant::now() + Duration::from_millis(FORWARD_EPOCH_SYNC_PREPARE_ATTEMPT_MSEC)
+    }
+
+    /// The error the network layer hands the client when a probe times out.
+    fn rpc_timed_out() -> anyhow::Error {
+        NetworkError::RpcError(RpcError::TimedOut.to_string()).into()
     }
 
     /// A peer that answers `reply` after `delay`, or times out like the network layer would if
@@ -1621,7 +1880,7 @@ mod forward_epoch_sync_tests {
     ) -> anyhow::Result<ForwardEpochSyncResponse> {
         if delay > timeout {
             time::sleep(timeout).await;
-            return Err(anyhow::anyhow!("timed out"));
+            return Err(rpc_timed_out());
         }
         time::sleep(delay).await;
         reply
@@ -1664,7 +1923,7 @@ mod forward_epoch_sync_tests {
     }
 
     #[tokio::test(start_paused = true)]
-    async fn prepare_probes_each_silent_peer_twice_then_reports_no_serving_peer() {
+    async fn prepare_probes_each_unreachable_peer_twice_without_pausing() {
         let peers: Vec<_> = (0..3).map(|_| AccountAddress::random()).collect();
         let calls = Rc::new(RefCell::new(Vec::new()));
         let started = time::Instant::now();
@@ -1672,7 +1931,7 @@ mod forward_epoch_sync_tests {
         let outcome = prepare_from_candidates(
             |peer, _timeout| {
                 calls.borrow_mut().push(peer);
-                async { Err(anyhow::anyhow!("timed out")) }
+                async { Err(anyhow::anyhow!("not connected")) }
             },
             peers.clone(),
             PREPARE_TIMEOUT,
@@ -1685,7 +1944,45 @@ mod forward_epoch_sync_tests {
         let mut expected = peers.clone();
         expected.extend(peers.iter().copied());
         assert_eq!(*calls.borrow(), expected, "one full pass, then one retry pass");
-        assert_eq!(time::Instant::now(), started, "silent peers are re-probed without sleeping");
+        assert_eq!(
+            time::Instant::now(),
+            started,
+            "a failure that did not wait is re-probed without a pause"
+        );
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn prepare_pauses_before_re_probing_a_timed_out_peer() {
+        // The peer's cold build overran the inbound cap on the first probe (no reply) and is
+        // cached by the second.
+        let peer = AccountAddress::random();
+        let manifest = sample_manifest();
+        let calls = Rc::new(RefCell::new(0usize));
+        let started = time::Instant::now();
+
+        let outcome = prepare_from_candidates(
+            |_, timeout| {
+                *calls.borrow_mut() += 1;
+                let first = *calls.borrow() == 1;
+                let reply = prepared_reply(&manifest);
+                async move {
+                    if first {
+                        slow_reply(Duration::MAX, timeout, reply).await
+                    } else {
+                        reply
+                    }
+                }
+            },
+            vec![peer],
+            PREPARE_TIMEOUT,
+            attempt_deadline(),
+        )
+        .await
+        .unwrap();
+
+        assert!(matches!(outcome, PrepareOutcome::Prepared(_, got) if got == peer));
+        assert_eq!(*calls.borrow(), 2);
+        assert_eq!(time::Instant::now() - started, PREPARE_TIMEOUT + REPROBE_DELAY);
     }
 
     #[tokio::test(start_paused = true)]
@@ -1748,8 +2045,8 @@ mod forward_epoch_sync_tests {
 
     #[tokio::test(start_paused = true)]
     async fn prepare_attempt_ends_at_its_deadline_with_old_binaries() {
-        // Five old binaries that never answer: only three 30 s probes fit in the attempt, so the
-        // remaining peers are never asked and there is no second pass.
+        // Five old binaries that never answer: the first pass costs 50 s, the re-probe pause 5 s,
+        // and the fourth probe of the second pass is cut short at the 90 s deadline.
         let peers: Vec<_> = (0..5).map(|_| AccountAddress::random()).collect();
         let calls = Rc::new(RefCell::new(Vec::new()));
         let started = time::Instant::now();
@@ -1767,24 +2064,26 @@ mod forward_epoch_sync_tests {
         .unwrap();
 
         assert!(matches!(outcome, PrepareOutcome::NoServingPeer));
-        assert_eq!(*calls.borrow(), peers[..3]);
+        let mut expected = peers.clone();
+        expected.extend_from_slice(&peers[..4]);
+        assert_eq!(*calls.borrow(), expected);
         assert_eq!(time::Instant::now() - started, Duration::from_secs(90));
     }
 
     #[tokio::test(start_paused = true)]
-    async fn prepare_attempt_with_slow_busy_peer_is_bounded_by_the_deadline() {
-        // A peer that answers `Busy` just under the probe timeout cannot stretch the attempt
-        // beyond the deadline: the third probe is cut short and the attempt reports StillBusy.
-        let peer = AccountAddress::random();
+    async fn prepare_attempt_with_slow_busy_peers_is_bounded_by_the_deadline() {
+        // Peers that answer `Busy` just under the probe timeout cannot stretch the attempt beyond
+        // the deadline: the ninth probe is cut short and the attempt reports StillBusy.
+        let peers: Vec<_> = (0..3).map(|_| AccountAddress::random()).collect();
         let calls = Rc::new(RefCell::new(0usize));
         let started = time::Instant::now();
 
         let outcome = prepare_from_candidates(
             |_, timeout| {
                 *calls.borrow_mut() += 1;
-                slow_reply(Duration::from_millis(29_900), timeout, busy_reply())
+                slow_reply(Duration::from_millis(9_900), timeout, busy_reply())
             },
-            vec![peer],
+            peers,
             PREPARE_TIMEOUT,
             attempt_deadline(),
         )
@@ -1792,15 +2091,16 @@ mod forward_epoch_sync_tests {
         .unwrap();
 
         assert!(matches!(outcome, PrepareOutcome::StillBusy));
-        // 29.9 + 0.5 + 29.9 + 1 = 61.3 s, then the third probe is limited to the 28.7 s left.
-        assert_eq!(*calls.borrow(), 3);
+        // 3 × 9.9 + 0.5 + 3 × 9.9 + 1 = 60.9 s, two more probes reach 80.7 s, and the last one is
+        // limited to the 9.3 s left.
+        assert_eq!(*calls.borrow(), 9);
         assert_eq!(time::Instant::now() - started, Duration::from_secs(90));
     }
 
     #[tokio::test(start_paused = true)]
-    async fn prepare_re_probes_silent_alternate_after_busy_backoff() {
-        // Preferred is saturated; the alternate's cold index build overran the inbound cap on
-        // the first probe (no reply) and is cached by the second.
+    async fn prepare_pauses_once_per_pass_for_busy_and_timed_out_peers() {
+        // Preferred is saturated and the alternate timed out (instantly here, to isolate the
+        // pause): the pass switch waits the longer of the two, the 5 s re-probe delay.
         let preferred = AccountAddress::random();
         let alternate = AccountAddress::random();
         let manifest = sample_manifest();
@@ -1814,7 +2114,7 @@ mod forward_epoch_sync_tests {
                 let reply = if peer == preferred {
                     busy_reply()
                 } else if alternate_calls == 1 {
-                    Err(anyhow::anyhow!("timed out"))
+                    Err(rpc_timed_out())
                 } else {
                     prepared_reply(&manifest)
                 };
@@ -1829,7 +2129,7 @@ mod forward_epoch_sync_tests {
 
         assert!(matches!(outcome, PrepareOutcome::Prepared(_, peer) if peer == alternate));
         assert_eq!(*calls.borrow(), vec![preferred, alternate, preferred, alternate]);
-        assert_eq!(time::Instant::now() - started, Duration::from_millis(500));
+        assert_eq!(time::Instant::now() - started, REPROBE_DELAY);
     }
 
     #[test]
@@ -1972,5 +2272,285 @@ mod forward_epoch_sync_tests {
         ));
         assert_eq!(*calls.borrow(), 1, "only Busy is retried here; other errors go to the caller");
         assert_eq!(time::Instant::now(), started);
+    }
+
+    // Serving side: index cache, cold-build admission, early `Busy`.
+
+    fn service(cold_build_quota: usize, fetch_quota: usize) -> Arc<ForwardEpochSyncService> {
+        Arc::new(ForwardEpochSyncService::new(cold_build_quota, fetch_quota))
+    }
+
+    fn built_index(epoch: u64) -> ForwardEpochSyncIndex {
+        ForwardEpochSyncIndex {
+            manifest: ForwardEpochSyncManifest { epoch, ..sample_manifest() },
+            entries: Vec::new(),
+            positions: HashMap::new(),
+            boundaries: Vec::new(),
+        }
+    }
+
+    /// A build that completes after `delay` and counts how often it actually ran.
+    fn timed_build(
+        epoch: u64,
+        delay: Duration,
+        builds: &Arc<AtomicUsize>,
+    ) -> impl Future<Output = Result<ForwardEpochSyncIndex, ForwardEpochSyncError>> + Send + 'static
+    {
+        let builds = builds.clone();
+        async move {
+            builds.fetch_add(1, Ordering::SeqCst);
+            time::sleep(delay).await;
+            Ok(built_index(epoch))
+        }
+    }
+
+    /// The deadline a Prepare received right now gets.
+    fn reply_by() -> Option<time::Instant> {
+        Some(time::Instant::now() + Duration::from_millis(FORWARD_EPOCH_SYNC_SLOW_BUILD_REPLY_MSEC))
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn index_cache_hit_needs_no_cold_build_quota() {
+        let service = service(1, 1);
+        let (a, b) = (AccountAddress::random(), AccountAddress::random());
+        let builds = Arc::new(AtomicUsize::new(0));
+
+        // Epoch 2 is cached first; then peer A's build of epoch 1 takes the only permit for good.
+        service.index(2, a, reply_by(), timed_build(2, Duration::ZERO, &builds)).await.unwrap();
+        let refused = service.index(1, a, reply_by(), future::pending()).await;
+        assert_eq!(refused.err(), Some(ForwardEpochSyncError::Busy));
+
+        let started = time::Instant::now();
+        let hit = service.index(2, b, reply_by(), timed_build(2, Duration::ZERO, &builds)).await;
+        assert!(hit.is_ok());
+        assert_eq!(time::Instant::now(), started, "a cache hit neither waits nor builds");
+        assert_eq!(builds.load(Ordering::SeqCst), 1);
+
+        let cold = service.index(3, b, reply_by(), timed_build(3, Duration::ZERO, &builds)).await;
+        assert_eq!(cold.err(), Some(ForwardEpochSyncError::Busy), "a cold build needs a permit");
+        assert_eq!(builds.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn concurrent_prepares_for_one_epoch_share_one_build() {
+        let service = service(1, 1);
+        let (a, b) = (AccountAddress::random(), AccountAddress::random());
+        let builds = Arc::new(AtomicUsize::new(0));
+        let started = time::Instant::now();
+
+        let (first, second) = tokio::join!(
+            service.index(7, a, reply_by(), timed_build(7, Duration::from_secs(1), &builds)),
+            service.index(7, b, reply_by(), timed_build(7, Duration::from_secs(1), &builds)),
+        );
+
+        let (first, second) = (first.unwrap(), second.unwrap());
+        assert!(Arc::ptr_eq(&first, &second));
+        assert_eq!(builds.load(Ordering::SeqCst), 1, "the second request joined the build");
+        assert_eq!(time::Instant::now() - started, Duration::from_secs(1));
+        // The joiner took neither the permit nor a peer slot, and the build gave its own back.
+        let next = service.index(8, b, reply_by(), timed_build(8, Duration::ZERO, &builds)).await;
+        assert!(next.is_ok());
+    }
+
+    // Also the lock-scope check the design asks for: peer A's build stays parked for the rest of
+    // the test, so a guard held across the build would deadlock the next `index()` call.
+    #[tokio::test(start_paused = true)]
+    async fn one_peer_gets_one_cold_build_at_a_time() {
+        let service = service(4, 1);
+        let (a, b) = (AccountAddress::random(), AccountAddress::random());
+        let builds = Arc::new(AtomicUsize::new(0));
+
+        // Peer A's build of epoch 1 never finishes, so A keeps its slot.
+        let slow = service.index(1, a, reply_by(), future::pending()).await;
+        assert_eq!(slow.err(), Some(ForwardEpochSyncError::Busy));
+
+        let started = time::Instant::now();
+        let second = service.index(2, a, reply_by(), timed_build(2, Duration::ZERO, &builds)).await;
+        assert_eq!(second.err(), Some(ForwardEpochSyncError::Busy));
+        assert_eq!(time::Instant::now(), started, "refused at once, not after waiting");
+        assert_eq!(builds.load(Ordering::SeqCst), 0);
+
+        let other = service.index(2, b, reply_by(), timed_build(2, Duration::ZERO, &builds)).await;
+        assert!(other.is_ok(), "another peer may build epoch 2 meanwhile");
+        assert_eq!(builds.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn fetch_quota_is_separate_from_cold_build_quota() {
+        let service = service(1, 1);
+        let a = AccountAddress::random();
+
+        let slow = service.index(1, a, reply_by(), future::pending()).await;
+        assert_eq!(slow.err(), Some(ForwardEpochSyncError::Busy), "the cold-build permit is taken");
+
+        let permit = service.try_acquire_fetch();
+        assert!(permit.is_some(), "Fetch has its own pool");
+        assert!(service.try_acquire_fetch().is_none());
+        drop(permit);
+        assert!(service.try_acquire_fetch().is_some());
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn index_cache_keeps_the_most_recent_epochs() {
+        let service = service(4, 1);
+        let a = AccountAddress::random();
+        let builds = Arc::new(AtomicUsize::new(0));
+
+        let cap = FORWARD_EPOCH_SYNC_INDEX_CACHE_EPOCHS as u64;
+        for epoch in 1..=cap {
+            service
+                .index(epoch, a, reply_by(), timed_build(epoch, Duration::ZERO, &builds))
+                .await
+                .unwrap();
+        }
+        // A hit on the oldest epoch makes it recent again, so the next miss evicts epoch 2.
+        service.index(1, a, reply_by(), timed_build(1, Duration::ZERO, &builds)).await.unwrap();
+        service
+            .index(cap + 1, a, reply_by(), timed_build(cap + 1, Duration::ZERO, &builds))
+            .await
+            .unwrap();
+
+        assert_eq!(builds.load(Ordering::SeqCst), cap as usize + 1, "the hit did not rebuild");
+        let indexes = service.indexes.lock();
+        assert!(!indexes.ready.contains(&2), "the least recently used epoch is evicted");
+        assert!(indexes.ready.contains(&1));
+        assert!((3..=cap + 1).all(|epoch| indexes.ready.contains(&epoch)));
+        assert!(indexes.in_flight.is_empty());
+        assert!(indexes.cold_build_peers.is_empty());
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn slow_build_answers_busy_then_serves_from_cache() {
+        let service = service(1, 1);
+        let a = AccountAddress::random();
+        let builds = Arc::new(AtomicUsize::new(0));
+        let started = time::Instant::now();
+
+        let first =
+            service.index(1, a, reply_by(), timed_build(1, Duration::from_secs(20), &builds)).await;
+        assert_eq!(first.err(), Some(ForwardEpochSyncError::Busy));
+        assert_eq!(
+            time::Instant::now() - started,
+            Duration::from_millis(FORWARD_EPOCH_SYNC_SLOW_BUILD_REPLY_MSEC),
+            "Busy leaves the RPC with time to spare before the inbound cap"
+        );
+
+        // The build carries on without a requester and lands in the cache.
+        time::sleep(Duration::from_secs(12) + Duration::from_millis(1)).await;
+        {
+            let indexes = service.indexes.lock();
+            assert!(indexes.ready.contains(&1));
+            assert!(indexes.in_flight.is_empty());
+            assert!(indexes.cold_build_peers.is_empty());
+        }
+
+        let started = time::Instant::now();
+        let retry = service.index(1, a, reply_by(), timed_build(1, Duration::ZERO, &builds)).await;
+        assert!(retry.is_ok());
+        assert_eq!(time::Instant::now(), started);
+        assert_eq!(builds.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn reply_deadline_counts_from_receipt_not_from_handler_start() {
+        let service = service(1, 1);
+        let a = AccountAddress::random();
+        let builds = Arc::new(AtomicUsize::new(0));
+
+        // The request sat in a queue for 5 s before its handler ran: 3 s of the budget are left.
+        let received_at = time::Instant::now();
+        let reply_by =
+            Some(received_at + Duration::from_millis(FORWARD_EPOCH_SYNC_SLOW_BUILD_REPLY_MSEC));
+        time::sleep(Duration::from_secs(5)).await;
+        let started = time::Instant::now();
+        let late =
+            service.index(1, a, reply_by, timed_build(1, Duration::from_secs(20), &builds)).await;
+        assert_eq!(late.err(), Some(ForwardEpochSyncError::Busy));
+        assert_eq!(time::Instant::now() - started, Duration::from_secs(3));
+
+        // A deadline that has already passed still joins (or starts) the build, but answers at
+        // once.
+        let expired = Some(received_at);
+        let started = time::Instant::now();
+        let joined = service.index(1, a, expired, timed_build(1, Duration::ZERO, &builds)).await;
+        assert_eq!(joined.err(), Some(ForwardEpochSyncError::Busy));
+        assert_eq!(time::Instant::now(), started);
+        assert_eq!(builds.load(Ordering::SeqCst), 1);
+
+        // Once cached, an expired deadline is no obstacle.
+        time::sleep(Duration::from_secs(20)).await;
+        let hit = service.index(1, a, expired, timed_build(1, Duration::ZERO, &builds)).await;
+        assert!(hit.is_ok());
+        assert_eq!(builds.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn re_ask_after_early_busy_joins_the_running_build() {
+        let service = service(1, 1);
+        let (a, b) = (AccountAddress::random(), AccountAddress::random());
+        let builds = Arc::new(AtomicUsize::new(0));
+
+        let first =
+            service.index(1, a, reply_by(), timed_build(1, Duration::from_secs(12), &builds)).await;
+        assert_eq!(first.err(), Some(ForwardEpochSyncError::Busy));
+        // The client's Busy backoff, then its retry, alongside another peer's first ask.
+        time::sleep(Duration::from_millis(500)).await;
+        let started = time::Instant::now();
+
+        let (again, other) = tokio::join!(
+            service.index(1, a, reply_by(), timed_build(1, Duration::ZERO, &builds)),
+            service.index(1, b, reply_by(), timed_build(1, Duration::ZERO, &builds)),
+        );
+
+        let (again, other) = (again.unwrap(), other.unwrap());
+        assert!(Arc::ptr_eq(&again, &other));
+        assert_eq!(builds.load(Ordering::SeqCst), 1, "no second build for the same epoch");
+        assert_eq!(
+            time::Instant::now() - started,
+            Duration::from_millis(3_500),
+            "both are served the moment the running build finishes"
+        );
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn fetch_lookup_never_waits_for_a_build() {
+        let service = service(1, 1);
+        let a = AccountAddress::random();
+        let builds = Arc::new(AtomicUsize::new(0));
+        let started = time::Instant::now();
+
+        let miss = service.index(1, a, None, timed_build(1, Duration::from_secs(1), &builds)).await;
+        assert_eq!(miss.err(), Some(ForwardEpochSyncError::Busy));
+        assert_eq!(time::Instant::now(), started, "answered at once");
+
+        time::sleep(Duration::from_secs(1) + Duration::from_millis(1)).await;
+        let hit = service.index(1, a, None, timed_build(1, Duration::ZERO, &builds)).await;
+        assert!(hit.is_ok());
+        assert_eq!(builds.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn failed_build_is_reported_to_every_waiter_and_frees_the_slot() {
+        let service = service(1, 1);
+        let (a, b) = (AccountAddress::random(), AccountAddress::random());
+        let builds = Arc::new(AtomicUsize::new(0));
+
+        let (first, second) = tokio::join!(
+            service.index(1, a, reply_by(), async { Err(ForwardEpochSyncError::EpochNotFound) }),
+            service.index(1, b, reply_by(), timed_build(1, Duration::ZERO, &builds)),
+        );
+
+        assert_eq!(first.err(), Some(ForwardEpochSyncError::EpochNotFound));
+        assert_eq!(second.err(), Some(ForwardEpochSyncError::EpochNotFound), "the joiner too");
+        assert_eq!(builds.load(Ordering::SeqCst), 0);
+        {
+            let indexes = service.indexes.lock();
+            assert!(!indexes.ready.contains(&1), "failures are not cached");
+            assert!(indexes.in_flight.is_empty());
+            assert!(indexes.cold_build_peers.is_empty());
+        }
+        // Slot and permit are back: the same peer may start another build at once.
+        let next = service.index(2, a, reply_by(), timed_build(2, Duration::ZERO, &builds)).await;
+        assert!(next.is_ok());
     }
 }

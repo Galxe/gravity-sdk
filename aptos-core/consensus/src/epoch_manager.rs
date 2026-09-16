@@ -6,7 +6,7 @@ use crate::{
     block_storage::{
         pending_blocks::PendingBlocks,
         tracing::{observe_block, BlockStage},
-        BlockReader, BlockStore,
+        BlockReader, BlockStore, ForwardEpochSyncService,
     },
     consensus_observer::publisher::ConsensusPublisher,
     dag::{DagBootstrapper, DagCommitSigner, StorageAdapter},
@@ -137,7 +137,6 @@ const PROPOSER_ELECTION_CACHING_WINDOW_ADDITION: usize = 3;
 /// Number of rounds we expect storage to be ahead of the proposer round,
 /// used for fetching data from DB.
 const PROPOSER_ROUND_BEHIND_STORAGE_BUFFER: usize = 10;
-const FORWARD_EPOCH_SYNC_MAX_CONCURRENT_REQUESTS: usize = 4;
 
 #[allow(clippy::large_enum_variant)]
 pub enum LivenessStorageData {
@@ -177,6 +176,8 @@ pub struct EpochManager<P: OnChainConfigProvider> {
         Option<aptos_channel::Sender<AccountAddress, IncomingBlockRetrievalRequest>>,
     forward_epoch_sync_tx:
         Option<aptos_channel::Sender<AccountAddress, IncomingForwardEpochSyncRequest>>,
+    /// Outlives the per-epoch block stores so served indexes survive the node's own epoch changes.
+    forward_epoch_sync_service: Arc<ForwardEpochSyncService>,
     sync_info_request_tx: Option<aptos_channel::Sender<AccountAddress, IncomingSyncInfoRequest>>,
     quorum_store_msg_tx: Option<aptos_channel::Sender<AccountAddress, VerifiedEvent>>,
     quorum_store_coordinator_tx: Option<Sender<CoordinatorCommand>>,
@@ -291,6 +292,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
             epoch_state: None,
             block_retrieval_tx: None,
             forward_epoch_sync_tx: None,
+            forward_epoch_sync_service: Arc::new(ForwardEpochSyncService::from_env()),
             sync_info_request_tx: None,
             quorum_store_msg_tx: None,
             quorum_store_coordinator_tx: None,
@@ -641,29 +643,13 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
     ) {
         let (request_tx, mut request_rx) =
             aptos_channel::new::<_, IncomingForwardEpochSyncRequest>(QueueStyle::FIFO, 1, None);
-        let permits =
-            Arc::new(tokio::sync::Semaphore::new(FORWARD_EPOCH_SYNC_MAX_CONCURRENT_REQUESTS));
+        // Admission (cold-build and Fetch quotas) lives in the block store's serving state, so a
+        // cache hit is never queued behind a cold build.
         let task = async move {
             info!(epoch = epoch, "Forward epoch sync task starts");
             while let Some(request) = request_rx.next().await {
-                let permit = match permits.clone().try_acquire_owned() {
-                    Ok(permit) => permit,
-                    Err(_) => {
-                        warn!(
-                            epoch = epoch,
-                            remote_peer = request.sender,
-                            "Reject forward epoch sync request because the service is busy"
-                        );
-                        Self::respond_forward_epoch_sync_error(
-                            request,
-                            ForwardEpochSyncError::Busy,
-                        );
-                        continue;
-                    }
-                };
                 let block_store = block_store.clone();
                 tokio::spawn(async move {
-                    let _permit = permit;
                     if let Err(error) =
                         block_store.process_forward_epoch_sync(request, max_blocks_allowed).await
                     {
@@ -959,6 +945,7 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
                 onchain_randomness_config.randomness_enabled(),
                 require_block_randomness,
                 validator_indices,
+                self.forward_epoch_sync_service.clone(),
             )
             .await,
         );

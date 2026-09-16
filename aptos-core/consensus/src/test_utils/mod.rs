@@ -4,7 +4,7 @@
 
 #![allow(clippy::unwrap_used)]
 use crate::{
-    block_storage::{BlockReader, BlockStore},
+    block_storage::{BlockReader, BlockStore, ForwardEpochSyncService},
     payload_manager::DirectMempoolPayloadManager,
 };
 use aptos_consensus_types::{
@@ -96,6 +96,7 @@ pub async fn build_empty_tree() -> Arc<BlockStore> {
         false,
         false,
         HashMap::new(), // validator_indices: empty for tests
+        Arc::new(ForwardEpochSyncService::from_env()),
     ))
 }
 

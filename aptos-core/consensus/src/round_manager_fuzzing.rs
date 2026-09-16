@@ -7,7 +7,7 @@
 #![allow(clippy::unwrap_used)]
 
 use crate::{
-    block_storage::{pending_blocks::PendingBlocks, BlockStore},
+    block_storage::{pending_blocks::PendingBlocks, BlockStore, ForwardEpochSyncService},
     liveness::{
         proposal_generator::{
             ChainHealthBackoffConfig, PipelineBackpressureConfig, ProposalGenerator,
@@ -104,6 +104,7 @@ fn build_empty_store(
         false,
         false,
         HashMap::new(), // validator_indices: empty for fuzzing
+        Arc::new(ForwardEpochSyncService::from_env()),
     ))
 }
 

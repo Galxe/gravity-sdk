@@ -10,7 +10,7 @@ use aptos_consensus_types::{
     wrapped_ledger_info::WrappedLedgerInfo,
 };
 pub use block_store::{
-    sync_manager::{BlockRetriever, EpochSyncOutcome, NeedFetchResult},
+    sync_manager::{BlockRetriever, EpochSyncOutcome, ForwardEpochSyncService, NeedFetchResult},
     BlockStore,
 };
 use gaptos::aptos_crypto::HashValue;
