@@ -643,8 +643,9 @@ impl<P: OnChainConfigProvider> EpochManager<P> {
     ) {
         let (request_tx, mut request_rx) =
             aptos_channel::new::<_, IncomingForwardEpochSyncRequest>(QueueStyle::FIFO, 1, None);
-        // Admission (cold-build and Fetch quotas) lives in the block store's serving state, so a
-        // cache hit is never queued behind a cold build.
+        // Admission (one Prepare and one Fetch handler per peer, the cold-build and Fetch quotas)
+        // lives in the block store's serving state, so a cache hit is never queued behind a cold
+        // build and a refused request is answered by the task spawned for it.
         let task = async move {
             info!(epoch = epoch, "Forward epoch sync task starts");
             while let Some(request) = request_rx.next().await {

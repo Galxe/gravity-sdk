@@ -45,6 +45,7 @@ use gaptos::{
     aptos_types::{account_address::AccountAddress, ledger_info::LedgerInfoWithSignatures},
 };
 use lru::LruCache;
+use rand::{thread_rng, Rng};
 use std::{
     collections::{HashMap, HashSet},
     future::Future,
@@ -52,7 +53,7 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio::{
-    sync::{oneshot, OwnedSemaphorePermit, Semaphore, SemaphorePermit},
+    sync::{oneshot, OwnedSemaphorePermit, Semaphore},
     time,
 };
 
@@ -111,6 +112,10 @@ fn decode_forward_epoch_sync_fetch_response(
 
 const FORWARD_EPOCH_SYNC_BUSY_BACKOFF_BASE_MSEC: u64 = 500;
 const FORWARD_EPOCH_SYNC_BUSY_BACKOFF_MAX_MSEC: u64 = 8_000;
+/// Each `Busy` sleep is drawn uniformly from ± this share of its nominal length, so clients that
+/// were refused together (a saturated Fetch pool refuses everyone at once) do not all come back
+/// together and collide again.
+const FORWARD_EPOCH_SYNC_BUSY_BACKOFF_JITTER_PERCENT: u32 = 25;
 /// How many times one Prepare attempt sleeps and re-asks the peers that answered `Busy` before
 /// it hands the retry to the next epoch-change trigger (which arrives within about a second).
 const FORWARD_EPOCH_SYNC_MAX_BUSY_RETRIES: u32 = 3;
@@ -138,28 +143,41 @@ const FORWARD_EPOCH_SYNC_INDEX_CACHE_EPOCHS: usize = 4;
 const FORWARD_EPOCH_SYNC_PROGRESS_WINDOW_MSEC: u64 = 60_000;
 const FORWARD_EPOCH_SYNC_MIN_BLOCKS_PER_WINDOW: u64 = 600;
 
-/// Exponential backoff between `Busy` replies: 0.5 s doubling up to 8 s.
+/// Exponential backoff between `Busy` replies: nominally 0.5 s doubling up to 8 s, each sleep
+/// spread by `FORWARD_EPOCH_SYNC_BUSY_BACKOFF_JITTER_PERCENT`.
 ///
-/// `Busy` is transient by construction: a serving quota is saturated or a cold index build is
-/// still running, and both clear on their own. The client therefore waits it out instead of
-/// degrading to legacy sync.
+/// `Busy` is transient by construction: a serving quota is saturated, a cold index build is
+/// still running, or the peer's own previous request is still being served, and all of these
+/// clear on their own. The client therefore waits it out instead of degrading to legacy sync.
 struct BusyBackoff {
     attempt: u32,
+    jitter: bool,
 }
 
 impl BusyBackoff {
-    fn new() -> Self {
-        Self { attempt: 0 }
+    fn jittered() -> Self {
+        Self { attempt: 0, jitter: true }
+    }
+
+    /// The nominal delays, for tests that pin timings.
+    #[cfg(test)]
+    fn exact() -> Self {
+        Self { attempt: 0, jitter: false }
     }
 
     fn next_delay(&mut self) -> Duration {
         let scale = 2u64.saturating_pow(self.attempt);
         self.attempt += 1;
-        Duration::from_millis(
+        let nominal = Duration::from_millis(
             FORWARD_EPOCH_SYNC_BUSY_BACKOFF_BASE_MSEC
                 .saturating_mul(scale)
                 .min(FORWARD_EPOCH_SYNC_BUSY_BACKOFF_MAX_MSEC),
-        )
+        );
+        if !self.jitter {
+            return nominal;
+        }
+        let spread = nominal * FORWARD_EPOCH_SYNC_BUSY_BACKOFF_JITTER_PERCENT / 100;
+        nominal - spread + thread_rng().gen_range(Duration::ZERO, 2 * spread)
     }
 }
 
@@ -266,6 +284,7 @@ async fn prepare_from_candidates<F, Fut>(
     candidates: Vec<AccountAddress>,
     rpc_timeout: Duration,
     deadline: time::Instant,
+    mut backoff: BusyBackoff,
 ) -> anyhow::Result<PrepareOutcome>
 where
     F: FnMut(AccountAddress, Duration) -> Fut,
@@ -273,7 +292,6 @@ where
 {
     let mut queue: Vec<(AccountAddress, bool)> =
         candidates.into_iter().map(|peer| (peer, true)).collect();
-    let mut backoff = BusyBackoff::new();
     let mut busy_retries = 0;
     let mut busy_seen = false;
     let out_of_time = |busy_seen: bool| {
@@ -397,13 +415,13 @@ async fn fetch_from_peer<F, Fut>(
     mut request: F,
     attempts: usize,
     window_end: time::Instant,
+    mut backoff: BusyBackoff,
 ) -> anyhow::Result<FetchStep>
 where
     F: FnMut() -> Fut,
     Fut: Future<Output = anyhow::Result<ForwardEpochSyncResponse>>,
 {
     let attempts = attempts.max(1);
-    let mut backoff = BusyBackoff::new();
     let mut rpc_failures = 0;
     loop {
         match request().await {
@@ -444,14 +462,34 @@ type IndexBuildResult = Result<Arc<ForwardEpochSyncIndex>, ForwardEpochSyncError
 type PendingIndexBuild = Shared<oneshot::Receiver<IndexBuildResult>>;
 
 /// Serving-side state of forward epoch sync, shared by every `BlockStore` of the node: the index
-/// cache, the cold builds in flight, and the two admission quotas.
+/// cache, the cold builds in flight, and the handler admissions.
 ///
 /// Indexes describe finished epochs, which never change, so the cache outlives the epoch the
 /// node itself is in.
 pub struct ForwardEpochSyncService {
     indexes: Mutex<ForwardEpochSyncIndexes>,
     cold_build_quota: Arc<Semaphore>,
-    fetch_quota: Semaphore,
+    /// Peers with an admitted Prepare handler, one per peer.
+    prepare_peers: Mutex<HashSet<AccountAddress>>,
+    /// Peers with an admitted Fetch handler. One per peer, so the set's size is also how many
+    /// Fetch handlers run node-wide; `fetch_quota` caps it.
+    fetch_peers: Mutex<HashSet<AccountAddress>>,
+    fetch_quota: usize,
+}
+
+/// Admission of one handler for one peer, released on drop. Held until the response has been
+/// handed to the network layer, so the admission covers the response's encoding as well as the
+/// work behind it. What the network layer buffers for a slow reader after that hand-off is its
+/// own backpressure.
+struct PeerAdmission<'a> {
+    peers: &'a Mutex<HashSet<AccountAddress>>,
+    peer: AccountAddress,
+}
+
+impl Drop for PeerAdmission<'_> {
+    fn drop(&mut self) {
+        self.peers.lock().remove(&self.peer);
+    }
 }
 
 struct ForwardEpochSyncIndexes {
@@ -483,13 +521,69 @@ impl ForwardEpochSyncService {
                 cold_build_peers: HashSet::new(),
             }),
             cold_build_quota: Arc::new(Semaphore::new(cold_build_quota)),
-            fetch_quota: Semaphore::new(fetch_quota),
+            prepare_peers: Mutex::new(HashSet::new()),
+            fetch_peers: Mutex::new(HashSet::new()),
+            fetch_quota,
         }
     }
 
-    /// A Fetch handler runs only while holding one of these.
-    fn try_acquire_fetch(&self) -> Option<SemaphorePermit<'_>> {
-        self.fetch_quota.try_acquire().ok()
+    /// Admits one Prepare handler for `peer`, or answers `Busy`.
+    ///
+    /// A peer gets one handler at a time: an honest client has one Prepare outstanding per
+    /// server, and without this a same-epoch flood would join the running build (or hit the
+    /// cache) once per request, bounded only by the connection's inbound RPC limit. Cold builds
+    /// have their own node-wide quota; the handlers themselves are bounded by one per peer and
+    /// by `reply_by`.
+    fn admit_prepare(
+        &self,
+        peer: AccountAddress,
+        epoch: u64,
+    ) -> Result<PeerAdmission<'_>, ForwardEpochSyncError> {
+        let mut prepare_peers = self.prepare_peers.lock();
+        if !prepare_peers.insert(peer) {
+            warn!(
+                remote_peer = peer,
+                epoch = epoch,
+                reason = "prepare_per_peer",
+                "Reject forward epoch sync prepare"
+            );
+            return Err(ForwardEpochSyncError::Busy);
+        }
+        Ok(PeerAdmission { peers: &self.prepare_peers, peer })
+    }
+
+    /// Admits one Fetch handler for `peer`, or answers `Busy`.
+    ///
+    /// A peer gets one handler at a time: an honest client fetches one page at a time, so a
+    /// second request from the same peer is either a retry of a page still being served or a
+    /// flood, and neither should cost anyone else a slot. Node-wide, `fetch_quota` handlers may
+    /// run at once.
+    fn admit_fetch(
+        &self,
+        peer: AccountAddress,
+        epoch: u64,
+    ) -> Result<PeerAdmission<'_>, ForwardEpochSyncError> {
+        let mut fetch_peers = self.fetch_peers.lock();
+        if fetch_peers.contains(&peer) {
+            warn!(
+                remote_peer = peer,
+                epoch = epoch,
+                reason = "fetch_per_peer",
+                "Reject forward epoch sync fetch"
+            );
+            return Err(ForwardEpochSyncError::Busy);
+        }
+        if fetch_peers.len() >= self.fetch_quota {
+            warn!(
+                remote_peer = peer,
+                epoch = epoch,
+                reason = "fetch_quota",
+                "Reject forward epoch sync fetch"
+            );
+            return Err(ForwardEpochSyncError::Busy);
+        }
+        fetch_peers.insert(peer);
+        Ok(PeerAdmission { peers: &self.fetch_peers, peer })
     }
 
     /// The index for `epoch`: cached, or built by `build` on a cold miss.
@@ -920,15 +1014,6 @@ impl BlockStore {
         if request.batch_size_blocks == 0 || request.batch_size_blocks > max_blocks_allowed {
             return ForwardEpochSyncResponseV1::Error(ForwardEpochSyncError::InvalidBatchSize);
         }
-        let Some(_permit) = self.forward_epoch_sync_service.try_acquire_fetch() else {
-            warn!(
-                remote_peer = peer,
-                epoch = request.epoch,
-                reason = "fetch_quota",
-                "Reject forward epoch sync fetch because the service is busy"
-            );
-            return ForwardEpochSyncResponseV1::Error(ForwardEpochSyncError::Busy);
-        };
         // A Fetch never waits for a cold build (a miss here means the serving node restarted or
         // evicted the epoch): its client times out after `RPC_TIMEOUT_MSEC`, well inside the
         // inbound cap, and its `Busy` backoff polls until the index is ready.
@@ -1038,14 +1123,31 @@ impl BlockStore {
             "Received forward epoch sync request"
         );
         let started = Instant::now();
-        let response = match request.req {
+        // The admission lives to the end of this function: through the response's encoding and
+        // its hand-off to the network layer, so it covers everything this handler does.
+        let service = &self.forward_epoch_sync_service;
+        let (response, _admission) = match request.req {
             ForwardEpochSyncRequest::V1(ForwardEpochSyncRequestV1::Prepare(prepare)) => {
-                let reply_by = request.received_at +
-                    Duration::from_millis(FORWARD_EPOCH_SYNC_SLOW_BUILD_REPLY_MSEC);
-                self.prepare_forward_epoch_sync(remote_peer, prepare, reply_by).await
+                match service.admit_prepare(remote_peer, prepare.epoch) {
+                    Ok(admission) => {
+                        let reply_by = request.received_at +
+                            Duration::from_millis(FORWARD_EPOCH_SYNC_SLOW_BUILD_REPLY_MSEC);
+                        (
+                            self.prepare_forward_epoch_sync(remote_peer, prepare, reply_by).await,
+                            Some(admission),
+                        )
+                    }
+                    Err(error) => (ForwardEpochSyncResponseV1::Error(error), None),
+                }
             }
             ForwardEpochSyncRequest::V1(ForwardEpochSyncRequestV1::Fetch(fetch)) => {
-                self.fetch_forward_epoch_sync(remote_peer, fetch, max_blocks_allowed).await
+                match service.admit_fetch(remote_peer, fetch.epoch) {
+                    Ok(admission) => (
+                        self.fetch_forward_epoch_sync(remote_peer, fetch, max_blocks_allowed).await,
+                        Some(admission),
+                    ),
+                    Err(error) => (ForwardEpochSyncResponseV1::Error(error), None),
+                }
             }
         };
         let elapsed_ms = started.elapsed().as_millis() as u64;
@@ -1458,6 +1560,7 @@ impl BlockRetriever {
             candidates,
             rpc_timeout,
             time::Instant::now() + Duration::from_millis(FORWARD_EPOCH_SYNC_PREPARE_ATTEMPT_MSEC),
+            BusyBackoff::jittered(),
         )
         .await
     }
@@ -1560,6 +1663,7 @@ impl BlockRetriever {
             },
             NUM_RETRIES,
             window_end,
+            BusyBackoff::jittered(),
         )
         .await?;
         let ForwardEpochSyncResponse::V1(response) = match step {
@@ -1654,10 +1758,11 @@ mod forward_epoch_sync_tests {
         certifying_position_in_batch, decode_forward_epoch_sync_fetch_response, fetch_from_peer,
         prepare_from_candidates, select_forward_batch_end, BlockStore, BusyBackoff, FetchStep,
         ForwardEpochSyncIndex, ForwardEpochSyncService, PrepareOutcome, ProgressWatchdog,
-        FORWARD_EPOCH_SYNC_INDEX_CACHE_EPOCHS, FORWARD_EPOCH_SYNC_MAX_BUSY_RETRIES,
-        FORWARD_EPOCH_SYNC_MIN_BLOCKS_PER_WINDOW, FORWARD_EPOCH_SYNC_PREPARE_ATTEMPT_MSEC,
-        FORWARD_EPOCH_SYNC_PREPARE_TIMEOUT_MSEC, FORWARD_EPOCH_SYNC_PROGRESS_WINDOW_MSEC,
-        FORWARD_EPOCH_SYNC_REPROBE_DELAY_MSEC, FORWARD_EPOCH_SYNC_SLOW_BUILD_REPLY_MSEC,
+        FORWARD_EPOCH_SYNC_BUSY_BACKOFF_JITTER_PERCENT, FORWARD_EPOCH_SYNC_INDEX_CACHE_EPOCHS,
+        FORWARD_EPOCH_SYNC_MAX_BUSY_RETRIES, FORWARD_EPOCH_SYNC_MIN_BLOCKS_PER_WINDOW,
+        FORWARD_EPOCH_SYNC_PREPARE_ATTEMPT_MSEC, FORWARD_EPOCH_SYNC_PREPARE_TIMEOUT_MSEC,
+        FORWARD_EPOCH_SYNC_PROGRESS_WINDOW_MSEC, FORWARD_EPOCH_SYNC_REPROBE_DELAY_MSEC,
+        FORWARD_EPOCH_SYNC_SLOW_BUILD_REPLY_MSEC,
     };
     use crate::consensusdb::{
         schema::{epoch_by_block_number::EpochByBlockNumberSchema, ledger_info::LedgerInfoSchema},
@@ -1888,9 +1993,34 @@ mod forward_epoch_sync_tests {
 
     #[test]
     fn busy_backoff_doubles_and_caps_at_eight_seconds() {
-        let mut backoff = BusyBackoff::new();
+        let mut backoff = BusyBackoff::exact();
         let delays: Vec<_> = (0..6).map(|_| backoff.next_delay()).collect();
         assert_eq!(delays, [500, 1_000, 2_000, 4_000, 8_000, 8_000].map(Duration::from_millis));
+    }
+
+    #[test]
+    fn busy_backoff_jitter_spreads_each_delay_around_its_nominal_value() {
+        let mut exact = BusyBackoff::exact();
+        let nominal: Vec<_> = (0..6).map(|_| exact.next_delay()).collect();
+        let spread = |delay: Duration| delay * FORWARD_EPOCH_SYNC_BUSY_BACKOFF_JITTER_PERCENT / 100;
+
+        // Every draw stays inside the band, and over 192 draws both halves of the band are hit
+        // (each half misses with probability 0.75^192).
+        let (mut below, mut above) = (false, false);
+        for _ in 0..32 {
+            let mut jittered = BusyBackoff::jittered();
+            for expected in &nominal {
+                let delay = jittered.next_delay();
+                let spread = spread(*expected);
+                assert!(
+                    (*expected - spread..=*expected + spread).contains(&delay),
+                    "{delay:?} is not within the jitter band of {expected:?}"
+                );
+                below |= delay < *expected - spread / 2;
+                above |= delay > *expected + spread / 2;
+            }
+        }
+        assert!(below && above, "the jitter spreads to both sides of the nominal delay");
     }
 
     #[tokio::test(start_paused = true)]
@@ -1911,6 +2041,7 @@ mod forward_epoch_sync_tests {
             vec![preferred, alternate],
             PREPARE_TIMEOUT,
             attempt_deadline(),
+            BusyBackoff::exact(),
         )
         .await
         .unwrap();
@@ -1936,6 +2067,7 @@ mod forward_epoch_sync_tests {
             peers.clone(),
             PREPARE_TIMEOUT,
             attempt_deadline(),
+            BusyBackoff::exact(),
         )
         .await
         .unwrap();
@@ -1976,6 +2108,7 @@ mod forward_epoch_sync_tests {
             vec![peer],
             PREPARE_TIMEOUT,
             attempt_deadline(),
+            BusyBackoff::exact(),
         )
         .await
         .unwrap();
@@ -1999,6 +2132,7 @@ mod forward_epoch_sync_tests {
             peers,
             PREPARE_TIMEOUT,
             attempt_deadline(),
+            BusyBackoff::exact(),
         )
         .await
         .unwrap();
@@ -2034,6 +2168,7 @@ mod forward_epoch_sync_tests {
             vec![preferred, alternate],
             PREPARE_TIMEOUT,
             attempt_deadline(),
+            BusyBackoff::exact(),
         )
         .await
         .unwrap();
@@ -2059,6 +2194,7 @@ mod forward_epoch_sync_tests {
             peers.clone(),
             PREPARE_TIMEOUT,
             attempt_deadline(),
+            BusyBackoff::exact(),
         )
         .await
         .unwrap();
@@ -2086,6 +2222,7 @@ mod forward_epoch_sync_tests {
             peers,
             PREPARE_TIMEOUT,
             attempt_deadline(),
+            BusyBackoff::exact(),
         )
         .await
         .unwrap();
@@ -2123,6 +2260,7 @@ mod forward_epoch_sync_tests {
             vec![preferred, alternate],
             PREPARE_TIMEOUT,
             attempt_deadline(),
+            BusyBackoff::exact(),
         )
         .await
         .unwrap();
@@ -2180,6 +2318,7 @@ mod forward_epoch_sync_tests {
             },
             NUM_RETRIES,
             window_end,
+            BusyBackoff::exact(),
         )
         .await
         .unwrap();
@@ -2209,6 +2348,7 @@ mod forward_epoch_sync_tests {
             },
             NUM_RETRIES,
             window_end,
+            BusyBackoff::exact(),
         )
         .await
         .unwrap();
@@ -2233,6 +2373,7 @@ mod forward_epoch_sync_tests {
             },
             NUM_RETRIES,
             started + Duration::from_secs(60),
+            BusyBackoff::exact(),
         )
         .await
         else {
@@ -2260,6 +2401,7 @@ mod forward_epoch_sync_tests {
             },
             NUM_RETRIES,
             started + Duration::from_secs(60),
+            BusyBackoff::exact(),
         )
         .await
         .unwrap();
@@ -2378,16 +2520,79 @@ mod forward_epoch_sync_tests {
     #[tokio::test(start_paused = true)]
     async fn fetch_quota_is_separate_from_cold_build_quota() {
         let service = service(1, 1);
-        let a = AccountAddress::random();
+        let (a, b) = (AccountAddress::random(), AccountAddress::random());
 
         let slow = service.index(1, a, reply_by(), future::pending()).await;
         assert_eq!(slow.err(), Some(ForwardEpochSyncError::Busy), "the cold-build permit is taken");
 
-        let permit = service.try_acquire_fetch();
-        assert!(permit.is_some(), "Fetch has its own pool");
-        assert!(service.try_acquire_fetch().is_none());
-        drop(permit);
-        assert!(service.try_acquire_fetch().is_some());
+        let admission = service.admit_fetch(a, 1);
+        assert!(admission.is_ok(), "Fetch has its own pool");
+        assert_eq!(service.admit_fetch(b, 1).err(), Some(ForwardEpochSyncError::Busy));
+        drop(admission);
+        assert!(service.admit_fetch(b, 1).is_ok());
+    }
+
+    // The re-review's flood case: one authenticated peer sending concurrent valid Fetch
+    // requests must not take the whole pool.
+    #[test]
+    fn one_peer_flooding_fetch_holds_one_slot_and_leaves_the_rest() {
+        let service = service(1, 4);
+        let (flooder, honest) = (AccountAddress::random(), AccountAddress::random());
+
+        let admitted: Vec<_> =
+            (0..10).filter_map(|_| service.admit_fetch(flooder, 1).ok()).collect();
+        assert_eq!(admitted.len(), 1, "a peer gets one Fetch handler at a time");
+        let other = service.admit_fetch(honest, 1);
+        assert!(other.is_ok(), "the flood leaves the other slots open");
+
+        drop(admitted);
+        assert!(
+            service.admit_fetch(flooder, 2).is_ok(),
+            "the slot is back once the handler has delivered its response"
+        );
+    }
+
+    #[test]
+    fn one_peer_flooding_prepare_holds_one_handler() {
+        let service = service(4, 4);
+        let (flooder, honest) = (AccountAddress::random(), AccountAddress::random());
+
+        let admitted: Vec<_> =
+            (0..10).filter_map(|_| service.admit_prepare(flooder, 1).ok()).collect();
+        assert_eq!(admitted.len(), 1, "a peer gets one Prepare handler at a time");
+        assert!(service.admit_prepare(honest, 1).is_ok(), "other peers are not affected");
+        assert!(
+            service.admit_fetch(flooder, 1).is_ok(),
+            "Prepare and Fetch are admitted independently"
+        );
+
+        drop(admitted);
+        assert!(
+            service.admit_prepare(flooder, 1).is_ok(),
+            "the slot is back once the handler has delivered its response"
+        );
+    }
+
+    #[test]
+    fn fetch_quota_bounds_all_peers_together() {
+        let service = service(1, 2);
+        let peers: Vec<_> = (0..3).map(|_| AccountAddress::random()).collect();
+
+        let first = service.admit_fetch(peers[0], 1).ok();
+        let _second = service.admit_fetch(peers[1], 1).ok();
+        assert!(first.is_some() && _second.is_some());
+        assert_eq!(service.admit_fetch(peers[2], 1).err(), Some(ForwardEpochSyncError::Busy));
+
+        drop(first);
+        let _third = service.admit_fetch(peers[2], 1).ok();
+        assert!(_third.is_some(), "a freed slot goes to whoever asks next");
+        // Only the dropped admission was released: the second peer still holds its slot and the
+        // pool is full again.
+        assert_eq!(service.admit_fetch(peers[1], 1).err(), Some(ForwardEpochSyncError::Busy));
+        assert_eq!(
+            service.admit_fetch(AccountAddress::random(), 1).err(),
+            Some(ForwardEpochSyncError::Busy)
+        );
     }
 
     #[tokio::test(start_paused = true)]
