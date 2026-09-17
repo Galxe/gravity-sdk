@@ -5,7 +5,7 @@
 use crate::{
     block_storage::{
         tracing::{observe_block, BlockStage},
-        BlockReader, BlockRetriever, BlockStore, NeedFetchResult,
+        BlockReader, BlockRetriever, BlockStore, EpochSyncOutcome, NeedFetchResult,
     },
     error::{error_kind, VerifyError},
     liveness::{
@@ -1604,15 +1604,36 @@ impl RoundManager {
                                     .max_blocks_per_sending_request(
                                         self.onchain_config.quorum_store_enabled(),
                                     );
-                                if let Err(e) = self.block_store.fast_forward_sync_by_epoch(
+                                let sync = self.block_store.fast_forward_sync_by_epoch(
                                     self.create_block_retriever(peer_id),
                                     epoch,
                                     batch_size_blocks,
-                                ).await {
-                                    Err(e)
-                                } else {
-                                    self.wait_change_epoch_flag = true;
-                                    Ok(())
+                                );
+                                // The sync can run for the whole epoch; let a shutdown request
+                                // cancel it instead of waiting for it. Every forward page is
+                                // persisted before it is replayed, the legacy path writes its
+                                // blocks and ledger infos before any await, and the next epoch
+                                // rebuilds the block store from storage, so dropping the future
+                                // loses nothing.
+                                tokio::select! {
+                                    biased;
+                                    close_req = close_rx.select_next_some() => {
+                                        if let Ok(ack_sender) = close_req {
+                                            ack_sender.send(()).expect("[RoundManager] Fail to ack shutdown");
+                                        }
+                                        break;
+                                    }
+                                    result = sync => match result {
+                                        Ok(EpochSyncOutcome::Completed) => {
+                                            self.wait_change_epoch_flag = true;
+                                            Ok(())
+                                        }
+                                        Ok(EpochSyncOutcome::Resume) => {
+                                            info!(epoch = epoch, "Epoch sync paused; the next epoch change trigger resumes it");
+                                            Ok(())
+                                        }
+                                        Err(e) => Err(e),
+                                    }
                                 }
                             } else {
                                 Ok(())
