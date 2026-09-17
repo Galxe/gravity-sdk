@@ -80,14 +80,13 @@ pub use quorum_store::quorum_store_db::QUORUM_STORE_DB_NAME;
 pub use round_manager::round_manager_fuzzing;
 
 pub(crate) const ENABLE_FORWARD_EPOCH_SYNC_ENV: &str = "ENABLE_FORWARD_EPOCH_SYNC";
-pub(crate) const FORWARD_EPOCH_SYNC_PREPARE_TIMEOUT_MSEC_ENV: &str =
-    "FORWARD_EPOCH_SYNC_PREPARE_TIMEOUT_MSEC";
-/// Default client-side Prepare timeout.
-///
-/// Sized from testnet serving measurements: cold index builds for ~29k-block epochs took
-/// ~4.5–5.7s on a loaded VFN. 30s (~5× that peak) leaves headroom for larger epochs, slower
-/// disks, and concurrent handler load without immediately falling back to legacy reverse sync.
-pub(crate) const FORWARD_EPOCH_SYNC_PREPARE_TIMEOUT_MSEC_DEFAULT: u64 = 30_000;
+pub(crate) const FORWARD_EPOCH_SYNC_COLD_BUILD_QUOTA_ENV: &str =
+    "FORWARD_EPOCH_SYNC_COLD_BUILD_QUOTA";
+pub(crate) const FORWARD_EPOCH_SYNC_FETCH_QUOTA_ENV: &str = "FORWARD_EPOCH_SYNC_FETCH_QUOTA";
+/// Default for both serving quotas: how many cold index builds may run at once, and how many
+/// Fetch handlers may run at once. The pools are separate so a burst of cold builds cannot starve
+/// the Fetch pages of a sync already in progress, and vice versa.
+pub(crate) const FORWARD_EPOCH_SYNC_QUOTA_DEFAULT: usize = 4;
 
 /// Opt-in switch for the block-number anchored epoch sync path. Nodes use the legacy reverse sync
 /// path unless operators explicitly set `ENABLE_FORWARD_EPOCH_SYNC=true`.
@@ -98,34 +97,33 @@ pub(crate) fn forward_epoch_sync_enabled() -> bool {
         .unwrap_or(false)
 }
 
-/// Client-side timeout for a single forward-epoch-sync Prepare RPC attempt.
-///
-/// Operators can override via `FORWARD_EPOCH_SYNC_PREPARE_TIMEOUT_MSEC`. Unset, unparsable, or
-/// values `< 1` fall back to [`FORWARD_EPOCH_SYNC_PREPARE_TIMEOUT_MSEC_DEFAULT`] (30000).
-pub(crate) fn forward_epoch_sync_prepare_timeout_msec() -> u64 {
-    match std::env::var(FORWARD_EPOCH_SYNC_PREPARE_TIMEOUT_MSEC_ENV) {
-        Err(_) => FORWARD_EPOCH_SYNC_PREPARE_TIMEOUT_MSEC_DEFAULT,
-        Ok(value) => match value.parse::<u64>() {
-            Ok(n) if n >= 1 => n,
-            Ok(n) => {
-                gaptos::aptos_logger::warn!(
-                    env = FORWARD_EPOCH_SYNC_PREPARE_TIMEOUT_MSEC_ENV,
-                    value = n,
-                    default = FORWARD_EPOCH_SYNC_PREPARE_TIMEOUT_MSEC_DEFAULT,
-                    "Invalid FORWARD_EPOCH_SYNC_PREPARE_TIMEOUT_MSEC (must be >= 1); using default"
-                );
-                FORWARD_EPOCH_SYNC_PREPARE_TIMEOUT_MSEC_DEFAULT
-            }
-            Err(_) => {
-                gaptos::aptos_logger::warn!(
-                    env = FORWARD_EPOCH_SYNC_PREPARE_TIMEOUT_MSEC_ENV,
-                    value = %value,
-                    default = FORWARD_EPOCH_SYNC_PREPARE_TIMEOUT_MSEC_DEFAULT,
-                    "Unparsable FORWARD_EPOCH_SYNC_PREPARE_TIMEOUT_MSEC; using default"
-                );
-                FORWARD_EPOCH_SYNC_PREPARE_TIMEOUT_MSEC_DEFAULT
-            }
-        },
+/// Serving-side cap on concurrent cold index builds (`FORWARD_EPOCH_SYNC_COLD_BUILD_QUOTA`).
+pub(crate) fn forward_epoch_sync_cold_build_quota() -> usize {
+    forward_epoch_sync_quota(FORWARD_EPOCH_SYNC_COLD_BUILD_QUOTA_ENV)
+}
+
+/// Serving-side cap on concurrent Fetch handlers (`FORWARD_EPOCH_SYNC_FETCH_QUOTA`).
+pub(crate) fn forward_epoch_sync_fetch_quota() -> usize {
+    forward_epoch_sync_quota(FORWARD_EPOCH_SYNC_FETCH_QUOTA_ENV)
+}
+
+/// Unset, unparsable, or out-of-range values (`< 1`, or more permits than a tokio semaphore can
+/// hold) fall back to [`FORWARD_EPOCH_SYNC_QUOTA_DEFAULT`] with a warning.
+fn forward_epoch_sync_quota(env: &str) -> usize {
+    let Ok(value) = std::env::var(env) else {
+        return FORWARD_EPOCH_SYNC_QUOTA_DEFAULT;
+    };
+    match value.parse::<usize>() {
+        Ok(n) if (1..=tokio::sync::Semaphore::MAX_PERMITS).contains(&n) => n,
+        _ => {
+            gaptos::aptos_logger::warn!(
+                env = env,
+                value = %value,
+                default = FORWARD_EPOCH_SYNC_QUOTA_DEFAULT,
+                "Invalid forward epoch sync quota (must be a positive integer); using default"
+            );
+            FORWARD_EPOCH_SYNC_QUOTA_DEFAULT
+        }
     }
 }
 

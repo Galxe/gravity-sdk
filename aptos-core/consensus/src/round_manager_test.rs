@@ -5,7 +5,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{
-    block_storage::{pending_blocks::PendingBlocks, BlockReader, BlockStore},
+    block_storage::{
+        pending_blocks::PendingBlocks, BlockReader, BlockStore, ForwardEpochSyncService,
+    },
     liveness::{
         proposal_generator::{
             ChainHealthBackoffConfig, PipelineBackpressureConfig, ProposalGenerator,
@@ -325,6 +327,7 @@ impl NodeSetup {
             false,
             false,
             HashMap::new(), // validator_indices: empty for tests
+            Arc::new(ForwardEpochSyncService::from_env()),
         ));
 
         let proposer_election = Self::create_proposer_election(proposers.clone());
