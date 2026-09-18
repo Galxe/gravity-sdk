@@ -137,9 +137,9 @@ pub struct BlockStore {
     /// Mapping from validator address to their index in the ordered validator set.
     /// Used during recovery to compute proposer_index for blocks.
     validator_indices: HashMap<AccountAddress, usize>,
-    /// Ephemeral, bounded metadata cache used by forward epoch sync. It is deliberately not
-    /// persisted: restart recovery is derived from the existing ConsensusDB schemas.
-    forward_epoch_sync_indexes: Mutex<HashMap<u64, Arc<sync_manager::ForwardEpochSyncIndex>>>,
+    /// Node-wide forward epoch sync serving state (index cache and quotas). Not persisted:
+    /// restart recovery is derived from the existing ConsensusDB schemas.
+    forward_epoch_sync_service: Arc<sync_manager::ForwardEpochSyncService>,
 }
 
 impl BlockStore {
@@ -157,6 +157,7 @@ impl BlockStore {
         enable_randomness: bool,
         require_block_randomness: bool,
         validator_indices: HashMap<AccountAddress, usize>,
+        forward_epoch_sync_service: Arc<sync_manager::ForwardEpochSyncService>,
     ) -> Self {
         let highest_2chain_tc = initial_data.highest_2chain_timeout_certificate();
         let (root, blocks, quorum_certs) = initial_data.take();
@@ -178,6 +179,7 @@ impl BlockStore {
             enable_randomness,
             require_block_randomness,
             validator_indices,
+            forward_epoch_sync_service,
         ));
         block_on(block_store.recover_blocks());
         block_store
@@ -197,6 +199,7 @@ impl BlockStore {
         enable_randomness: bool,
         require_block_randomness: bool,
         validator_indices: HashMap<AccountAddress, usize>,
+        forward_epoch_sync_service: Arc<sync_manager::ForwardEpochSyncService>,
     ) -> Self {
         let highest_2chain_tc = initial_data.highest_2chain_timeout_certificate();
         let (root, blocks, quorum_certs) = initial_data.take();
@@ -218,6 +221,7 @@ impl BlockStore {
             enable_randomness,
             require_block_randomness,
             validator_indices,
+            forward_epoch_sync_service,
         )
         .await;
         block_store.recover_blocks().await;
@@ -425,6 +429,7 @@ impl BlockStore {
         enable_randomness: bool,
         require_block_randomness: bool,
         validator_indices: HashMap<AccountAddress, usize>,
+        forward_epoch_sync_service: Arc<sync_manager::ForwardEpochSyncService>,
     ) -> Self {
         let RootInfo(root_block, root_qc, root_ordered_cert, root_commit_cert) = root;
         let root_round = root_block.round();
@@ -463,7 +468,7 @@ impl BlockStore {
             enable_randomness,
             require_block_randomness,
             validator_indices,
-            forward_epoch_sync_indexes: Mutex::new(HashMap::new()),
+            forward_epoch_sync_service,
         };
 
         // Skip ancestors of the root. They can appear in recovery data when an
@@ -929,6 +934,7 @@ impl BlockStore {
             self.enable_randomness,
             self.require_block_randomness,
             self.validator_indices.clone(),
+            self.forward_epoch_sync_service.clone(),
         )
         .await;
 

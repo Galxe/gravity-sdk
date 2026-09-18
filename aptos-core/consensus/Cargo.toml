@@ -79,6 +79,7 @@ proptest = { workspace = true }
 proptest-derive = { workspace = true }
 tempfile = { workspace = true }
 rocksdb = { workspace = true }
+tokio = { workspace = true, features = ["test-util"] }
 
 [features]
 default = []
