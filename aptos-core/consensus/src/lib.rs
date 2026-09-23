@@ -88,13 +88,14 @@ pub(crate) const FORWARD_EPOCH_SYNC_FETCH_QUOTA_ENV: &str = "FORWARD_EPOCH_SYNC_
 /// the Fetch pages of a sync already in progress, and vice versa.
 pub(crate) const FORWARD_EPOCH_SYNC_QUOTA_DEFAULT: usize = 4;
 
-/// Opt-in switch for the block-number anchored epoch sync path. Nodes use the legacy reverse sync
-/// path unless operators explicitly set `ENABLE_FORWARD_EPOCH_SYNC=true`.
+/// Opt-out switch for the block-number anchored epoch sync path. Nodes use it by default and fall
+/// back to the legacy reverse sync path only when operators explicitly set
+/// `ENABLE_FORWARD_EPOCH_SYNC=false`; unset or unparsable values keep it enabled.
 pub(crate) fn forward_epoch_sync_enabled() -> bool {
     std::env::var(ENABLE_FORWARD_EPOCH_SYNC_ENV)
         .ok()
         .and_then(|value| value.parse::<bool>().ok())
-        .unwrap_or(false)
+        .unwrap_or(true)
 }
 
 /// Serving-side cap on concurrent cold index builds (`FORWARD_EPOCH_SYNC_COLD_BUILD_QUOTA`).

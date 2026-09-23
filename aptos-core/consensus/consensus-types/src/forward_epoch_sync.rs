@@ -114,7 +114,7 @@ pub enum ForwardEpochSyncError {
     BatchBoundaryNotFound,
     Busy,
     Internal,
-    /// The serving node runs without `ENABLE_FORWARD_EPOCH_SYNC`; unlike `Busy` this does not
+    /// The serving node runs with `ENABLE_FORWARD_EPOCH_SYNC=false`; unlike `Busy` this does not
     /// clear up by waiting, so the client should move on to another peer.
     Disabled,
 }
