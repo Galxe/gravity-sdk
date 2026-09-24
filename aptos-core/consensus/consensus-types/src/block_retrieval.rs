@@ -160,8 +160,11 @@ impl BlockRetrievalResponse {
                     commit_block_id
                 )
             })?;
+            let allows_epoch_change_suffix_number = ledger_info.ends_epoch() &&
+                ledger_info.commit_info().epoch_block_info().is_some() &&
+                *block_number >= ledger_info.block_number();
             ensure!(
-                *block_number == ledger_info.block_number(),
+                *block_number == ledger_info.block_number() || allows_epoch_change_suffix_number,
                 "ledger info block number mismatch for block {}: expected {}, got {}",
                 commit_block_id,
                 block_number,
@@ -177,26 +180,52 @@ impl BlockRetrievalResponse {
         sig_verifier: &ValidatorVerifier,
     ) -> anyhow::Result<()> {
         ensure!(
+            !matches!(
+                self.status,
+                BlockRetrievalStatus::Succeeded | BlockRetrievalStatus::SucceededWithTarget
+            ) || !self.blocks.is_empty(),
+            "successful block retrieval response must not be empty",
+        );
+        ensure!(
             self.status != BlockRetrievalStatus::Succeeded ||
                 self.blocks.len() as u64 == retrieval_request.num_blocks(),
             "not enough blocks returned, expect {}, get {}",
             retrieval_request.num_blocks(),
             self.blocks.len(),
         );
-        self.blocks
-            .iter()
-            .try_fold(retrieval_request.block_id(), |expected_id, (block, _, _)| {
+        let mut expected_id = (retrieval_request.block_id() != HashValue::zero())
+            .then_some(retrieval_request.block_id());
+        for (block, _, _) in &self.blocks {
+            if let Some(expected_id) = expected_id {
                 ensure!(
                     block.id() == expected_id,
                     "blocks doesn't form a chain: expect {}, get {}",
                     expected_id,
                     block.id()
                 );
-                block.validate_signature(sig_verifier)?;
-                block.verify_well_formed()?;
-                Ok(block.parent_id())
-            })
-            .map(|_| ())
+            }
+            block.validate_signature(sig_verifier)?;
+            block.verify_well_formed()?;
+            expected_id = Some(block.parent_id());
+        }
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use gaptos::aptos_types::validator_verifier::random_validator_verifier;
+
+    #[test]
+    fn verify_rejects_empty_successful_response() {
+        let (_signers, verifier) = random_validator_verifier(1, None, false);
+        let request = BlockRetrievalRequest::new(HashValue::zero(), 0);
+
+        for status in [BlockRetrievalStatus::Succeeded, BlockRetrievalStatus::SucceededWithTarget] {
+            let response = BlockRetrievalResponse::new(status, vec![], vec![], vec![]);
+            assert!(response.verify(request.clone(), &verifier).is_err());
+        }
     }
 }
 
