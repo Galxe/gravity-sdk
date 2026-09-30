@@ -51,6 +51,7 @@
 //! identical fork conditions. To re-time a fork, ship a new binary; there
 //! is no in-place override path by design.
 
+use crate::fork_times::*;
 use alloy_genesis::Genesis;
 use greth::{
     reth::chainspec::EthereumChainSpecParser,
@@ -61,26 +62,6 @@ use std::{fmt, sync::Arc};
 
 /// Gravity mainnet chain id.
 pub const GRAVITY_MAINNET_CHAIN_ID: u64 = 127_001;
-
-/// Gravity mainnet Alpha activation timestamp in Unix seconds.
-///
-/// 2026-07-27 13:00:00 Beijing (UTC+08:00), which is
-/// 2026-07-27 05:00:00 UTC.
-pub(crate) const GRAVITY_MAINNET_ALPHA_TIME: u64 = 1_785_128_400;
-
-/// Gravity mainnet Beta and Osaka activation timestamp in Unix seconds.
-///
-/// Both forks share this value: Beta (Gravity EIP-7702 lockdown release +
-/// block-gas last-gate) and Osaka (Ethereum hardfork) activate together.
-///
-/// 2026-08-18 02:00:00 UTC.
-pub(crate) const GRAVITY_MAINNET_BETA_OSAKA_TIME: u64 = 1_787_018_400;
-
-/// Longevity testnet Beta and Osaka activation timestamp in Unix seconds.
-///
-/// 2026-08-04 11:00:00 Beijing (UTC+08:00), which is
-/// 2026-08-04 03:00:00 UTC.
-const LONGEVITY_TESTNET_BETA_OSAKA_TIME: u64 = 1_785_812_400;
 
 /// Per-chain hardcoded override. Each field gates one fork.
 ///
@@ -136,47 +117,28 @@ impl GravityForkOverrides {
 /// change. The PR doing so must reference the onchain governance or
 /// coordination record that authorised the timestamp.
 const HARDCODED: &[(u64, GravityForkOverrides)] = &[
-    // Gravity mainnet. Source: gravity-mainet-gitops/genesis.json.
     (
         GRAVITY_MAINNET_CHAIN_ID,
         GravityForkOverrides {
-            // Pinned to deployed mainnet genesis (config.pragueTime).
-            prague_time: Some(1_782_709_200),
-            // Mainnet Osaka activation coordinated for 2026-08-18 02:00:00 UTC.
+            prague_time: Some(GRAVITY_MAINNET_PRAGUE_TIME),
             osaka_time: Some(GRAVITY_MAINNET_BETA_OSAKA_TIME),
-            // Mainnet Alpha activation coordinated for 2026-07-27 13:00:00
-            // Beijing (UTC+08:00), equivalent to 2026-07-27 05:00:00 UTC.
             alpha_time: Some(GRAVITY_MAINNET_ALPHA_TIME),
-            // Mainnet Beta (same wall-clock as Osaka).
             beta_time: Some(GRAVITY_MAINNET_BETA_OSAKA_TIME),
-            // Gamma is not scheduled on mainnet yet; a genesis `gammaTime`
-            // must not activate it on a single node.
             gamma_time: None,
-            // Testnet-only one-shots.
             testnet_owner_fix_time: None,
             testnet_owner_fix_v2_time: None,
         },
     ),
-    // Longevity testnet. Every value is the timestamp of the first block that
-    // crossed the fork on the live chain; the block numbers were read back
-    // from the public testnet RPC on 2026-09-30.
     (
         LONGEVITY_TESTNET_CHAIN_ID,
         GravityForkOverrides {
-            // Block 1084564 (EIP-2935 history contract deployed).
-            prague_time: Some(1_780_909_442),
-            // Same wall-clock as Beta.
+            prague_time: Some(LONGEVITY_TESTNET_PRAGUE_TIME),
             osaka_time: Some(LONGEVITY_TESTNET_BETA_OSAKA_TIME),
-            // Block 10787823.
-            alpha_time: Some(1_783_328_400),
-            // Live genesis value; Beta has no directly observable state effect.
+            alpha_time: Some(LONGEVITY_TESTNET_ALPHA_TIME),
             beta_time: Some(LONGEVITY_TESTNET_BETA_OSAKA_TIME),
-            // Block 25666608 (NativeOracle runtime swapped).
-            gamma_time: Some(1_787_108_400),
-            // Block 30922944 (StakePool pendingOwner set to the wrong CLI address).
-            testnet_owner_fix_time: Some(1_788_490_800),
-            // Block 32664162 (pendingOwner set to the cast-derived address).
-            testnet_owner_fix_v2_time: Some(1_788_948_000),
+            gamma_time: Some(LONGEVITY_TESTNET_GAMMA_TIME),
+            testnet_owner_fix_time: Some(LONGEVITY_TESTNET_OWNER_FIX_TIME),
+            testnet_owner_fix_v2_time: Some(LONGEVITY_TESTNET_OWNER_FIX_V2_TIME),
         },
     ),
 ];
@@ -387,18 +349,19 @@ mod tests {
         }
     }
 
-    /// Longevity testnet activations, written independently of [`HARDCODED`].
-    /// Each is the timestamp of the first block that crossed the fork on the
-    /// live chain (block number in the comment).
+    /// Longevity testnet schedule, mapped fork-by-fork without going through
+    /// [`HARDCODED`], so a constant wired to the wrong fork in the table
+    /// fails the schedule assertions. The constants' values are pinned by
+    /// `gravity_testnet_timestamps_pinned_to_onchain_activations`.
     fn expected_testnet_forks() -> ForkInputs {
         ForkInputs {
-            prague: Some(1_780_909_442),       // block 1084564
-            osaka: Some(1_785_812_400),        // shares Beta's activation
-            alpha: Some(1_783_328_400),        // block 10787823
-            beta: Some(1_785_812_400),         // from the live genesis snapshot
-            gamma: Some(1_787_108_400),        // block 25666608
-            owner_fix: Some(1_788_490_800),    // block 30922944
-            owner_fix_v2: Some(1_788_948_000), // block 32664162
+            prague: Some(LONGEVITY_TESTNET_PRAGUE_TIME),
+            osaka: Some(LONGEVITY_TESTNET_BETA_OSAKA_TIME),
+            alpha: Some(LONGEVITY_TESTNET_ALPHA_TIME),
+            beta: Some(LONGEVITY_TESTNET_BETA_OSAKA_TIME),
+            gamma: Some(LONGEVITY_TESTNET_GAMMA_TIME),
+            owner_fix: Some(LONGEVITY_TESTNET_OWNER_FIX_TIME),
+            owner_fix_v2: Some(LONGEVITY_TESTNET_OWNER_FIX_V2_TIME),
         }
     }
 
@@ -977,7 +940,7 @@ mod tests {
                 chain_id: LONGEVITY_TESTNET_CHAIN_ID,
                 fork: "testnetOwnerFixV2Time",
                 genesis: Some(1),
-                forced: Some(1_788_948_000),
+                forced: Some(LONGEVITY_TESTNET_OWNER_FIX_V2_TIME),
             }],
         );
         assert_schedule(&ChainSpec::from(g), expected_testnet_forks());

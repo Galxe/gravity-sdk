@@ -324,6 +324,11 @@ Code-stage notes (non-material):
   fields are unnecessary. The repository-genesis test therefore allows missing
   keys and rejects only contradicting values.
 - 2026-09-30: sections 1-3 approved.
+- 2026-09-30 (PR review): every hardcoded timestamp, mainnet Prague included,
+  becomes a named constant in the new `bin/gravity_node/src/fork_times.rs`,
+  documented on the constant (date, activation block, observed effect) instead
+  of per-field comments in `HARDCODED`. `chainspec.rs` glob-imports the module.
+  The pin tests keep literal values as the independent check.
 
 ## 7. Outcome and Evidence
 
@@ -343,19 +348,22 @@ Code-stage notes (non-material):
   | B3 | DONE | `testnet_genesis_matching_the_table_is_silent` |
   | B4 | DONE | `mainnet_removes_gamma_and_owner_fix_keys`; existing mainnet tests unchanged and green. SDK `genesis/mainnet/genesis.json` and production `gravity-mainnet-gitops` `genesis.json` (main, 2026-09-30) contain none of the three keys, so the live mainnet schedule and startup output are unchanged |
   | B5 | DONE | pass-through tests on `UNLISTED_CHAIN_ID` (1337) |
-  | F1 | DONE | `gravity_testnet_timestamps_pinned_to_onchain_activations`; table comments name the activation blocks |
-  | D1-D3 | DONE | `bin/gravity_node/src/chainspec.rs` |
+  | F1 | DONE | `gravity_testnet_timestamps_pinned_to_onchain_activations`; constant docs in `fork_times.rs` name the activation blocks |
+  | D1-D3 | DONE | `bin/gravity_node/src/chainspec.rs`, `bin/gravity_node/src/fork_times.rs` |
   | D4 | DONE (deferred by design) | no TestnetGammaBridge field added |
   | R1 | Accepted | Beta/Osaka from the live genesis snapshot, not state-verified |
   | R2 | Checked | `GravityChainSpecParser` is the only `ChainSpec` construction path in the SDK (`cli.rs`, `main.rs`) |
 
 - Changes: `bin/gravity_node/src/chainspec.rs` (table, loop, testnet entry,
-  tests, module docs) and this changelog. No dependency, genesis, config or
-  deployment change.
+  tests, module docs), `bin/gravity_node/src/fork_times.rs` (all hardcoded
+  timestamps as documented constants), `bin/gravity_node/src/main.rs` (module
+  declaration, constant path in one test) and this changelog. No dependency,
+  genesis, config or deployment change.
 - Deviations: RED taken after the struct extension; clippy run with
   `--no-deps` because of a pre-existing `crates/api` dead-code error (details
   in section 4 notes).
-- Verification (worktree root, final product tree `a0b2c967`):
+- Verification (worktree root, final product tree after the `fork_times.rs`
+  move; first run at `a0b2c967` gave the same results):
   - `RUSTFLAGS="--cfg tokio_unstable" cargo test -p gravity_node` → exit 0,
     57 passed (38 in `chainspec`).
   - `cargo +nightly-2026-09-05 fmt --all -- --check` → exit 0.
