@@ -324,3 +324,53 @@ Code-stage notes (non-material):
   fields are unnecessary. The repository-genesis test therefore allows missing
   keys and rejects only contradicting values.
 - 2026-09-30: sections 1-3 approved.
+
+## 7. Outcome and Evidence
+
+- Result: a node started with a Longevity testnet genesis (chain id
+  `7771625`) schedules all seven gated forks at the on-chain activation
+  timestamps regardless of genesis content. The repository testnet genesis,
+  which lacks `testnetOwnerFixV2Time`, now yields the correct schedule (one
+  startup WARN for that key) instead of never scheduling TestnetOwnerFixV2.
+  Mainnet additionally pins `gammaTime`, `testnetOwnerFixTime` and
+  `testnetOwnerFixV2Time` to absent.
+- Reconciliation:
+
+  | ID | Status | Evidence |
+  | --- | --- | --- |
+  | B1 | DONE | `testnet_schedule_is_forced_when_genesis_omits_every_fork` |
+  | B2 | DONE | `testnet_overrides_a_genesis_value_that_disagrees`, `repository_testnet_genesis_never_contradicts_table` |
+  | B3 | DONE | `testnet_genesis_matching_the_table_is_silent` |
+  | B4 | DONE | `mainnet_removes_gamma_and_owner_fix_keys`; existing mainnet tests unchanged and green. SDK `genesis/mainnet/genesis.json` and production `gravity-mainnet-gitops` `genesis.json` (main, 2026-09-30) contain none of the three keys, so the live mainnet schedule and startup output are unchanged |
+  | B5 | DONE | pass-through tests on `UNLISTED_CHAIN_ID` (1337) |
+  | F1 | DONE | `gravity_testnet_timestamps_pinned_to_onchain_activations`; table comments name the activation blocks |
+  | D1-D3 | DONE | `bin/gravity_node/src/chainspec.rs` |
+  | D4 | DONE (deferred by design) | no TestnetGammaBridge field added |
+  | R1 | Accepted | Beta/Osaka from the live genesis snapshot, not state-verified |
+  | R2 | Checked | `GravityChainSpecParser` is the only `ChainSpec` construction path in the SDK (`cli.rs`, `main.rs`) |
+
+- Changes: `bin/gravity_node/src/chainspec.rs` (table, loop, testnet entry,
+  tests, module docs) and this changelog. No dependency, genesis, config or
+  deployment change.
+- Deviations: RED taken after the struct extension; clippy run with
+  `--no-deps` because of a pre-existing `crates/api` dead-code error (details
+  in section 4 notes).
+- Verification (worktree root, final product tree `a0b2c967`):
+  - `RUSTFLAGS="--cfg tokio_unstable" cargo test -p gravity_node` → exit 0,
+    57 passed (38 in `chainspec`).
+  - `cargo +nightly-2026-09-05 fmt --all -- --check` → exit 0.
+  - `RUSTFLAGS="--cfg tokio_unstable" cargo clippy -p gravity_node --no-deps --all-targets --all-features -- -D warnings` → exit 0.
+  - `make lint-fix`: not defined in this repository.
+- E2E: not required (section 5); the stable boundary is the parser, exercised
+  with the real repository testnet genesis.
+- Migration/docs: none beyond module rustdoc.
+
+## 8. Remaining Work
+
+- TestnetGammaBridge: add its genesis key and timestamp to the table in the
+  SDK PR that bumps greth to the implementation (D4).
+- `v1.10.1` release gate (tracked in mono-grav version-status docs): replay
+  testnet and mainnet state with the release binary.
+- Pre-existing: `cargo clippy -p gravity_node` with dependencies fails on
+  `crates/api` `FailpointConfResponse` dead code under `-D warnings`; not
+  addressed here.
