@@ -439,3 +439,63 @@ async fn test_need_sync_for_ledger_info() {
     let not_too_far = create_ledger_info(round_not_too_far);
     assert!(!block_store.need_sync_for_ledger_info(&not_too_far));
 }
+
+#[tokio::test]
+async fn issue845_recovery_rejects_ordered_uncommitted_target() {
+    use crate::{
+        block_storage::{pending_blocks::PendingBlocks, ForwardEpochSyncService},
+        payload_manager::DirectMempoolPayloadManager,
+        persistent_liveness_storage::RootInfo,
+        pipeline::execution_client::DummyExecutionClient,
+        test_utils::EmptyStorage,
+    };
+    use gaptos::aptos_infallible::Mutex;
+    use std::collections::HashMap;
+
+    let genesis = Block::make_genesis_block();
+    genesis.set_block_number(0);
+    let qc = certificate_for_genesis();
+    let proof = qc.clone().into_wrapped_ledger_info();
+    // Build directly: EmptyStorage's recovery and database methods are unimplemented.
+    let store = Arc::new(
+        super::BlockStore::build(
+            RootInfo(Box::new(genesis), qc, proof.clone(), proof),
+            vec![],
+            vec![],
+            None,
+            Arc::new(DummyExecutionClient),
+            Arc::new(EmptyStorage::new()),
+            10,
+            Arc::new(SimulatedTimeService::new()),
+            10,
+            Arc::new(DirectMempoolPayloadManager::new()),
+            false,
+            true,
+            Arc::new(Mutex::new(PendingBlocks::new())),
+            false, // Disable randomness database reads in this frontier-only fixture.
+            true,
+            HashMap::new(),
+            Arc::new(ForwardEpochSyncService::from_env()),
+        )
+        .await,
+    );
+    let mut inserter = TreeInserter::new_with_store(ValidatorSigner::random(None), store.clone());
+    let a = store.commit_root();
+    let b = inserter.insert_block(&a, 1, None).await;
+    let c = inserter.insert_block(&b, 2, None).await;
+    let proof = inserter.create_qc_for_block(&c, Some(b.block_info())).into_wrapped_ledger_info();
+
+    // Positive control: live ordering advances B; DummyExecutionClient discards the commit callback.
+    assert_eq!(store.path_from_ordered_root(b.id()), Some(vec![b.clone()]));
+    store.send_for_execution(proof.clone(), false, None).await.unwrap();
+    assert_eq!(store.ordered_root().id(), b.id());
+    assert_eq!(store.commit_root().id(), a.id());
+    assert!(b.randomness().is_none());
+    assert_eq!(store.path_from_commit_root(b.id()), Some(vec![b.clone()]));
+    assert_eq!(store.path_from_ordered_root(b.id()), Some(vec![]));
+
+    let error = store.send_for_execution(proof, true, None).await.unwrap_err();
+    assert!(error.to_string().contains("block_to_commit_round=1, ordered_root_round=1"));
+    assert_eq!(store.commit_root().id(), a.id());
+    assert_eq!(store.ordered_root().id(), b.id());
+}
