@@ -25,7 +25,7 @@ covers upstream integration as well as the installer.
 The original minimal lock update changes four dependency edges without package
 additions/removals/version drift. Keep Gaptos upstream `a64f8ad` and locked Alloy
 2.0.5 / primitives 1.6.0. This source checkpoint pins the simplified Reth revision
-`1bb275f0a085461560de6773b4257abc024773af` consistently. The actual locked SDK node
+`239bdaadf4fc5cbd49eeb7d73ec40dfcc83172f0` consistently. The actual locked SDK node
 requires a fresh Dev build and verification.
 
 `GravityChainSpecParser` preserves chain `7771625` genesis extra fields and calls
