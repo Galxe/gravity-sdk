@@ -263,4 +263,27 @@ mod tests {
         assert!(queue.set_randomness(2, Randomness::default()));
         assert_eq!(queue.dequeue_rand_ready_prefix().len(), 1);
     }
+
+    #[test]
+    fn issue845_randomness_restore_does_not_update_queued_clone() {
+        let ordered_blocks = create_ordered_blocks(vec![1]);
+        // Model the by-value PipelinedBlock clone boundary used by finalize_order.
+        let tree_block = ordered_blocks.ordered_blocks[0].clone();
+        let mut queue = BlockQueue::new();
+        queue.push_back(QueueItem::new(ordered_blocks, None));
+
+        tree_block.set_randomness(Randomness::default());
+        assert!(tree_block.has_randomness());
+        let item = queue.item_mut(1).unwrap();
+        assert!(!item.blocks()[0].has_randomness());
+        assert_eq!(item.num_undecided(), 1);
+        assert!(queue.dequeue_rand_ready_prefix().is_empty());
+
+        // Positive control: the queue owner's setter updates the value and readiness.
+        assert!(queue.set_randomness(1, Randomness::default()));
+        assert_eq!(queue.item_mut(1).unwrap().num_undecided(), 0);
+        let ready = queue.dequeue_rand_ready_prefix();
+        assert_eq!(ready.len(), 1);
+        assert!(ready[0].ordered_blocks[0].has_randomness());
+    }
 }
