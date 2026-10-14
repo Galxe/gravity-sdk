@@ -158,7 +158,16 @@ impl LedgerMetadataDb {
 
     pub(crate) fn get_block_hash(&self, block_number: u64) -> Option<HashValue> {
         match self.db.get::<LedgerInfoSchema>(&block_number) {
-            Ok(Some(ledger_info)) => Some(ledger_info.ledger_info().block_hash()),
+            Ok(Some(ledger_info)) => {
+                let ledger_info = ledger_info.ledger_info();
+                Some(
+                    ledger_info
+                        .commit_info()
+                        .epoch_block_info()
+                        .filter(|info| info.block_number == block_number)
+                        .map_or_else(|| ledger_info.block_hash(), |info| info.block_hash),
+                )
+            }
             _ => None,
         }
     }

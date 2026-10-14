@@ -328,6 +328,50 @@ impl BlockStore {
         Ok(())
     }
 
+    fn recovery_path_from_commit_root(
+        &self,
+        target_id: HashValue,
+    ) -> anyhow::Result<Vec<Arc<PipelinedBlock>>> {
+        let tree = self.inner.read();
+        let commit_root = tree.commit_root();
+        let ordered_root = tree.ordered_root();
+        let target = tree
+            .get_block(&target_id)
+            .ok_or_else(|| format_err!("Recovery target {} is not in the block tree", target_id))?;
+        if target.round() <= commit_root.round() {
+            ensure!(
+                tree.path_from_root_to_block(commit_root.id(), target_id, target.round()).is_some(),
+                "Recovery target {} is not an ancestor of commit root {}",
+                target_id,
+                commit_root.id(),
+            );
+            return Ok(Vec::new());
+        }
+        let path = tree.path_from_commit_root(target_id).ok_or_else(|| {
+            format_err!(
+                "Recovery target {} is not a descendant of commit root {}",
+                target_id,
+                commit_root.id(),
+            )
+        })?;
+        let ordered_path = tree.path_from_commit_root(ordered_root.id()).ok_or_else(|| {
+            format_err!(
+                "Ordered root {} is not a descendant of commit root {}",
+                ordered_root.id(),
+                commit_root.id(),
+            )
+        })?;
+        ensure!(
+            ordered_root.id() == commit_root.id() ||
+                ordered_path.iter().any(|block| block.id() == target_id) ||
+                path.iter().any(|block| block.id() == ordered_root.id()),
+            "Recovery target {} conflicts with ordered root {}",
+            target_id,
+            ordered_root.id(),
+        );
+        Ok(path)
+    }
+
     /// Check if there are blocks without randomness on the path from highest_ordered_cert to
     /// highest_commit_cert
     ///
@@ -549,38 +593,39 @@ impl BlockStore {
             return Ok(());
         }
         let block_id_to_commit = finality_proof.commit_info().id();
-        // Idempotent short-circuits for concurrent send_for_execution races
-        // (e.g. recover_blocks vs. live consensus both advancing ordered_root).
-        // Each case means some other path already committed through this block,
-        // so returning Ok is correct. Logging is graded by likelihood of a real bug.
         let block_to_commit = self
             .get_block(block_id_to_commit)
             .ok_or_else(|| format_err!("Committed block id not found"))?;
         let ordered_root = self.ordered_root();
         let commit_root = self.commit_root();
-        if block_to_commit.round() <= ordered_root.round() {
-            warn!(
-                "send_for_execution: committed block round lower than ordered root: \
+        let blocks_to_commit = if recovery {
+            self.recovery_path_from_commit_root(block_id_to_commit)?
+        } else {
+            if block_to_commit.round() <= ordered_root.round() {
+                warn!(
+                    "send_for_execution: committed block round lower than ordered root: \
                 block_to_commit_id={}, block_to_commit_round={}, \
                 ordered_root_id={}, ordered_root_round={}, \
                 commit_root_id={}, commit_root_round={}, recovery={}",
-                block_to_commit.id(),
-                block_to_commit.round(),
-                ordered_root.id(),
-                ordered_root.round(),
-                commit_root.id(),
-                commit_root.round(),
-                recovery,
-            );
-            return Err(format_err!(
+                    block_to_commit.id(),
+                    block_to_commit.round(),
+                    ordered_root.id(),
+                    ordered_root.round(),
+                    commit_root.id(),
+                    commit_root.round(),
+                    recovery,
+                );
+                return Err(format_err!(
                 "Committed block round lower than root: block_to_commit_round={}, ordered_root_round={}",
                 block_to_commit.round(),
                 ordered_root.round(),
             ));
-        }
-        let blocks_to_commit = self.path_from_ordered_root(block_id_to_commit).unwrap_or_default();
+            }
+            self.path_from_ordered_root(block_id_to_commit).unwrap_or_default()
+        };
         if blocks_to_commit.is_empty() {
-            // Narrow race: ordered_root advanced between the round check above and here.
+            // A live ordering call may have advanced ordered_root between its round check and
+            // path lookup. Recovery only returns an empty path for an already committed target.
             warn!(
                 "send_for_execution: no path from ordered_root to {} (round {}), likely concurrent advance",
                 block_id_to_commit,
@@ -771,15 +816,19 @@ impl BlockStore {
                 }
             }
             let commit_decision = finality_proof.ledger_info().clone();
-            block_tree.write().commit_callback(
-                storage,
-                &blocks_to_commit,
-                finality_proof,
-                commit_decision,
-            );
-            self.inner.write().update_ordered_root(block_to_commit.id());
-            self.inner.write().insert_ordered_cert(finality_proof_clone.clone());
-            update_counters_for_ordered_blocks(&blocks_to_commit);
+            let mut tree = block_tree.write();
+            tree.commit_callback(storage, &blocks_to_commit, finality_proof, commit_decision);
+            let ordered_round = tree.ordered_root().round();
+            if block_to_commit.round() > ordered_round {
+                tree.update_ordered_root(block_to_commit.id());
+                tree.insert_ordered_cert(finality_proof_clone);
+                let newly_ordered = blocks_to_commit
+                    .iter()
+                    .filter(|block| block.round() > ordered_round)
+                    .cloned()
+                    .collect::<Vec<_>>();
+                update_counters_for_ordered_blocks(&newly_ordered);
+            }
         } else {
             // `BATCH_COMMIT_SIZE` env var: when set and the accumulated path is still
             // small, defer sending so the execution layer can process blocks in larger

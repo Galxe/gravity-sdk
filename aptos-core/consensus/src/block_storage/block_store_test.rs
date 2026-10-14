@@ -439,3 +439,72 @@ async fn test_need_sync_for_ledger_info() {
     let not_too_far = create_ledger_info(round_not_too_far);
     assert!(!block_store.need_sync_for_ledger_info(&not_too_far));
 }
+
+#[tokio::test]
+async fn issue845_recovery_includes_ordered_uncommitted_block() {
+    use crate::{
+        block_storage::{pending_blocks::PendingBlocks, ForwardEpochSyncService},
+        payload_manager::DirectMempoolPayloadManager,
+        persistent_liveness_storage::RootInfo,
+        pipeline::execution_client::DummyExecutionClient,
+        test_utils::EmptyStorage,
+    };
+    use gaptos::aptos_infallible::Mutex;
+    use std::collections::HashMap;
+
+    let genesis = Block::make_genesis_block();
+    genesis.set_block_number(0);
+    let qc = certificate_for_genesis();
+    let proof = qc.clone().into_wrapped_ledger_info();
+    let store = Arc::new(
+        super::BlockStore::build(
+            RootInfo(Box::new(genesis), qc, proof.clone(), proof),
+            vec![],
+            vec![],
+            None,
+            Arc::new(DummyExecutionClient),
+            Arc::new(EmptyStorage::new()),
+            10,
+            Arc::new(SimulatedTimeService::new()),
+            10,
+            Arc::new(DirectMempoolPayloadManager::new()),
+            false,
+            true,
+            Arc::new(Mutex::new(PendingBlocks::new())),
+            false,
+            true,
+            HashMap::new(),
+            Arc::new(ForwardEpochSyncService::from_env()),
+        )
+        .await,
+    );
+    let mut inserter = TreeInserter::new_with_store(ValidatorSigner::random(None), store.clone());
+    let committed = store.commit_root();
+    let ordered = inserter.insert_block(&committed, 1, None).await;
+    let successor = inserter.insert_block(&ordered, 2, None).await;
+    let competing = inserter.insert_block(&committed, 3, None).await;
+    let proof = inserter
+        .create_qc_for_block(&successor, Some(ordered.block_info()))
+        .into_wrapped_ledger_info();
+
+    // DummyExecutionClient accepts ordering but does not invoke the commit callback.
+    store.send_for_execution(proof, false, None).await.unwrap();
+    assert_eq!(store.ordered_root().id(), ordered.id());
+    assert_eq!(store.commit_root().id(), committed.id());
+    assert_eq!(store.path_from_ordered_root(ordered.id()), Some(vec![]));
+    assert!(store.recovery_path_from_commit_root(committed.id()).unwrap().is_empty());
+    assert_eq!(store.recovery_path_from_commit_root(ordered.id()).unwrap(), vec![ordered.clone()],);
+    assert_eq!(
+        store.recovery_path_from_commit_root(successor.id()).unwrap(),
+        vec![ordered.clone(), successor.clone()],
+    );
+    assert!(store.recovery_path_from_commit_root(competing.id()).is_err());
+
+    // A live commit may advance past this recovery target after the caller selected its QC.
+    {
+        let mut tree = store.inner.write();
+        tree.update_ordered_root(successor.id());
+        tree.update_commit_and_finalized_root(successor.id());
+    }
+    assert!(store.recovery_path_from_commit_root(ordered.id()).unwrap().is_empty());
+}

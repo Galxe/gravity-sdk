@@ -19,7 +19,7 @@ use crate::{
     network::IncomingForwardEpochSyncRequest,
     network_interface::ConsensusMsg,
 };
-use anyhow::{anyhow, bail, ensure};
+use anyhow::{anyhow, bail, ensure, Context};
 use aptos_consensus_types::{
     block_retrieval::{NUM_RETRIES, RETRY_INTERVAL_MSEC, RPC_TIMEOUT_MSEC},
     common::Round,
@@ -90,6 +90,21 @@ fn select_forward_batch_end(start: usize, requested: usize, total: usize) -> Opt
 
 fn certifying_position_in_batch(position: usize, start: usize, end: usize) -> bool {
     position >= start && position < end
+}
+
+fn forward_randomness_to_persist(
+    local: Option<&[u8]>,
+    stored: Option<&[u8]>,
+    incoming: Option<&[u8]>,
+) -> anyhow::Result<Option<Vec<u8>>> {
+    if let (Some(local), Some(incoming)) = (local, incoming) {
+        ensure!(local == incoming, "Forward randomness conflicts with local block");
+    }
+    let selected = local.or(incoming);
+    if let (Some(stored), Some(selected)) = (stored, selected) {
+        ensure!(stored == selected, "Forward randomness conflicts with stored value");
+    }
+    Ok(selected.filter(|_| stored.is_none()).map(<[u8]>::to_vec))
 }
 
 /// A validated fetch cursor at the end of the server index has no page to return. Keep that
@@ -1244,11 +1259,13 @@ impl BlockStore {
         epoch: u64,
         batch_size_blocks: u64,
     ) -> anyhow::Result<ForwardAttempt> {
-        let fetch_root = self.ordered_root();
+        // Ordered blocks may still be waiting for randomness or execution. Fetch them again so
+        // recovery can replay the entire uncommitted suffix from the durable commit root.
+        let fetch_root = self.commit_root();
         let mut fetch_anchor_block_number = fetch_root
             .block()
             .block_number()
-            .ok_or_else(|| anyhow!("Ordered root has no block number"))?;
+            .ok_or_else(|| anyhow!("Commit root has no block number"))?;
         let mut fetch_anchor_block_id = fetch_root.id();
 
         let (manifest, serving_peer) = match retriever
@@ -1273,26 +1290,6 @@ impl BlockStore {
             // message is not. Re-send it after restart before reporting the sync as complete.
             self.send_committed_epoch_change(retriever, &manifest.target_ledger_info).await?;
             return Ok(ForwardAttempt::Completed);
-        }
-
-        // The live ordered pipeline can already contain the block targeted by the epoch-ending
-        // commit decision when sync starts. In that case Prepare supplied the missing signed
-        // decision, so commit the existing local path instead of fetching past the snapshot tail.
-        if self.forward_epoch_sync_commit_proof_target_is_ordered(&manifest) {
-            self.persist_forward_epoch_sync_ledger_infos(std::slice::from_ref(
-                &manifest.target_ledger_info,
-            ))?;
-            retriever.network.send_commit_proof(manifest.target_ledger_info.clone()).await;
-            if self.wait_for_forward_epoch_sync_target(&manifest).await? {
-                self.send_committed_epoch_change(retriever, &manifest.target_ledger_info).await?;
-                return Ok(ForwardAttempt::Completed);
-            }
-            info!(
-                epoch = epoch,
-                target_block_number = manifest.target_block_number,
-                "Local ordered epoch target did not commit in time; use legacy fallback"
-            );
-            return Ok(ForwardAttempt::UseLegacy);
         }
 
         let mut watchdog = ProgressWatchdog::start(time::Instant::now());
@@ -1431,20 +1428,6 @@ impl BlockStore {
         Ok(committed_number >= manifest.target_block_number)
     }
 
-    fn forward_epoch_sync_commit_proof_target_is_ordered(
-        &self,
-        manifest: &ForwardEpochSyncManifest,
-    ) -> bool {
-        // For a non-blocking epoch change the signed commit decision can point at a suffix block,
-        // while `target_block_id` is the earlier epoch-change boundary. The buffer manager indexes
-        // commit decisions by `commit_info().id()`, so only take this recovery path after that
-        // exact block is already present on the local ordered path. Otherwise ordinary
-        // paging must keep fetching the suffix until the proof can be applied.
-        let commit_proof_target = manifest.target_ledger_info.ledger_info().commit_info().id();
-        self.path_from_commit_root(self.ordered_root().id())
-            .is_some_and(|path| path.iter().any(|block| block.id() == commit_proof_target))
-    }
-
     async fn wait_for_forward_epoch_sync_target(
         &self,
         manifest: &ForwardEpochSyncManifest,
@@ -1506,14 +1489,33 @@ impl BlockStore {
                     .map(|block_number| (batch.epoch, block_number, record.block.id()))
             })
             .collect::<Vec<_>>();
+        let consensus_db = self.storage.consensus_db();
+        let mut randomness_to_persist = Vec::new();
+        for record in &batch.records {
+            let Some(block_number) = record.block_number else {
+                continue;
+            };
+            let local_randomness = self.get_block(record.block.id()).and_then(|block| {
+                block.randomness().map(|randomness| randomness.randomness().to_vec())
+            });
+            let stored_randomness = consensus_db.get_randomness(block_number)?;
+            if let Some(randomness) = forward_randomness_to_persist(
+                local_randomness.as_deref(),
+                stored_randomness.as_deref(),
+                record.randomness.as_deref(),
+            )
+            .with_context(|| {
+                format!(
+                    "Forward randomness conflict for block {} at number {}",
+                    record.block.id(),
+                    block_number,
+                )
+            })? {
+                randomness_to_persist.push((block_number, randomness));
+            }
+        }
         self.storage.save_tree(blocks, quorum_certs.clone(), block_numbers)?;
-        self.storage.consensus_db().put_randomness(
-            &batch
-                .records
-                .iter()
-                .filter_map(|record| record.block_number.zip(record.randomness.clone()))
-                .collect::<Vec<_>>(),
-        )?;
+        consensus_db.put_randomness(&randomness_to_persist)?;
 
         self.persist_forward_epoch_sync_ledger_infos(&batch.ledger_infos)?;
 
@@ -1756,13 +1758,13 @@ impl BlockRetriever {
 mod forward_epoch_sync_tests {
     use super::{
         certifying_position_in_batch, decode_forward_epoch_sync_fetch_response, fetch_from_peer,
-        prepare_from_candidates, select_forward_batch_end, BlockStore, BusyBackoff, FetchStep,
-        ForwardEpochSyncIndex, ForwardEpochSyncService, PrepareOutcome, ProgressWatchdog,
-        FORWARD_EPOCH_SYNC_BUSY_BACKOFF_JITTER_PERCENT, FORWARD_EPOCH_SYNC_INDEX_CACHE_EPOCHS,
-        FORWARD_EPOCH_SYNC_MAX_BUSY_RETRIES, FORWARD_EPOCH_SYNC_MIN_BLOCKS_PER_WINDOW,
-        FORWARD_EPOCH_SYNC_PREPARE_ATTEMPT_MSEC, FORWARD_EPOCH_SYNC_PREPARE_TIMEOUT_MSEC,
-        FORWARD_EPOCH_SYNC_PROGRESS_WINDOW_MSEC, FORWARD_EPOCH_SYNC_REPROBE_DELAY_MSEC,
-        FORWARD_EPOCH_SYNC_SLOW_BUILD_REPLY_MSEC,
+        forward_randomness_to_persist, prepare_from_candidates, select_forward_batch_end,
+        BlockStore, BusyBackoff, FetchStep, ForwardEpochSyncIndex, ForwardEpochSyncService,
+        PrepareOutcome, ProgressWatchdog, FORWARD_EPOCH_SYNC_BUSY_BACKOFF_JITTER_PERCENT,
+        FORWARD_EPOCH_SYNC_INDEX_CACHE_EPOCHS, FORWARD_EPOCH_SYNC_MAX_BUSY_RETRIES,
+        FORWARD_EPOCH_SYNC_MIN_BLOCKS_PER_WINDOW, FORWARD_EPOCH_SYNC_PREPARE_ATTEMPT_MSEC,
+        FORWARD_EPOCH_SYNC_PREPARE_TIMEOUT_MSEC, FORWARD_EPOCH_SYNC_PROGRESS_WINDOW_MSEC,
+        FORWARD_EPOCH_SYNC_REPROBE_DELAY_MSEC, FORWARD_EPOCH_SYNC_SLOW_BUILD_REPLY_MSEC,
     };
     use crate::consensusdb::{
         schema::{epoch_by_block_number::EpochByBlockNumberSchema, ledger_info::LedgerInfoSchema},
@@ -1810,6 +1812,25 @@ mod forward_epoch_sync_tests {
         assert_eq!(select_forward_batch_end(0, 3, 10), Some(3));
         assert_eq!(select_forward_batch_end(3, 4, 10), Some(7));
         assert_eq!(select_forward_batch_end(7, 4, 10), Some(10));
+    }
+
+    #[test]
+    fn issue845_forward_randomness_preserves_existing_values() {
+        assert_eq!(
+            forward_randomness_to_persist(None, None, Some(b"peer")).unwrap(),
+            Some(b"peer".to_vec()),
+        );
+        assert_eq!(
+            forward_randomness_to_persist(Some(b"local"), None, None).unwrap(),
+            Some(b"local".to_vec()),
+        );
+        assert_eq!(
+            forward_randomness_to_persist(Some(b"local"), Some(b"local"), Some(b"local")).unwrap(),
+            None,
+        );
+        assert!(forward_randomness_to_persist(Some(b"local"), None, Some(b"peer")).is_err());
+        assert!(forward_randomness_to_persist(None, Some(b"stored"), Some(b"peer")).is_err());
+        assert!(forward_randomness_to_persist(Some(b"local"), Some(b"stored"), None).is_err());
     }
 
     #[test]
@@ -1913,6 +1934,9 @@ mod forward_epoch_sync_tests {
         assert_eq!(index.manifest.first_block_number, 1);
         assert_eq!(index.manifest.target_block_number, 4);
         assert_eq!(index.manifest.target_block_id, blocks[3].id());
+        let after_committed_block =
+            BlockStore::validate_forward_anchor(&index, 1, blocks[0].id()).unwrap();
+        assert_eq!(index.entries[after_committed_block].block_id, blocks[1].id());
         assert_eq!(
             index.entries.iter().map(|entry| entry.block_id).collect::<Vec<_>>(),
             blocks.iter().map(|block| block.id()).collect::<Vec<_>>()

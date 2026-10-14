@@ -314,6 +314,54 @@ fn test_reputation_anchor_uses_lagged_commit_and_epoch_boundary() {
 }
 
 #[test]
+fn test_get_block_hash_uses_epoch_boundary_hash() {
+    let tmp_dir = TempPath::new();
+    let db = ConsensusDB::new(&tmp_dir, &PathBuf::new());
+    let boundary_block_number = 100;
+    let boundary_hash = HashValue::new([0x11; 32]);
+    let suffix_hash = HashValue::new([0x22; 32]);
+    let normal_hash = HashValue::new([0x33; 32]);
+
+    // A nonblocking epoch-change LI is stored at the boundary block number, while its
+    // outer block number and hash may describe a later locally persisted suffix block.
+    let boundary_info = EpochBlockInfo {
+        block_id: HashValue::random(),
+        block_number: boundary_block_number,
+        epoch_start_round: 50,
+        epoch_start_timestamp_usecs: 1_000,
+        block_hash: boundary_hash,
+    };
+    let epoch_end_info = BlockInfo::new_with_epoch_block_info(
+        1,
+        50,
+        HashValue::random(),
+        HashValue::random(),
+        0,
+        1_100,
+        Some(EpochState::new(2, ValidatorVerifier::new(vec![]))),
+        Some(boundary_info),
+    );
+    let epoch_end_li = LedgerInfoWithSignatures::new(
+        LedgerInfo::new_with_block_info(epoch_end_info, HashValue::zero(), suffix_hash, 105),
+        AggregateSignature::empty(),
+    );
+    db.put::<LedgerInfoSchema>(&boundary_block_number, &epoch_end_li).unwrap();
+    assert_eq!(
+        db.ledger_db.metadata_db().get_block_hash(boundary_block_number),
+        Some(boundary_hash)
+    );
+
+    let normal_info =
+        BlockInfo::new(2, 10, HashValue::random(), HashValue::random(), 0, 1_200, None);
+    let normal_li = LedgerInfoWithSignatures::new(
+        LedgerInfo::new_with_block_info(normal_info, HashValue::zero(), normal_hash, 110),
+        AggregateSignature::empty(),
+    );
+    db.put::<LedgerInfoSchema>(&110, &normal_li).unwrap();
+    assert_eq!(db.ledger_db.metadata_db().get_block_hash(110), Some(normal_hash));
+}
+
+#[test]
 fn test_reputation_anchor_skips_epoch_boundary_without_epoch_block_info() {
     let tmp_dir = TempPath::new();
     let db = ConsensusDB::new(&tmp_dir, &PathBuf::new());
