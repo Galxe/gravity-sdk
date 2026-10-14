@@ -624,13 +624,21 @@ impl BlockStore {
             self.path_from_ordered_root(block_id_to_commit).unwrap_or_default()
         };
         if blocks_to_commit.is_empty() {
-            // A live ordering call may have advanced ordered_root between its round check and
-            // path lookup. Recovery only returns an empty path for an already committed target.
-            warn!(
-                "send_for_execution: no path from ordered_root to {} (round {}), likely concurrent advance",
-                block_id_to_commit,
-                block_to_commit.round()
-            );
+            if recovery {
+                info!(
+                    "send_for_execution(recovery): target {} (round {}) is already committed",
+                    block_id_to_commit,
+                    block_to_commit.round()
+                );
+            } else {
+                // A live ordering call may have advanced ordered_root between its round check
+                // and path lookup.
+                warn!(
+                    "send_for_execution: no path from ordered_root to {} (round {}), likely concurrent advance",
+                    block_id_to_commit,
+                    block_to_commit.round()
+                );
+            }
             return Ok(());
         }
         counters::SEND_TO_EXECUTION_BLOCK_COUNTER.inc_by(blocks_to_commit.len() as u64);

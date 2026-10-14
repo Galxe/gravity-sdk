@@ -92,6 +92,14 @@ fn certifying_position_in_batch(position: usize, start: usize, end: usize) -> bo
     position >= start && position < end
 }
 
+fn epoch_randomness_block_number(
+    block_number: Option<u64>,
+    boundary_block_number: u64,
+) -> Option<u64> {
+    // Suffix numbers are reused in the next epoch, but randomness is keyed only by number.
+    block_number.filter(|number| *number <= boundary_block_number)
+}
+
 fn forward_randomness_to_persist(
     local: Option<&[u8]>,
     stored: Option<&[u8]>,
@@ -1086,7 +1094,10 @@ impl BlockStore {
                     return ForwardEpochSyncResponseV1::Error(ForwardEpochSyncError::Internal);
                 }
             };
-            let randomness = match entry.block_number {
+            let randomness = match epoch_randomness_block_number(
+                entry.block_number,
+                index.manifest.target_block_number,
+            ) {
                 Some(block_number) => match db.get_randomness(block_number) {
                     Ok(randomness) => randomness,
                     Err(error) => {
@@ -1261,6 +1272,8 @@ impl BlockStore {
     ) -> anyhow::Result<ForwardAttempt> {
         // Ordered blocks may still be waiting for randomness or execution. Fetch them again so
         // recovery can replay the entire uncommitted suffix from the durable commit root.
+        // RandManager holds a separate queued copy, which this does not repair. Epoch recovery
+        // commits through BBM and then tears down that queue on the epoch-change signal.
         let fetch_root = self.commit_root();
         let mut fetch_anchor_block_number = fetch_root
             .block()
@@ -1352,7 +1365,8 @@ impl BlockStore {
             };
 
             BLOCKS_FETCHED_FROM_NETWORK_WHILE_FAST_FORWARD_SYNC.inc_by(batch.records.len() as u64);
-            self.persist_and_process_forward_epoch_sync_batch(&batch).await?;
+            self.persist_and_process_forward_epoch_sync_batch(&batch, manifest.target_block_number)
+                .await?;
             watchdog.record(batch.records.len() as u64);
 
             let committed = self.commit_root();
@@ -1471,6 +1485,7 @@ impl BlockStore {
     async fn persist_and_process_forward_epoch_sync_batch(
         &self,
         batch: &ForwardEpochSyncBatch,
+        boundary_block_number: u64,
     ) -> anyhow::Result<()> {
         for record in &batch.records {
             if let Some(payload) = record.block.payload() {
@@ -1492,7 +1507,9 @@ impl BlockStore {
         let consensus_db = self.storage.consensus_db();
         let mut randomness_to_persist = Vec::new();
         for record in &batch.records {
-            let Some(block_number) = record.block_number else {
+            let Some(block_number) =
+                epoch_randomness_block_number(record.block_number, boundary_block_number)
+            else {
                 continue;
             };
             let local_randomness = self.get_block(record.block.id()).and_then(|block| {
@@ -1522,7 +1539,12 @@ impl BlockStore {
         let sync_blocks = batch
             .records
             .iter()
-            .map(|record| (record.block.clone(), record.block_number, record.randomness.clone()))
+            .map(|record| {
+                let randomness =
+                    epoch_randomness_block_number(record.block_number, boundary_block_number)
+                        .and(record.randomness.clone());
+                (record.block.clone(), record.block_number, randomness)
+            })
             .collect();
         self.append_blocks_for_sync_checked(sync_blocks, quorum_certs).await
     }
@@ -1757,10 +1779,11 @@ impl BlockRetriever {
 #[cfg(test)]
 mod forward_epoch_sync_tests {
     use super::{
-        certifying_position_in_batch, decode_forward_epoch_sync_fetch_response, fetch_from_peer,
-        forward_randomness_to_persist, prepare_from_candidates, select_forward_batch_end,
-        BlockStore, BusyBackoff, FetchStep, ForwardEpochSyncIndex, ForwardEpochSyncService,
-        PrepareOutcome, ProgressWatchdog, FORWARD_EPOCH_SYNC_BUSY_BACKOFF_JITTER_PERCENT,
+        certifying_position_in_batch, decode_forward_epoch_sync_fetch_response,
+        epoch_randomness_block_number, fetch_from_peer, forward_randomness_to_persist,
+        prepare_from_candidates, select_forward_batch_end, BlockReader, BlockStore, BusyBackoff,
+        FetchStep, ForwardEpochSyncIndex, ForwardEpochSyncService, PrepareOutcome,
+        ProgressWatchdog, FORWARD_EPOCH_SYNC_BUSY_BACKOFF_JITTER_PERCENT,
         FORWARD_EPOCH_SYNC_INDEX_CACHE_EPOCHS, FORWARD_EPOCH_SYNC_MAX_BUSY_RETRIES,
         FORWARD_EPOCH_SYNC_MIN_BLOCKS_PER_WINDOW, FORWARD_EPOCH_SYNC_PREPARE_ATTEMPT_MSEC,
         FORWARD_EPOCH_SYNC_PREPARE_TIMEOUT_MSEC, FORWARD_EPOCH_SYNC_PROGRESS_WINDOW_MSEC,
@@ -1775,8 +1798,8 @@ mod forward_epoch_sync_tests {
         block_retrieval::{NUM_RETRIES, RETRY_INTERVAL_MSEC},
         common::Payload,
         forward_epoch_sync::{
-            ForwardEpochSyncError, ForwardEpochSyncManifest, ForwardEpochSyncResponse,
-            ForwardEpochSyncResponseV1,
+            ForwardEpochSyncBatch, ForwardEpochSyncError, ForwardEpochSyncManifest,
+            ForwardEpochSyncRecord, ForwardEpochSyncResponse, ForwardEpochSyncResponseV1,
         },
         quorum_cert::QuorumCert,
         vote_data::VoteData,
@@ -1831,6 +1854,95 @@ mod forward_epoch_sync_tests {
         assert!(forward_randomness_to_persist(Some(b"local"), None, Some(b"peer")).is_err());
         assert!(forward_randomness_to_persist(None, Some(b"stored"), Some(b"peer")).is_err());
         assert!(forward_randomness_to_persist(Some(b"local"), Some(b"stored"), None).is_err());
+    }
+
+    #[test]
+    fn forward_randomness_excludes_epoch_suffix_numbers() {
+        assert_eq!(epoch_randomness_block_number(None, 10), None);
+        assert_eq!(epoch_randomness_block_number(Some(9), 10), Some(9));
+        assert_eq!(epoch_randomness_block_number(Some(10), 10), Some(10));
+        assert_eq!(epoch_randomness_block_number(Some(11), 10), None);
+    }
+
+    #[tokio::test]
+    async fn old_peer_suffix_randomness_does_not_conflict_with_next_epoch() {
+        use crate::{
+            block_storage::pending_blocks::PendingBlocks,
+            payload_manager::DirectMempoolPayloadManager, persistent_liveness_storage::RootInfo,
+            pipeline::execution_client::DummyExecutionClient, test_utils::EmptyStorage,
+            util::mock_time_service::SimulatedTimeService,
+        };
+        use gaptos::aptos_infallible::Mutex;
+
+        let tmp_dir = TempPath::new();
+        let db = Arc::new(ConsensusDB::new(&tmp_dir, &PathBuf::new()));
+        let boundary_block_number = 10;
+        let suffix_block_number = boundary_block_number + 1;
+        db.put_randomness(&vec![(suffix_block_number, b"next epoch".to_vec())]).unwrap();
+
+        let genesis = Block::make_genesis_block();
+        genesis.set_block_number(boundary_block_number);
+        let genesis_qc = certificate_for_genesis();
+        let root_proof = genesis_qc.clone().into_wrapped_ledger_info();
+        let store = BlockStore::build(
+            RootInfo(Box::new(genesis.clone()), genesis_qc.clone(), root_proof.clone(), root_proof),
+            vec![],
+            vec![],
+            None,
+            Arc::new(DummyExecutionClient),
+            Arc::new(EmptyStorage::with_consensus_db(db.clone())),
+            10,
+            Arc::new(SimulatedTimeService::new()),
+            10,
+            Arc::new(DirectMempoolPayloadManager::new()),
+            false,
+            true,
+            Arc::new(Mutex::new(PendingBlocks::new())),
+            true,
+            false,
+            HashMap::new(),
+            Arc::new(ForwardEpochSyncService::from_env()),
+        )
+        .await;
+
+        let signer = ValidatorSigner::random(None);
+        let suffix =
+            Block::new_proposal(Payload::empty(false, true), 1, 1, genesis_qc, &signer, Vec::new())
+                .unwrap();
+        suffix.set_block_number(suffix_block_number);
+        let block_info = |block: &Block| block.gen_block_info(HashValue::zero(), 0, None);
+        let qc = QuorumCert::new(
+            VoteData::new(block_info(&suffix), block_info(&genesis)),
+            ledger_info_committing(block_info(&genesis), boundary_block_number),
+        );
+        let batch = ForwardEpochSyncBatch {
+            epoch: genesis.epoch(),
+            manifest_id: HashValue::random(),
+            anchor_block_number: boundary_block_number,
+            anchor_block_id: genesis.id(),
+            records: vec![ForwardEpochSyncRecord {
+                block: suffix.clone(),
+                block_number: Some(suffix_block_number),
+                randomness: Some(b"old peer suffix".to_vec()),
+                quorum_cert: qc,
+            }],
+            ledger_infos: vec![],
+            next_anchor_block_number: suffix_block_number,
+            next_anchor_block_id: suffix.id(),
+        };
+
+        // Old peers may still send the previous epoch's suffix randomness. The same number has
+        // already been used by the next epoch, so the conflict check must skip this record and
+        // leave the stored value intact.
+        time::timeout(
+            Duration::from_secs(30),
+            store.persist_and_process_forward_epoch_sync_batch(&batch, boundary_block_number),
+        )
+        .await
+        .expect("forward batch processing timed out")
+        .unwrap();
+        assert_eq!(db.get_randomness(suffix_block_number).unwrap(), Some(b"next epoch".to_vec()));
+        assert!(store.get_block(suffix.id()).is_some());
     }
 
     #[test]
