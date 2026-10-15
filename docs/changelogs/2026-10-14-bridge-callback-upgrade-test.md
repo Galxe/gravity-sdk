@@ -1,6 +1,6 @@
 # Pin the callback failure upgrade for Bridge verification
 
-Primary record: [Mono result and Dev evidence](../../../mono-grav-bridge119/docs/changelogs/2026-10-14-bridge-callback-upgrade-test.md).
+Primary record: [Mono result and Dev evidence](https://github.com/Galxe/mono-grav/blob/codex/issue131-oracle-install-e2e/docs/changelogs/2026-10-14-bridge-callback-upgrade-test.md).
 
 ## Background and approved behavior
 
