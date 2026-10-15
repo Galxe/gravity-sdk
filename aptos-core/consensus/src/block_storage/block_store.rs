@@ -947,16 +947,24 @@ impl BlockStore {
 
     pub async fn append_blocks_for_sync_checked(
         &self,
-        blocks: Vec<(Block, Option<u64>, Option<Vec<u8>>)>,
+        blocks: Vec<(Block, Option<u64>)>,
         quorum_certs: Vec<QuorumCert>,
+        epoch_boundary_block_number: u64,
     ) -> anyhow::Result<()> {
-        for (block, block_number, _) in blocks {
+        for (block, block_number) in blocks {
+            let block_number = block_number.or_else(|| block.block_number());
             if let Some(num) = block_number {
                 if block.block_number().is_none() {
                     block.set_block_number(num);
                 }
             }
-            self.insert_block(block, true).await.context("Failed to append forward-sync block")?;
+            // Suffix numbers are reused by the next epoch. Their DB randomness row may
+            // already belong to a different block, so leave these blocks without it.
+            let load_randomness =
+                !block_number.is_some_and(|number| number > epoch_boundary_block_number);
+            self.insert_block_with_db_randomness(block, true, load_randomness)
+                .await
+                .context("Failed to append forward-sync block")?;
         }
         for qc in quorum_certs {
             self.insert_single_quorum_cert(qc, true).context("Failed to append forward-sync QC")?;
@@ -1016,6 +1024,26 @@ impl BlockStore {
             return;
         }
         if let Some(block_number) = block.block_number() {
+            // On restart, build() inserts persisted blocks through this path too. An
+            // epoch-ending LI can leave old-epoch suffix blocks in storage while the
+            // randomness row at their number already belongs to the next epoch.
+            let is_epoch_suffix = self
+                .storage
+                .consensus_db()
+                .ledger_db
+                .metadata_db()
+                .get_latest_ledger_info()
+                .filter(|li| li.ledger_info().epoch() == block.epoch())
+                .and_then(|li| {
+                    li.ledger_info()
+                        .commit_info()
+                        .epoch_block_info()
+                        .map(|info| block_number > info.block_number)
+                })
+                .unwrap_or(false);
+            if is_epoch_suffix {
+                return;
+            }
             if !pipelined_block.has_randomness() {
                 if let Ok(Some(randomness)) =
                     self.storage.consensus_db().get_randomness(block_number)
@@ -1049,8 +1077,19 @@ impl BlockStore {
         block: Block,
         rebuild: bool,
     ) -> anyhow::Result<Arc<PipelinedBlock>> {
+        self.insert_block_with_db_randomness(block, rebuild, true).await
+    }
+
+    async fn insert_block_with_db_randomness(
+        &self,
+        block: Block,
+        rebuild: bool,
+        load_randomness: bool,
+    ) -> anyhow::Result<Arc<PipelinedBlock>> {
         if let Some(existing_block) = self.get_block(block.id()) {
-            self.try_set_randomness_from_db(&existing_block, &block);
+            if load_randomness {
+                self.try_set_randomness_from_db(&existing_block, &block);
+            }
             return Ok(existing_block);
         }
         info!("insert block {}", block);
@@ -1063,7 +1102,9 @@ impl BlockStore {
 
         let pipelined_block = PipelinedBlock::new_ordered(block.clone());
         // set_randomness if it is available
-        self.try_set_randomness_from_db(&pipelined_block, &block);
+        if load_randomness {
+            self.try_set_randomness_from_db(&pipelined_block, &block);
+        }
         // ensure local time past the block time
         let block_time = Duration::from_micros(pipelined_block.timestamp_usecs());
         let current_timestamp = self.time_service.get_current_timestamp();

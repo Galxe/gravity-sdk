@@ -1539,14 +1539,9 @@ impl BlockStore {
         let sync_blocks = batch
             .records
             .iter()
-            .map(|record| {
-                let randomness =
-                    epoch_randomness_block_number(record.block_number, boundary_block_number)
-                        .and(record.randomness.clone());
-                (record.block.clone(), record.block_number, randomness)
-            })
+            .map(|record| (record.block.clone(), record.block_number))
             .collect();
-        self.append_blocks_for_sync_checked(sync_blocks, quorum_certs).await
+        self.append_blocks_for_sync_checked(sync_blocks, quorum_certs, boundary_block_number).await
     }
 }
 
@@ -1811,9 +1806,11 @@ mod forward_epoch_sync_tests {
         aptos_types::{
             account_address::AccountAddress,
             aggregate_signature::AggregateSignature,
-            block_info::BlockInfo,
+            block_info::{BlockInfo, EpochBlockInfo},
+            epoch_state::EpochState,
             ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
             validator_signer::ValidatorSigner,
+            validator_verifier::ValidatorVerifier,
         },
     };
     use std::{
@@ -1942,7 +1939,33 @@ mod forward_epoch_sync_tests {
         .expect("forward batch processing timed out")
         .unwrap();
         assert_eq!(db.get_randomness(suffix_block_number).unwrap(), Some(b"next epoch".to_vec()));
-        assert!(store.get_block(suffix.id()).is_some());
+        assert!(store.get_block(suffix.id()).unwrap().randomness().is_none());
+
+        // A restart rebuilds persisted blocks with the ordinary insert_block path.
+        // Once the epoch-ending LI is present, that path must also leave the suffix
+        // without the next epoch's randomness.
+        let boundary_info = EpochBlockInfo {
+            block_id: genesis.id(),
+            block_number: boundary_block_number,
+            epoch_start_round: genesis.round(),
+            epoch_start_timestamp_usecs: genesis.timestamp_usecs(),
+            block_hash: HashValue::zero(),
+        };
+        let epoch_end_info = BlockInfo::new_with_epoch_block_info(
+            genesis.epoch(),
+            genesis.round(),
+            genesis.id(),
+            HashValue::zero(),
+            0,
+            genesis.timestamp_usecs(),
+            Some(EpochState::new(genesis.epoch() + 1, ValidatorVerifier::new(vec![]))),
+            Some(boundary_info),
+        );
+        let epoch_end_li = ledger_info_committing(epoch_end_info, suffix_block_number);
+        db.put::<LedgerInfoSchema>(&boundary_block_number, &epoch_end_li).unwrap();
+        db.ledger_db.metadata_db().update_latest_ledger_info().unwrap();
+        store.insert_block(suffix.clone(), true).await.unwrap();
+        assert!(store.get_block(suffix.id()).unwrap().randomness().is_none());
     }
 
     #[test]
