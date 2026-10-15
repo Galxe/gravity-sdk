@@ -1,7 +1,7 @@
 # Testnet installation from a missing Bridge Receiver
 
 The cross-repository design and acceptance flow are recorded in
-[`mono-grav`'s primary changelog](../../../mono-grav-bridge119/docs/changelogs/2026-10-15-oracle-install-missing-receiver.md).
+[`mono-grav`'s primary changelog](https://github.com/Galxe/mono-grav/blob/codex/issue131-oracle-install-e2e/docs/changelogs/2026-10-15-oracle-install-missing-receiver.md).
 This local record owns the SDK dependency pin and locked release evidence.
 
 ## 1. Current state
@@ -104,5 +104,8 @@ and the original offline mainnet PFN baseline is unchanged.
 
 ## 8. Remaining work
 
-This run prepares and verifies local release candidates. Publication and
-deployment remain later work; the mainnet PFN remains untouched.
+The user has now authorized preparing and publishing the four existing PRs for
+review. Merge and public activation remain separate work; the mainnet PFN remains
+untouched.
+
+Review order: [Contracts #119](https://github.com/Galxe/gravity_chain_core_contracts/pull/119) owns callback semantics; [Reth #457](https://github.com/Galxe/gravity-reth/pull/457) owns atomic installation; [SDK #844](https://github.com/Galxe/gravity-sdk/pull/844) pins the tested Reth; [Mono #132](https://github.com/Galxe/mono-grav/pull/132) owns acceptance flows and evidence.
