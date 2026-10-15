@@ -57,10 +57,10 @@ Retain the original offline mainnet PFN baseline and guard thresholds.
 ## 6. Execution checklist
 
 - [x] S1: Pin the final Reth revision without unrelated graph changes.
-- [ ] S2: Record locked Cargo metadata and successful release build.
-- [ ] S3: Export release and source provenance.
-- [ ] S4: Record both required final-tree E2E outcomes.
-- [ ] S5: Root reviews final diff and evidence; retain the local-only boundary.
+- [x] S2: Record locked Cargo metadata and successful release build.
+- [x] S3: Export release and source provenance.
+- [x] S4: Record both required final-tree E2E outcomes.
+- [x] S5: Root reviews final diff and evidence; retain the local-only boundary.
 
 ## 7. Outcome
 
@@ -68,8 +68,39 @@ Final Reth revision: `b84b33c58e7db2566a8115e31efba5943d660183`.
 Gravity Dev Cargo 1.93.0 passed locked offline metadata resolution.
 The lock SHA256 is
 `af2ecde2d634f84dcfd93f3ad0a9f680d109fe10305f12385276a30cae34be86`;
-only the Reth source revision strings changed. Release and E2E evidence are
-pending.
+only the Reth source revision strings changed.
+
+The tested SDK product revision is
+`ceae46b6a97bd74cc9fddce273a3123a6be6bfb8`. Its locked Gravity Dev release
+build passed with Rust 1.93.0; Cargo completed in 36m19s. The resulting ELF
+SHA256 is
+`3fecc79aa22e2fad3ad1f55c67e6c84f896ce73c9c75c61c9532c7a64275e1bd`.
+The actual release job was `sdk-release-02`; job 01 failed operator mount
+admission before any compiler ran. The original pre-generation snapshot
+predates job 02, and all three generated Rust files were rewritten during
+that build with unchanged bytes.
+
+Both required single-run E2E flows passed with this ELF, including fresh
+source reload, independent verification and archive reload:
+
+- Focused callback flow: missing Receiver installed at H1235; two failed
+  callbacks consumed their nonces and the later valid mint completed.
+  Final nonce 4, exactly two mints, balance increase 13.
+- Full installer flow: missing Receiver installed at H757; original core-4
+  database replay and a second restart both succeeded. All twelve messages
+  minted once, final nonce 12 and balance increase 138. The final soak
+  lasted 240.411 seconds and advanced 1081 common blocks.
+
+Local evidence is retained under
+`/home/jingyue/.local/state/issue131/receiver-install-20261015/`:
+`logs/sdk-release-02-outcome.json`,
+`logs/gaptos-generation-origin-receiver-install-01.json`,
+`artifacts/candidate/provenance.json`, both `logs/e2e/*/result.json` and
+`logs/final-operator-outcome.json`. The primary Mono changelog records the
+cross-repository checks and archive hashes. Both owned raw case directories
+and build targets were removed after verification; the candidate and
+acceptance archives remain. All four owned case/runtime units are inactive,
+and the original offline mainnet PFN baseline is unchanged.
 
 ## 8. Remaining work
 
