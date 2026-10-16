@@ -439,3 +439,129 @@ async fn test_need_sync_for_ledger_info() {
     let not_too_far = create_ledger_info(round_not_too_far);
     assert!(!block_store.need_sync_for_ledger_info(&not_too_far));
 }
+
+#[tokio::test]
+async fn issue845_recovery_includes_ordered_uncommitted_block() {
+    use crate::{
+        block_storage::{pending_blocks::PendingBlocks, ForwardEpochSyncService},
+        consensusdb::{ConsensusDB, LedgerInfoSchema},
+        payload_manager::DirectMempoolPayloadManager,
+        persistent_liveness_storage::RootInfo,
+        pipeline::execution_client::DummyExecutionClient,
+        test_utils::EmptyStorage,
+    };
+    use block_buffer_manager::get_block_buffer_manager;
+    use gaptos::{
+        api_types::u256_define::BlockId,
+        aptos_infallible::Mutex,
+        aptos_types::{
+            aggregate_signature::AggregateSignature,
+            ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
+        },
+    };
+    use std::{collections::HashMap, path::PathBuf, time::Duration};
+
+    let db_dir = tempfile::tempdir().unwrap();
+    let consensus_db = Arc::new(ConsensusDB::new(db_dir.path(), &PathBuf::new()));
+    let genesis = Block::make_genesis_block();
+    genesis.set_block_number(0);
+    let qc = certificate_for_genesis();
+    let proof = qc.clone().into_wrapped_ledger_info();
+    let store = Arc::new(
+        super::BlockStore::build(
+            RootInfo(Box::new(genesis), qc, proof.clone(), proof),
+            vec![],
+            vec![],
+            None,
+            Arc::new(DummyExecutionClient),
+            Arc::new(EmptyStorage::with_consensus_db(consensus_db.clone())),
+            10,
+            Arc::new(SimulatedTimeService::new()),
+            10,
+            Arc::new(DirectMempoolPayloadManager::new()),
+            false,
+            true,
+            Arc::new(Mutex::new(PendingBlocks::new())),
+            false,
+            true,
+            HashMap::new(),
+            Arc::new(ForwardEpochSyncService::from_env()),
+        )
+        .await,
+    );
+    let mut inserter = TreeInserter::new_with_store(ValidatorSigner::random(None), store.clone());
+    let committed = store.commit_root();
+    let ordered = inserter.insert_block(&committed, 1, None).await;
+    let successor = inserter.insert_block(&ordered, 2, None).await;
+    let competing = inserter.insert_block(&committed, 3, None).await;
+    let proof = inserter
+        .create_qc_for_block(&successor, Some(ordered.block_info()))
+        .into_wrapped_ledger_info();
+
+    // DummyExecutionClient accepts ordering but does not invoke the commit callback.
+    store.send_for_execution(proof.clone(), false, None).await.unwrap();
+    assert_eq!(store.ordered_root().id(), ordered.id());
+    assert_eq!(store.commit_root().id(), committed.id());
+    assert_eq!(store.path_from_ordered_root(ordered.id()), Some(vec![]));
+    assert!(store.recovery_path_from_commit_root(committed.id()).unwrap().is_empty());
+    assert_eq!(store.recovery_path_from_commit_root(ordered.id()).unwrap(), vec![ordered.clone()],);
+    assert_eq!(
+        store.recovery_path_from_commit_root(successor.id()).unwrap(),
+        vec![ordered.clone(), successor.clone()],
+    );
+    assert!(store.recovery_path_from_commit_root(competing.id()).is_err());
+
+    // The target is already the ordered root, but it still needs execution and commit.
+    let block_number = ordered.block().block_number().unwrap();
+    let block_hash = HashValue::new([0x5a; 32]);
+    let persisted_li = LedgerInfoWithSignatures::new(
+        LedgerInfo::new_with_block_info(
+            ordered.block_info(),
+            proof.ledger_info().ledger_info().consensus_data_hash(),
+            block_hash,
+            block_number,
+        ),
+        AggregateSignature::empty(),
+    );
+    consensus_db.put::<LedgerInfoSchema>(&block_number, &persisted_li).unwrap();
+    let manager = get_block_buffer_manager().clone();
+    manager
+        .init(
+            0,
+            HashMap::from([(0, (committed.epoch(), BlockId(*committed.id())))]),
+            ordered.epoch(),
+        )
+        .await
+        .unwrap();
+    tokio::time::timeout(Duration::from_secs(10), async {
+        tokio::try_join!(store.send_for_execution(proof, true, None), async {
+            let ordered_blocks =
+                manager.get_ordered_blocks(block_number, Some(1), ordered.epoch()).await?;
+            assert_eq!(ordered_blocks.len(), 1);
+            assert_eq!(ordered_blocks[0].0.block_meta.block_id, BlockId(*ordered.id()));
+            manager
+                .set_compute_res(
+                    BlockId(*ordered.id()),
+                    *block_hash,
+                    block_number,
+                    ordered.epoch(),
+                    Arc::new(None),
+                    vec![],
+                )
+                .await
+        })
+    })
+    .await
+    .expect("recovery execution timed out")
+    .unwrap();
+    assert_eq!(store.commit_root().id(), ordered.id());
+    assert_eq!(store.ordered_root().id(), ordered.id());
+
+    // A live commit may advance past this recovery target after the caller selected its QC.
+    {
+        let mut tree = store.inner.write();
+        tree.update_ordered_root(successor.id());
+        tree.update_commit_and_finalized_root(successor.id());
+    }
+    assert!(store.recovery_path_from_commit_root(ordered.id()).unwrap().is_empty());
+}
