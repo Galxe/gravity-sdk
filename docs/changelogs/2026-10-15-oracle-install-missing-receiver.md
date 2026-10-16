@@ -1,99 +1,93 @@
-# Testnet installation from a missing Bridge Receiver
+# Integrate the combined testnet bridge hardfork
 
-## 1. Background and Current State
+## 1. Background
 
-The target testnet lacks the authorized Receiver. Its installation must include
-Contracts PR119 NativeOracle and bridge Task/default callback together. Reth's
-review fix also handles an epoch block that first crosses both Gamma and the
-installation timestamp. [Mono's primary plan and report](https://github.com/Galxe/mono-grav/blob/codex/issue131-oracle-install-e2e/docs/changelogs/2026-10-15-oracle-install-missing-receiver.md) owns the
-cross-repository design and acceptance evidence.
+[Issue #131](https://github.com/Galxe/mono-grav/issues/131) installs a missing
+Bridge Receiver, the callback-failure NativeOracle fix, and the Oracle task/default
+callback together at a scheduled hardfork. SDK integrates the Reth implementation;
+[Mono's guide](https://github.com/Galxe/mono-grav/blob/codex/issue131-oracle-install-e2e/docs/changelogs/2026-10-15-oracle-install-missing-receiver.md)
+owns the complete design, acceptance evidence and reproduction procedure.
 
-## 2. Required Behavior
+## 2. SDK behavior
 
-B1: A locked SDK release embeds the Reth implementation that atomically stages
-Gamma when needed and installs Receiver, NativeOracle and task/callback at H.
-B2: Activation and bridge inputs remain dynamic chain configuration; this change
-does not import SDK PR843's fixed historical timestamps. B3: Both manifests and
-the lock resolve one Reth revision without unrelated dependency changes.
+`GravityChainSpecParser` reads the chain configuration and calls Reth's shared
+`oracle_task_install_config` validator before startup completes. On testnet chain
+`7771625`, malformed present installer configuration fails startup. With both
+installer keys absent, or on another chain ID, this validation returns no installer
+configuration. Existing mainnet hardfork overrides remain unchanged by this PR.
 
-## 3. Architecture Decision
+The parser preserves the existing genesis extra fields. It performs no contract
+installation or state migration; Reth executes the transition at the first block H
+whose timestamp crosses the configured installation time. Gamma is a prerequisite
+and is staged in the same overlay if H first crosses both fork boundaries.
 
-Reth owns execution/migration behavior; Contracts owns frozen runtime source;
-Mono owns isolated acceptance flows. SDK owns the exact Reth pin, startup
-configuration validation, locked dependency graph and release provenance. This
-review fix changes only the Reth revision strings in the two manifests and lock.
+## 3. Integration
 
-## 4. Implementation Design
+Both Cargo manifests and all 113 Reth git lock sources select
+`f028d188e207a5963af38120e76f7f406e563d6d`. This advances the previous SDK pin
+`41e1c20` through Reth upstream `5235476` and the installer changes in
+[Reth #457](https://github.com/Galxe/gravity-reth/pull/457), including upstream
+committed-block RPC replay changes. Gaptos remains `a64f8ad`; locked Alloy 2.0.5
+and primitives 1.6.0 are retained. There is no SDK database schema migration.
 
-Pin Reth `f028d188e207a5963af38120e76f7f406e563d6d` in workspace and node
-manifests and every corresponding lock source. Preserve all other lock packages
-and dependency edges. Use actual locked/offline Cargo metadata resolution on
-Gravity Dev, then build the release and bind its ELF to the selected Reth source.
+## 4. Configuration
 
-- [x] Pin the reviewed Reth implementation without unrelated graph changes.
-- [x] Validate actual locked/offline Cargo metadata on Gravity Dev.
-- [x] Build the new release and independently verify binary/source provenance.
-- [x] Complete both final-binary acceptance flows and reconcile evidence.
+Set integer Unix-seconds `oracleTaskInstallTime` and an `oracleTaskInstall` object
+containing exactly `sourceId`, `taskName`, `taskConfig`, `receiverCodeHash` and
+`trustedBridge`. Reth validates their encoding, bounds and nonzero identifiers,
+and requires installation after genesis and `gammaTime`.
 
-## 5. Verification and E2E Design
+Activation time stays configurable for isolated testing. This PR does not add
+SDK #843's fixed fork schedule. Public-network values require a separate freeze;
+the parser tests' timestamps and addresses are fixtures, not deployment inputs.
 
-All builds and tests run on Gravity Dev. Preserve the original offline mainnet PFN
-baseline and guard thresholds. Run `cargo metadata --locked --offline
---format-version 1`, then `RUSTFLAGS="--cfg tokio_unstable" cargo build --locked -p gravity_node --release -j 4`
-with the existing Rust 1.93 builder and owned isolated target directory.
+## 5. Verification commands
 
-E2E Required: yes. Run the focused four-message callback flow and complete
-twelve-message installer, original-validator replay and recovery flow from a
-missing Receiver once each with the new ELF. Bind release, Cargo-selected Reth,
-frozen Contracts artifacts and source manifest to the resulting archives.
+Run on Gravity Dev with the recorded Rust 1.93 builder and isolated target:
 
-## 6. Human Decisions and Interaction
+```bash
+cargo metadata --locked --offline --format-version 1
+cargo test --locked -p gravity_node oracle_task_install
+RUSTFLAGS="--cfg tokio_unstable" cargo build --locked -p gravity_node --release -j 4
+```
 
-The user authorized preparing and publishing the four existing PRs for review,
-including the Gamma-crossing fix, with one Gravity Dev operator. Local work is
-static editing/review; no local formatting, build or tests. Merge and public
-activation remain separate work.
+For E2E, follow Mono's guide for the focused four-message callback flow and the
+twelve-message installation/replay/recovery flow, once each with the selected
+binary. The guide supplies prerequisites, isolated staging, exact invocation,
+source-receipt checks, independent archive verification and cleanup.
 
-Review order: [Contracts #119](https://github.com/Galxe/gravity_chain_core_contracts/pull/119) owns callback semantics; [Reth #457](https://github.com/Galxe/gravity-reth/pull/457) owns atomic installation; [SDK #844](https://github.com/Galxe/gravity-sdk/pull/844) pins Reth; [Mono #132](https://github.com/Galxe/mono-grav/pull/132) owns acceptance flows and evidence.
+## 6. Scope and ownership
 
-## 7. Outcome and Evidence
+Merge order is [Contracts #119](https://github.com/Galxe/gravity_chain_core_contracts/pull/119)
+→ [Reth #457](https://github.com/Galxe/gravity-reth/pull/457)
+→ [SDK #844](https://github.com/Galxe/gravity-sdk/pull/844)
+→ [Mono #132](https://github.com/Galxe/mono-grav/pull/132).
+Contracts owns callback semantics, Reth owns execution, SDK owns integration, and
+Mono owns cross-repository acceptance. All builds and tests run on Gravity Dev.
 
-SDK product revision: `4412093c7cb48c39843c2b16ab19eb5926c06ba1`.
-Selected Reth: `f028d188e207a5963af38120e76f7f406e563d6d`.
-Cargo.lock SHA256: `7fd08cc89440b17f07536d0d9671a3ee09b6103a5569ae86be5703f7244b8805`.
-Gravity Dev's actual locked/offline Cargo metadata resolution passed. Static
-comparison confirms the two manifests and lock contain only the Reth revision
-replacement. The Rust 1.93 locked release build passed with
-`RUSTFLAGS="--cfg tokio_unstable"`. Its independently verified ELF SHA256 is
-`d6b6930e8a6f4301314de37e9e54d89387070ef16ab9ca1aba1076bae4d880ec`;
-source-tree SHA256 is
-`f1f5816cee1c4b70a671829608a8157aab81689cee878a93456ba1d16a127081`.
-Reth formatting produced zero diff; all 21 installer/RPC tests, one staged history
-test and both canonical epoch cases passed. Canonical cases require separate
-processes because the node harness initializes process-global configuration.
-The focused runtime passed at H1220 with four matching replicas, nonce 4,
-progress `[4,13]`, balance 13 and two mints. Fresh four-receipt source reload,
-independent verification, archive reload and raw cleanup passed; acceptance archive SHA256 is
-`f1733b11197bf29cffe31a3268b2624ca8d5183d01d65ad77164917c62dcd194`.
-The full H457 installer/replay/recovery flow passed with the same ELF, including
-original-database replay and a second recovery. All four replicas ended at nonce
-12, progress `[12,167]`, balance 138 and 12 mints. The final soak ran
-240.407 seconds and advanced common blocks 2932 to 4013 (+1081), above
-the 768-block minimum. Fresh source reload verified 12 receipts; independent
-verification, archive reload and raw cleanup passed. Full acceptance archive SHA256:
-`483dd88db3c57c0c593fb5d39aca66472bd8e1b84bd044a43cb81917f06c71f2`.
-Both acceptance archives remained unchanged after cleanup; the original offline
-mainnet PFN baseline remained intact. Local evidence is retained under
-`/home/jingyue/.local/state/issue131/cross-fork-install-recovered-20261015/`.
+## 7. Verified outcome
 
-The [initial SDK verification record](https://github.com/Galxe/gravity-sdk/blob/ddd0dddcd07c1a3ab92e166f745dc1653164b7c1/docs/changelogs/2026-10-15-oracle-install-missing-receiver.md)
-retains the earlier release and acceptance evidence bound to SDK `ceae46b` and
-Reth `b84b33c`. It does not verify the new dependency pin. [Mono's primary report](https://github.com/Galxe/mono-grav/blob/codex/issue131-oracle-install-e2e/docs/changelogs/2026-10-15-oracle-install-missing-receiver.md)
-owns current binary/source bindings, archive hashes and cleanup evidence.
+SDK product revision `4412093c7cb48c39843c2b16ab19eb5926c06ba1` passed locked/offline
+metadata resolution and the locked release build with the Reth pin above. The
+verified ELF SHA256 is
+`d6b6930e8a6f4301314de37e9e54d89387070ef16ab9ca1aba1076bae4d880ec`.
+Later commits, including this consolidation, change documentation only.
 
-## 8. Remaining Work
+Both missing-Receiver flows passed once with that ELF: focused H1220 consumed four
+messages, recorded two callback failures and minted only the two valid messages
+(balance +13); full H457 completed twelve messages, original-database replay and
+a second natural-epoch recovery. All four replicas ended at nonce 12 and balance
+138, followed by a 240.407-second / 1081-block observation. Source-receipt reload,
+independent/archive verification and cleanup passed. Mono retains the exact
+source/binary bindings, archive hashes and commands.
 
-The Gravity Dev release build and acceptance are complete. This documentation
-closeout follows the tested SDK product revision. Hosted required checks, review,
-merge, release publication and public activation remain separate steps. The shared
-callback batch-gas budget boundary remains unresolved; see Mono's primary report.
+The four parser tests and 55 full-node tests passed on earlier SDK revisions;
+full-node tests and Clippy also passed on SDK `2213742`. Those are historical
+results, not fresh unit/Clippy runs for `4412093`. This documentation consolidation
+does not require a new build or repeat of the unchanged product's E2E.
+
+## 8. Remaining work
+
+Hosted required checks and review remain merge gates. Release publication and
+public activation are separate steps. The callback batch-gas budget review remains
+open in Contracts #119; the randomness recovery issue SDK #845 remains separate.
