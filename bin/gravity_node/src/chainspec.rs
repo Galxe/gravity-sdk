@@ -155,7 +155,9 @@ impl ChainSpecParser for GravityChainSpecParser {
         for ev in &events {
             eprintln!("{ev}");
         }
-        Ok(Arc::new(g.into()))
+        let spec: ChainSpec = g.into();
+        greth::reth_chainspec::oracle_task_install_config(&spec).map_err(eyre::Error::msg)?;
+        Ok(Arc::new(spec))
     }
 }
 
@@ -348,6 +350,67 @@ mod tests {
                 "Failed to parse named chain `{chain}`",
             );
         }
+    }
+
+    fn installer_genesis(chain_id: u64) -> serde_json::Value {
+        let mut genesis: serde_json::Value =
+            serde_json::from_str(&genesis_json(chain_id, ForkInputs::default())).unwrap();
+        let config = genesis["config"].as_object_mut().unwrap();
+        config.insert("gammaTime".into(), serde_json::json!(1));
+        config.insert("oracleTaskInstallTime".into(), serde_json::json!(2));
+        config.insert(
+            "oracleTaskInstall".into(),
+            serde_json::json!({
+                "sourceId": "0x7a69",
+                "taskName": format!("0x{}", "11".repeat(32)),
+                "taskConfig": "0x1234",
+                "receiverCodeHash": format!("0x{}", "22".repeat(32)),
+                "trustedBridge": format!("0x{}", "33".repeat(20))
+            }),
+        );
+        genesis
+    }
+
+    #[test]
+    fn oracle_task_install_parser_preserves_target_configuration() {
+        let genesis = installer_genesis(7_771_625);
+        let spec = GravityChainSpecParser::parse(&genesis.to_string()).unwrap();
+        let installer = greth::reth_chainspec::oracle_task_install_config(&*spec).unwrap().unwrap();
+        assert_eq!(installer.timestamp, 2);
+        assert_eq!(installer.source_id, alloy_primitives::U256::from(31_337));
+        assert_eq!(installer.task_config.as_ref(), &[0x12, 0x34]);
+        assert_eq!(
+            spec.genesis.config.extra_fields.get("oracleTaskInstall"),
+            genesis["config"].get("oracleTaskInstall"),
+        );
+    }
+
+    #[test]
+    fn oracle_task_install_parser_rejects_incomplete_target_configuration() {
+        let mut genesis = installer_genesis(7_771_625);
+        genesis["config"].as_object_mut().unwrap().remove("oracleTaskInstall");
+        let error = GravityChainSpecParser::parse(&genesis.to_string()).unwrap_err();
+        assert!(error.to_string().contains("oracleTaskInstall must be an object"));
+    }
+
+    #[test]
+    fn oracle_task_install_parser_rejects_malformed_target_timestamp() {
+        let mut genesis = installer_genesis(7_771_625);
+        genesis["config"]["oracleTaskInstallTime"] = serde_json::json!("2");
+        let error = GravityChainSpecParser::parse(&genesis.to_string()).unwrap_err();
+        assert!(error.to_string().contains("Unix-seconds integer"));
+    }
+
+    #[test]
+    fn oracle_task_install_parser_ignores_other_chain_configuration() {
+        let mut genesis = installer_genesis(GRAVITY_MAINNET_CHAIN_ID);
+        genesis["config"]["oracleTaskInstallTime"] = serde_json::json!("2");
+        let spec = GravityChainSpecParser::parse(&genesis.to_string()).unwrap();
+        assert!(greth::reth_chainspec::oracle_task_install_config(&*spec).unwrap().is_none());
+        assert_eq!(
+            spec.gravity_hardforks.fork(GravityHardfork::Alpha),
+            ForkCondition::Timestamp(GRAVITY_MAINNET_ALPHA_TIME),
+        );
     }
 
     // ---------- Ethereum-side: Prague override ----------
