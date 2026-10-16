@@ -72,7 +72,7 @@ pub(crate) type RethBlockChainProvider =
 pub(crate) type RethTransactionPool = greth::reth_transaction_pool::EthTransactionPool<
     RethBlockChainProvider,
     greth::reth_transaction_pool::blobstore::DiskFileBlobStore,
-    greth::reth_node_ethereum::EthEvmConfig,
+    greth::reth_evm_ethereum::GravityEvmConfig,
 >;
 
 pub(crate) trait RethEthCall:
