@@ -36,7 +36,8 @@
     "betaTime": 1785812400,
     "osakaTime": 1785812400,
     "gammaTime": 1787108400,
-    "testnetOwnerFixTime": 1788490800
+    "testnetOwnerFixTime": 1788490800,
+    "testnetOwnerFixV2Time": 1788948000
   },
   "alloc": {
     "0x00000000000000000000000000000001625f0001": {
