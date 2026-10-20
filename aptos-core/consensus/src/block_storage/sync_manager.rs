@@ -86,6 +86,21 @@ pub enum NeedFetchResult {
     NeedFetch,
 }
 
+fn legacy_epoch_randomness_to_persist<'a>(
+    blocks: impl Iterator<Item = (Option<u64>, Option<&'a [u8]>)>,
+    epoch_change_block_number: Option<u64>,
+) -> Vec<(u64, Vec<u8>)> {
+    blocks
+        .filter_map(|(block_number, randomness)| {
+            let block_number = block_number?;
+            if epoch_change_block_number.is_some_and(|boundary| block_number > boundary) {
+                return None;
+            }
+            randomness.map(|randomness| (block_number, randomness.to_vec()))
+        })
+        .collect()
+}
+
 impl BlockStore {
     fn is_epoch_change_li_boundary_locally_committed(&self, li: &LedgerInfoWithSignatures) -> bool {
         let commit_root = self.commit_root();
@@ -413,6 +428,73 @@ impl BlockStore {
             .filter(|((block, _, _), _)| block.round() > hcc_round)
             .unzip();
 
+        // An epoch-ending LI can commit a suffix after the actual reconfiguration block.
+        // Those suffix block numbers belong to the next epoch and may already have
+        // randomness in the local DB, which is keyed only by block number. Use the
+        // signed epoch boundary rather than the LI's suffix commit block as the limit.
+        let epoch_change_block_number = ledger_infos
+            .iter()
+            .filter(|li| li.ledger_info().epoch() == epoch && li.ledger_info().ends_epoch())
+            .max_by_key(|li| li.ledger_info().version())
+            .map(|li| {
+                li.verify_signatures(retriever.network.validators())?;
+                Ok::<_, anyhow::Error>(
+                    li.ledger_info()
+                        .commit_info()
+                        .epoch_block_info()
+                        .map(|info| info.block_number)
+                        .unwrap_or_else(|| li.ledger_info().block_number()),
+                )
+            })
+            .transpose()?;
+        let epoch_change_block_number = if epoch_change_block_number.is_some() {
+            epoch_change_block_number
+        } else {
+            // Older peers can omit the epoch-ending LI from a paged response. If the local
+            // node already has the signed boundary, it still lets us distinguish the old
+            // epoch's suffix from next-epoch randomness at the same block number.
+            let db = storage.consensus_db();
+            match db.get_all::<EpochByBlockNumberSchema>() {
+                Ok(epoch_boundaries) => {
+                    let mut local_boundary = None;
+                    for (block_number, stored_epoch) in epoch_boundaries {
+                        if stored_epoch != epoch {
+                            continue;
+                        }
+                        match db.get::<LedgerInfoSchema>(&block_number) {
+                            Ok(Some(li))
+                                if li.ledger_info().epoch() == epoch &&
+                                    li.ledger_info().ends_epoch() &&
+                                    li.ledger_info()
+                                        .commit_info()
+                                        .epoch_block_info()
+                                        .is_some_and(|info| {
+                                            info.block_number == block_number
+                                        }) &&
+                                    li.verify_signatures(retriever.network.validators())
+                                        .is_ok() =>
+                            {
+                                local_boundary = Some(block_number);
+                                break;
+                            }
+                            Ok(_) => {}
+                            Err(error) => warn!(
+                                epoch = epoch,
+                                block_number = block_number,
+                                error = ?error,
+                                "Failed to read local epoch boundary LI"
+                            ),
+                        }
+                    }
+                    local_boundary
+                }
+                Err(error) => {
+                    warn!(epoch = epoch, error = ?error, "Failed to read local epoch boundaries");
+                    None
+                }
+            }
+        };
+
         if blocks.is_empty() {
             info!(
                 "[Fast_Forward_sync] all fetched blocks at or below local HCC round {}, nothing to sync",
@@ -448,15 +530,12 @@ impl BlockStore {
             quorum_certs,
             block_numbers,
         )?;
-        storage.consensus_db().put_randomness(
-            &blocks
+        storage.consensus_db().put_randomness(&legacy_epoch_randomness_to_persist(
+            blocks
                 .iter()
-                .filter(|(_, _, randomness)| randomness.is_some())
-                .map(|(_, block_number, randomness)| {
-                    (block_number.unwrap(), randomness.as_ref().unwrap().clone())
-                })
-                .collect(),
-        )?;
+                .map(|(_, block_number, randomness)| (*block_number, randomness.as_deref())),
+            epoch_change_block_number,
+        ))?;
 
         if ledger_infos.is_empty() {
             info!(
@@ -980,6 +1059,37 @@ impl BlockStore {
             .response_sender
             .send(Ok(response_bytes.into()))
             .map_err(|_| anyhow::anyhow!("Failed to send block retrieval response"))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::legacy_epoch_randomness_to_persist;
+    use crate::consensusdb::ConsensusDB;
+    use gaptos::aptos_temppath::TempPath;
+    use std::path::PathBuf;
+
+    #[test]
+    fn legacy_epoch_suffix_randomness_does_not_overwrite_next_epoch() {
+        let tmp_dir = TempPath::new();
+        let db = ConsensusDB::new(&tmp_dir, &PathBuf::new());
+        let boundary = 10;
+        db.put_randomness(&vec![(boundary + 1, b"next epoch".to_vec())]).unwrap();
+
+        let old_boundary_randomness = b"old boundary";
+        let old_suffix_randomness = b"old suffix";
+        let to_persist = legacy_epoch_randomness_to_persist(
+            [
+                (Some(boundary), Some(&old_boundary_randomness[..])),
+                (Some(boundary + 1), Some(&old_suffix_randomness[..])),
+            ]
+            .into_iter(),
+            Some(boundary),
+        );
+        db.put_randomness(&to_persist).unwrap();
+
+        assert_eq!(db.get_randomness(boundary).unwrap(), Some(old_boundary_randomness.to_vec()));
+        assert_eq!(db.get_randomness(boundary + 1).unwrap(), Some(b"next epoch".to_vec()));
     }
 }
 

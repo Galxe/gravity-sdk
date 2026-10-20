@@ -234,11 +234,16 @@ impl PersistentLivenessStorage for MockStorage {
 /// A storage that ignores any requests, used in the tests that don't care about the storage.
 pub struct EmptyStorage {
     next_block_number: AtomicU64,
+    consensus_db: Option<Arc<crate::consensusdb::ConsensusDB>>,
 }
 
 impl EmptyStorage {
     pub fn new() -> Self {
-        Self { next_block_number: AtomicU64::new(1) }
+        Self { next_block_number: AtomicU64::new(1), consensus_db: None }
+    }
+
+    pub fn with_consensus_db(consensus_db: Arc<crate::consensusdb::ConsensusDB>) -> Self {
+        Self { next_block_number: AtomicU64::new(1), consensus_db: Some(consensus_db) }
     }
 
     pub async fn start_for_testing() -> (RecoveryData, Arc<Self>) {
@@ -313,6 +318,6 @@ impl PersistentLivenessStorage for EmptyStorage {
     }
 
     fn consensus_db(&self) -> Arc<crate::consensusdb::ConsensusDB> {
-        unimplemented!()
+        self.consensus_db.as_ref().expect("EmptyStorage has no consensus DB").clone()
     }
 }

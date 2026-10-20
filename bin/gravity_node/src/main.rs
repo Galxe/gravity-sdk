@@ -114,7 +114,7 @@ fn run_reth(
                 async move {
                     let handle = builder
                         .with_types_and_provider::<EthereumNode, BlockchainProvider<_>>()
-                        .with_components(EthereumNode::components())
+                        .with_components(EthereumNode::gravity_components())
                         .with_add_ons(EthereumAddOns::default())
                         .launch_with_fn(|builder| {
                             let datadir = builder.config().datadir();
