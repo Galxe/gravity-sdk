@@ -95,9 +95,8 @@ fn oracle_signature_verification_time_from_genesis_extra_fields(
     value: Option<&serde_json::Value>,
 ) -> Option<u64> {
     value.map(|value| {
-        let seconds = value
-            .as_u64()
-            .expect("oracleSignatureVerificationTime must be an unsigned integer");
+        let seconds =
+            value.as_u64().expect("oracleSignatureVerificationTime must be an unsigned integer");
         seconds
             .checked_mul(1_000_000)
             .expect("oracleSignatureVerificationTime exceeds microsecond timestamp range")

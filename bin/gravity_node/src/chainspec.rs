@@ -271,9 +271,9 @@ fn apply_overrides(g: &mut Genesis) -> Vec<OverrideEvent> {
     let genesis_oracle = g.config.extra_fields.get(oracle_key).and_then(|v| v.as_u64());
     // Clear even malformed values on mainnet, so the genesis field cannot
     // silently acquire different meanings in future parsers.
-    if genesis_oracle != ov.oracle_signature_verification_time
-        || (ov.oracle_signature_verification_time.is_none()
-            && g.config.extra_fields.contains_key(oracle_key))
+    if genesis_oracle != ov.oracle_signature_verification_time ||
+        (ov.oracle_signature_verification_time.is_none() &&
+            g.config.extra_fields.contains_key(oracle_key))
     {
         events.push(OverrideEvent {
             chain_id,
