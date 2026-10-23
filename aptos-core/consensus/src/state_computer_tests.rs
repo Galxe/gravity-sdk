@@ -281,6 +281,31 @@ async fn schedule_compute_should_propagate_payload_fetch_errors() {
 }
 
 #[tokio::test]
+async fn schedule_compute_should_reject_missing_epoch_state() {
+    let executor = Arc::new(DummyBlockExecutor::new());
+    let execution_policy = ExecutionProxy::new(
+        executor.clone(),
+        Arc::new(DummyTxnNotifier {}),
+        Arc::new(DummyStateSyncNotifier::new()),
+        &Handle::current(),
+        TransactionFilter::new(Filter::empty()),
+        true,
+    );
+
+    let result = execution_policy
+        .schedule_compute(&block_for_schedule_compute(), HashValue::zero(), None, dummy_guard())
+        .await
+        .await;
+
+    assert!(matches!(
+        result,
+        Err(ExecutorError::InternalError { error })
+            if error.contains("must be set within an epoch")
+    ));
+    assert!(executor.blocks_received.lock().is_empty());
+}
+
+#[tokio::test]
 async fn schedule_compute_should_reject_unsupported_transaction_payloads() {
     let executor = Arc::new(DummyBlockExecutor::new());
     let execution_policy = execution_proxy_with_payload_manager(
@@ -382,4 +407,228 @@ async fn commit_should_discover_validator_txns() {
 
 fn dummy_guard() -> CountedRequest<()> {
     CountedRequest::new((), Arc::new(AtomicU64::new(0)))
+}
+
+#[cfg(test)]
+mod oracle_signature_tests {
+    use super::*;
+    use crate::state_computer::process_validator_transactions_with_activation;
+    use gaptos::{
+        api_types::{on_chain_config::jwks::ProviderJWKs as ExecutionProviderJWKs, ExtraDataType},
+        aptos_types::{
+            aggregate_signature::AggregateSignature,
+            dkg::DKGTranscript,
+            jwks::{
+                jwk::{JWKMoveStruct, JWK},
+                unsupported::UnsupportedJWK,
+                ProviderJWKs, QuorumCertifiedUpdate,
+            },
+            validator_signer::ValidatorSigner,
+            validator_verifier::{ValidatorConsensusInfo, ValidatorVerifier},
+        },
+    };
+
+    fn block_with_validator_txns(txns: Vec<ValidatorTransaction>) -> Block {
+        let block = Block::new_for_testing(
+            HashValue::zero(),
+            BlockData::dummy_with_validator_txns(txns),
+            None,
+        );
+        block.set_block_number(1);
+        block
+    }
+
+    fn validator_set(block: &Block) -> (Vec<ValidatorSigner>, EpochState) {
+        let signers = (1..=4).map(|seed| ValidatorSigner::random([seed; 32])).collect::<Vec<_>>();
+        let verifier = ValidatorVerifier::new(
+            signers
+                .iter()
+                .map(|signer| ValidatorConsensusInfo::new(signer.author(), signer.public_key(), 1))
+                .collect(),
+        );
+        assert_eq!(verifier.quorum_voting_power(), 3);
+        (signers, EpochState::new(block.epoch(), verifier))
+    }
+
+    fn oracle_update() -> ProviderJWKs {
+        ProviderJWKs {
+            issuer: b"bridge".to_vec(),
+            version: 7,
+            jwks: [
+                (b"event-1".to_vec(), b"payload-1".to_vec()),
+                (b"event-2".to_vec(), b"payload-2".to_vec()),
+            ]
+            .into_iter()
+            .map(|(id, payload)| {
+                JWKMoveStruct::from(JWK::Unsupported(UnsupportedJWK { id, payload }))
+            })
+            .collect(),
+        }
+    }
+
+    fn signature_from(
+        update: &ProviderJWKs,
+        signers: &[ValidatorSigner],
+        epoch_state: &EpochState,
+        count: usize,
+    ) -> AggregateSignature {
+        let partials = signers
+            .iter()
+            .take(count)
+            .map(|signer| (signer.author(), signer.sign(update).unwrap()))
+            .collect::<Vec<_>>();
+        epoch_state
+            .verifier
+            .aggregate_signatures(partials.iter().map(|(author, signature)| (author, signature)))
+            .unwrap()
+    }
+
+    fn oracle_txn(update: ProviderJWKs, multi_sig: AggregateSignature) -> ValidatorTransaction {
+        ValidatorTransaction::ObservedJWKUpdate(QuorumCertifiedUpdate { update, multi_sig })
+    }
+
+    fn convert(
+        txns: Vec<ValidatorTransaction>,
+        epoch_state: &EpochState,
+        verify_oracle_signature: bool,
+    ) -> anyhow::Result<Vec<ExtraDataType>> {
+        let block = block_with_validator_txns(txns);
+        process_validator_transactions_with_activation(
+            block.validator_txns().map(|txns| &**txns),
+            &block,
+            epoch_state,
+            verify_oracle_signature,
+        )
+    }
+
+    #[test]
+    fn oracle_certificate_covers_the_entire_original_update() {
+        let block = block_with_validator_txns(vec![]);
+        let (signers, epoch_state) = validator_set(&block);
+        let update = oracle_update();
+        let quorum_signature = signature_from(&update, &signers, &epoch_state, 3);
+
+        let valid =
+            convert(vec![oracle_txn(update.clone(), quorum_signature.clone())], &epoch_state, true)
+                .unwrap();
+        assert_eq!(valid.len(), 1);
+        let ExtraDataType::JWK(bytes) = &valid[0] else {
+            panic!("valid Oracle update must produce JWK extra data");
+        };
+        let decoded: ExecutionProviderJWKs = bcs::from_bytes(bytes).unwrap();
+        assert_eq!(decoded.issuer, update.issuer);
+        assert_eq!(decoded.version, update.version);
+        assert_eq!(decoded.jwks.len(), 2);
+        assert_eq!(decoded.jwks[0].data.as_slice(), b"payload-1");
+        assert_eq!(decoded.jwks[1].data.as_slice(), b"payload-2");
+
+        let invalid_certificates = [
+            AggregateSignature::empty(),
+            signature_from(&update, &signers, &epoch_state, 2),
+            AggregateSignature::new((*quorum_signature.get_signers_bitvec()).clone(), None),
+            signature_from(
+                &ProviderJWKs { version: update.version + 1, ..update.clone() },
+                &signers,
+                &epoch_state,
+                3,
+            ),
+        ];
+        for multi_sig in invalid_certificates {
+            assert!(convert(vec![oracle_txn(update.clone(), multi_sig)], &epoch_state, true)
+                .unwrap()
+                .is_empty());
+        }
+
+        let mut invalid_bitmap = (*quorum_signature.get_signers_bitvec()).clone();
+        invalid_bitmap.set(4); // Four validators have indices 0 through 3.
+        let malformed_certificate =
+            AggregateSignature::new(invalid_bitmap, (*quorum_signature.sig()).clone());
+        assert!(convert(
+            vec![oracle_txn(update.clone(), malformed_certificate)],
+            &epoch_state,
+            true,
+        )
+        .unwrap()
+        .is_empty());
+
+        let mut modified_updates = vec![
+            ProviderJWKs { issuer: b"price-feed".to_vec(), ..update.clone() },
+            ProviderJWKs { version: update.version + 1, ..update.clone() },
+        ];
+        let mut changed_id = update.clone();
+        changed_id.jwks[1] = JWKMoveStruct::from(JWK::Unsupported(UnsupportedJWK {
+            id: b"changed-id".to_vec(),
+            payload: b"payload-2".to_vec(),
+        }));
+        modified_updates.push(changed_id);
+        let mut changed_payload = update.clone();
+        changed_payload.jwks[1] = JWKMoveStruct::from(JWK::Unsupported(UnsupportedJWK {
+            id: b"event-2".to_vec(),
+            payload: b"changed-payload".to_vec(),
+        }));
+        modified_updates.push(changed_payload);
+        for modified in modified_updates {
+            assert!(convert(
+                vec![oracle_txn(modified, quorum_signature.clone())],
+                &epoch_state,
+                true,
+            )
+            .unwrap()
+            .is_empty());
+        }
+    }
+
+    #[test]
+    fn invalid_oracle_certificate_drops_only_its_update_after_activation() {
+        let block = block_with_validator_txns(vec![]);
+        let (signers, epoch_state) = validator_set(&block);
+        let valid_update = oracle_update();
+        let valid_signature = signature_from(&valid_update, &signers, &epoch_state, 3);
+        let invalid_update = ProviderJWKs { issuer: b"price-feed".to_vec(), ..oracle_update() };
+        let invalid = oracle_txn(invalid_update, AggregateSignature::empty());
+        let dkg = ValidatorTransaction::DKGResult(DKGTranscript::new(
+            block.epoch(),
+            signers[0].author(),
+            vec![1, 2, 3],
+        ));
+        let valid = oracle_txn(valid_update.clone(), valid_signature);
+
+        // Historical blocks retain the old conversion behavior at the pre-activation call.
+        let before_activation =
+            convert(vec![invalid.clone(), dkg.clone(), valid.clone()], &epoch_state, false)
+                .unwrap();
+        assert_eq!(before_activation.len(), 3);
+
+        let after_activation = convert(vec![invalid, dkg, valid], &epoch_state, true).unwrap();
+        assert_eq!(after_activation.len(), 2);
+        assert!(matches!(&after_activation[0], ExtraDataType::DKG(_)));
+        let ExtraDataType::JWK(bytes) = &after_activation[1] else {
+            panic!("the valid Oracle update must remain after the DKG result");
+        };
+        let decoded: ExecutionProviderJWKs = bcs::from_bytes(bytes).unwrap();
+        assert_eq!(decoded.issuer, valid_update.issuer);
+        assert_eq!(decoded.jwks.len(), 2);
+    }
+
+    #[test]
+    fn oracle_conversion_rejects_epoch_mismatch_before_and_after_activation() {
+        let block = block_with_validator_txns(vec![]);
+        let (signers, matching_epoch_state) = validator_set(&block);
+        let wrong_epoch_state = EpochState {
+            epoch: matching_epoch_state.epoch + 1,
+            verifier: matching_epoch_state.verifier.clone(),
+        };
+        let update = oracle_update();
+        let signature = signature_from(&update, &signers, &matching_epoch_state, 3);
+
+        for verify_oracle_signature in [false, true] {
+            let error = convert(
+                vec![oracle_txn(update.clone(), signature.clone())],
+                &wrong_epoch_state,
+                verify_oracle_signature,
+            )
+            .unwrap_err();
+            assert!(error.to_string().contains("belongs to epoch"));
+        }
+    }
 }

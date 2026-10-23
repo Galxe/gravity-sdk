@@ -41,6 +41,7 @@ use gaptos::{
     aptos_metrics_core::{register_int_gauge_vec, IntGaugeHelper, IntGaugeVec},
     aptos_types::{
         aggregate_signature::AggregateSignature,
+        epoch_state::EpochState,
         jwks,
         ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
         randomness::{RandMetadata, Randomness},
@@ -137,6 +138,8 @@ pub struct BlockStore {
     /// Mapping from validator address to their index in the ordered validator set.
     /// Used during recovery to compute proposer_index for blocks.
     validator_indices: HashMap<AccountAddress, usize>,
+    /// The verifier for this BlockStore's epoch, including recovery execution.
+    epoch_state: Arc<EpochState>,
     /// Node-wide forward epoch sync serving state (index cache and quotas). Not persisted:
     /// restart recovery is derived from the existing ConsensusDB schemas.
     forward_epoch_sync_service: Arc<sync_manager::ForwardEpochSyncService>,
@@ -156,7 +159,7 @@ impl BlockStore {
         pending_blocks: Arc<Mutex<PendingBlocks>>,
         enable_randomness: bool,
         require_block_randomness: bool,
-        validator_indices: HashMap<AccountAddress, usize>,
+        epoch_state: Arc<EpochState>,
         forward_epoch_sync_service: Arc<sync_manager::ForwardEpochSyncService>,
     ) -> Self {
         let highest_2chain_tc = initial_data.highest_2chain_timeout_certificate();
@@ -178,7 +181,7 @@ impl BlockStore {
             pending_blocks,
             enable_randomness,
             require_block_randomness,
-            validator_indices,
+            epoch_state,
             forward_epoch_sync_service,
         ));
         block_on(block_store.recover_blocks());
@@ -198,7 +201,7 @@ impl BlockStore {
         pending_blocks: Arc<Mutex<PendingBlocks>>,
         enable_randomness: bool,
         require_block_randomness: bool,
-        validator_indices: HashMap<AccountAddress, usize>,
+        epoch_state: Arc<EpochState>,
         forward_epoch_sync_service: Arc<sync_manager::ForwardEpochSyncService>,
     ) -> Self {
         let highest_2chain_tc = initial_data.highest_2chain_timeout_certificate();
@@ -220,7 +223,7 @@ impl BlockStore {
             pending_blocks,
             enable_randomness,
             require_block_randomness,
-            validator_indices,
+            epoch_state,
             forward_epoch_sync_service,
         )
         .await;
@@ -472,7 +475,7 @@ impl BlockStore {
         pending_blocks: Arc<Mutex<PendingBlocks>>,
         enable_randomness: bool,
         require_block_randomness: bool,
-        validator_indices: HashMap<AccountAddress, usize>,
+        epoch_state: Arc<EpochState>,
         forward_epoch_sync_service: Arc<sync_manager::ForwardEpochSyncService>,
     ) -> Self {
         let RootInfo(root_block, root_qc, root_ordered_cert, root_commit_cert) = root;
@@ -497,6 +500,7 @@ impl BlockStore {
             highest_2chain_timeout_cert.map(Arc::new),
         );
 
+        let validator_indices = epoch_state.verifier.address_to_validator_index().clone();
         let block_store = Self {
             inner: Arc::new(RwLock::new(tree)),
             execution_client,
@@ -512,6 +516,7 @@ impl BlockStore {
             enable_randomness,
             require_block_randomness,
             validator_indices,
+            epoch_state,
             forward_epoch_sync_service,
         };
 
@@ -736,7 +741,8 @@ impl BlockStore {
                 let extra_data = crate::state_computer::process_validator_transactions_util(
                     validator_txns.map(|v| &**v),
                     p_block.block(),
-                );
+                    &self.epoch_state,
+                )?;
 
                 // In recovery mode, use existing randomness from the block
                 let randomness = if self.require_block_randomness && p_block.epoch() != 1 {
@@ -998,7 +1004,7 @@ impl BlockStore {
             self.pending_blocks.clone(),
             self.enable_randomness,
             self.require_block_randomness,
-            self.validator_indices.clone(),
+            self.epoch_state.clone(),
             self.forward_epoch_sync_service.clone(),
         )
         .await;

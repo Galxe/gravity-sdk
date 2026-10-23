@@ -4,6 +4,7 @@ use api::{
     config_storage::ConfigStorageWrapper,
     consensus_api::{ConsensusEngine, ConsensusEngineArgs},
 };
+use aptos_consensus::oracle_hardfork::init_oracle_signature_verification_time;
 use consensus::mock_consensus::mock::MockConsensus;
 use gaptos::{
     api_types::{
@@ -89,6 +90,20 @@ fn consensus_hardforks_from_genesis_extra_fields(
     hardforks
 }
 
+/// The genesis field uses Unix seconds; consensus blocks use microseconds.
+fn oracle_signature_verification_time_from_genesis_extra_fields(
+    value: Option<&serde_json::Value>,
+) -> Option<u64> {
+    value.map(|value| {
+        let seconds = value
+            .as_u64()
+            .expect("oracleSignatureVerificationTime must be an unsigned integer");
+        seconds
+            .checked_mul(1_000_000)
+            .expect("oracleSignatureVerificationTime exceeds microsecond timestamp range")
+    })
+}
+
 fn run_reth(
     cli: Cli<GravityChainSpecParser>,
     execution_args_rx: oneshot::Receiver<ExecutionArgs>,
@@ -137,6 +152,15 @@ fn run_reth(
                         });
                         info!("Consensus hardforks:\n{}", hardforks);
                         init_consensus_hardforks(hardforks);
+                        let oracle_verification_time =
+                            oracle_signature_verification_time_from_genesis_extra_fields(
+                                extra.get("oracleSignatureVerificationTime"),
+                            );
+                        info!(
+                            "Oracle signature verification activation time: {:?} us",
+                            oracle_verification_time
+                        );
+                        init_oracle_signature_verification_time(oracle_verification_time);
                     }
 
                     let eth_api = handle.node.rpc_registry.eth_api().clone();
@@ -479,5 +503,31 @@ mod tests {
             hardforks.condition(ConsensusHardfork::ConsensusAlpha),
             ForkCondition::Timestamp(1_785_128_400_000_000),
         );
+    }
+
+    #[test]
+    fn oracle_signature_verification_time_converts_seconds_to_microseconds() {
+        let activation_time = serde_json::json!(42);
+        assert_eq!(
+            oracle_signature_verification_time_from_genesis_extra_fields(Some(&activation_time)),
+            Some(42_000_000),
+        );
+        assert_eq!(oracle_signature_verification_time_from_genesis_extra_fields(None), None);
+    }
+
+    #[test]
+    #[should_panic(expected = "oracleSignatureVerificationTime must be an unsigned integer")]
+    fn oracle_signature_verification_time_rejects_malformed_value() {
+        let malformed = serde_json::json!("42");
+        oracle_signature_verification_time_from_genesis_extra_fields(Some(&malformed));
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "oracleSignatureVerificationTime exceeds microsecond timestamp range"
+    )]
+    fn oracle_signature_verification_time_rejects_overflow() {
+        let overflow = serde_json::json!(u64::MAX);
+        oracle_signature_verification_time_from_genesis_extra_fields(Some(&overflow));
     }
 }

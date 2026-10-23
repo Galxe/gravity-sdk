@@ -17,7 +17,7 @@ use crate::{
     transaction_shuffler::TransactionShuffler,
     txn_notifier::TxnNotifier,
 };
-use anyhow::Result;
+use anyhow::{ensure, Result};
 use aptos_consensus_types::{
     block::Block,
     common::{ensure_supported_transaction_payloads, RejectedTransactionSummary, Round},
@@ -87,6 +87,7 @@ impl LogicalTime {
 
 #[derive(Clone)]
 struct MutableState {
+    epoch_state: Arc<EpochState>,
     validators: Arc<[AccountAddress]>,
     payload_manager: Arc<dyn TPayloadManager>,
     transaction_shuffler: Arc<dyn TransactionShuffler>,
@@ -109,14 +110,10 @@ pub struct ExecutionProxy {
 }
 
 impl ExecutionProxy {
-    async fn get_block_txns(&self, block: &Block) -> ExecutorResult<Vec<SignedTransaction>> {
-        let payload_manager = self
-            .state
-            .read()
-            .as_ref()
-            .ok_or_else(|| ExecutorError::internal_err("must be set within an epoch"))?
-            .payload_manager
-            .clone();
+    async fn get_block_txns(
+        block: &Block,
+        payload_manager: &Arc<dyn TPayloadManager>,
+    ) -> ExecutorResult<Vec<SignedTransaction>> {
         let (transactions, _) = payload_manager.get_transactions(block).await?;
         ensure_supported_transaction_payloads(&transactions)
             .map_err(ExecutorError::internal_err)?;
@@ -199,6 +196,7 @@ impl ExecutionProxy {
 
     pub fn pipeline_builder(&self, commit_signer: Arc<ValidatorSigner>) -> PipelineBuilder {
         let MutableState {
+            epoch_state: _,
             validators,
             payload_manager,
             transaction_shuffler,
@@ -225,132 +223,58 @@ impl ExecutionProxy {
             self.txn_notifier.clone(),
         )
     }
-
-    /// Process validator transactions (DKG and JWK) and extract extra data for execution
-    fn process_validator_transactions(
-        &self,
-        validator_txns: Option<&[ValidatorTransaction]>,
-        block: &Block,
-    ) -> Vec<ExtraDataType> {
-        validator_txns
-            .map(|validator_txns| {
-                validator_txns
-                    .iter()
-                    .filter_map(|txn| self.process_single_validator_transaction(txn, block))
-                    .collect()
-            })
-            .unwrap_or_default()
-    }
-
-    /// Process a single validator transaction (DKG or JWK) and return the serialized data
-    fn process_single_validator_transaction(
-        &self,
-        txn: &ValidatorTransaction,
-        block: &Block,
-    ) -> Option<ExtraDataType> {
-        match txn {
-            ValidatorTransaction::DKGResult(transcript) => {
-                let transcript = gaptos::api_types::on_chain_config::dkg::DKGTranscript {
-                    metadata: gaptos::api_types::on_chain_config::dkg::DKGTranscriptMetadata {
-                        epoch: transcript.metadata.epoch,
-                        author: ExternalAccountAddress::new(
-                            transcript.metadata.author.into_bytes(),
-                        ),
-                    },
-                    transcript_bytes: transcript.transcript_bytes.clone(),
-                };
-                bcs::to_bytes(&transcript)
-                    .map(ExtraDataType::DKG)
-                    .map_err(|err| {
-                        warn!(
-                            "failed to serialize DKG validator transaction for block {}: {}",
-                            block.id(),
-                            err
-                        )
-                    })
-                    .ok()
-            }
-            ValidatorTransaction::ObservedJWKUpdate(jwks::QuorumCertifiedUpdate {
-                update,
-                multi_sig,
-            }) => self.process_jwk_update(&update, block).map(ExtraDataType::JWK),
-        }
-    }
-
-    /// Process JWK update and convert to gaptos format
-    fn process_jwk_update(&self, update: &ProviderJWKs, block: &Block) -> Option<Vec<u8>> {
-        use gaptos::api_types::on_chain_config::jwks::{JWKStruct, ProviderJWKs};
-        // TODO(Gravity): Check the signature here instead of execution layer
-        info!(
-            "jwk txn block number {} , {:?}",
-            block.block_number().unwrap_or_else(|| panic!("No block number")),
-            update.version
-        );
-
-        let gaptos_provider_jwk = ProviderJWKs {
-            issuer: update.issuer.clone(),
-            version: update.version,
-            jwks: update
-                .jwks
-                .iter()
-                .filter_map(|jwk| {
-                    let aptos_jwk = match JWK::try_from(jwk) {
-                        Ok(jwk) => jwk,
-                        Err(err) => {
-                            warn!("failed to parse JWK update for block {}: {}", block.id(), err);
-                            return None;
-                        }
-                    };
-
-                    match aptos_jwk {
-                        JWK::RSA(rsa_jwk) => {
-                            error!(
-                                "unexpected RSA JWK in validator transaction for block {}, issuer {:?}, version {}, kid {}: dropping",
-                                block.id(),
-                                update.issuer,
-                                update.version,
-                                rsa_jwk.kid,
-                            );
-                            None
-                        }
-                        JWK::Unsupported(unsupported_jwk) => Some(JWKStruct {
-                            type_name: JWK_TYPE_UNSUPPORTED.to_string(),
-                            data: unsupported_jwk.payload,
-                        }),
-                    }
-                })
-                .collect(),
-        };
-
-        bcs::to_bytes(&gaptos_provider_jwk)
-            .map_err(|err| {
-                warn!("failed to serialize provider JWK update for block {}: {}", block.id(), err)
-            })
-            .ok()
-    }
 }
 
 /// Public utility function to process validator transactions (JWK and DKG)
 pub fn process_validator_transactions_util(
     validator_txns: Option<&[ValidatorTransaction]>,
     block: &Block,
-) -> Vec<ExtraDataType> {
-    let mut extra_data = Vec::new();
-
-    if let Some(validator_txns) = validator_txns {
-        extra_data = validator_txns
-            .iter()
-            .filter_map(|txn| process_single_validator_transaction_util(txn, block))
-            .collect();
-    }
-
-    extra_data
+    epoch_state: &EpochState,
+) -> Result<Vec<ExtraDataType>> {
+    process_validator_transactions_with_activation(
+        validator_txns,
+        block,
+        epoch_state,
+        crate::oracle_hardfork::is_active(block.timestamp_usecs()),
+    )
 }
 
-/// Public utility function to process a single validator transaction
-pub fn process_single_validator_transaction_util(
+/// Shared conversion path for normal and recovery execution.
+/// The explicit activation flag also lets tests exercise both sides of the fork.
+pub(crate) fn process_validator_transactions_with_activation(
+    validator_txns: Option<&[ValidatorTransaction]>,
+    block: &Block,
+    epoch_state: &EpochState,
+    verify_oracle_signature: bool,
+) -> Result<Vec<ExtraDataType>> {
+    ensure!(
+        block.epoch() == epoch_state.epoch,
+        "block {} belongs to epoch {}, but execution has epoch {}",
+        block.id(),
+        block.epoch(),
+        epoch_state.epoch
+    );
+
+    Ok(validator_txns
+        .unwrap_or_default()
+        .iter()
+        .filter_map(|txn| {
+            process_single_validator_transaction_util(
+                txn,
+                block,
+                epoch_state,
+                verify_oracle_signature,
+            )
+        })
+        .collect())
+}
+
+/// Process one validator transaction after checking the block's epoch.
+fn process_single_validator_transaction_util(
     txn: &ValidatorTransaction,
     block: &Block,
+    epoch_state: &EpochState,
+    verify_oracle_signature: bool,
 ) -> Option<ExtraDataType> {
     match txn {
         ValidatorTransaction::DKGResult(transcript) => {
@@ -375,14 +299,29 @@ pub fn process_single_validator_transaction_util(
         ValidatorTransaction::ObservedJWKUpdate(jwks::QuorumCertifiedUpdate {
             update,
             multi_sig,
-        }) => process_jwk_update_util(&update, block).map(ExtraDataType::JWK),
+        }) => {
+            // The certificate covers the original issuer, version, and every JWK entry.
+            // Verify before converting or filtering any entry. Historical blocks before
+            // the activation timestamp retain their original execution behavior.
+            if verify_oracle_signature {
+                if let Err(error) = epoch_state.verifier.verify_multi_signatures(update, multi_sig)
+                {
+                    warn!(
+                        "discarding Oracle update with invalid quorum certificate in block {}: {}",
+                        block.id(),
+                        error
+                    );
+                    return None;
+                }
+            }
+            process_jwk_update_util(update, block).map(ExtraDataType::JWK)
+        }
     }
 }
 
-/// Public utility function to process JWK update
-pub fn process_jwk_update_util(update: &ProviderJWKs, block: &Block) -> Option<Vec<u8>> {
+/// Convert an already-authorized JWK update for the external executor.
+fn process_jwk_update_util(update: &ProviderJWKs, block: &Block) -> Option<Vec<u8>> {
     use gaptos::api_types::on_chain_config::jwks::{JWKStruct, ProviderJWKs};
-    // TODO(Gravity): Check the signature here instead of execution layer
     info!(
         "jwk txn epoch {}, block number {}, data len {}, {:?}",
         block.epoch(),
@@ -445,15 +384,29 @@ impl StateComputer for ExecutionProxy {
         lifetime_guard: CountedRequest<()>,
     ) -> StateComputeResultFut {
         assert!(block.block_number().is_some());
-        let txns = match self.get_block_txns(block).await {
+        // Keep the payload manager, verifier, validator order, and randomness flag
+        // from one epoch snapshot across the payload fetch await.
+        let state = match self.state.read().as_ref().cloned() {
+            Some(state) => state,
+            None => {
+                return Box::pin(async {
+                    Err(ExecutorError::internal_err("must be set within an epoch"))
+                })
+            }
+        };
+        let extra_data = match process_validator_transactions_util(
+            block.validator_txns().map(|txns| &**txns),
+            block,
+            &state.epoch_state,
+        ) {
+            Ok(extra_data) => extra_data,
+            Err(error) => return Box::pin(async move { Err(ExecutorError::internal_err(error)) }),
+        };
+        let txns = match Self::get_block_txns(block, &state.payload_manager).await {
             Ok(txns) => txns,
             Err(error) => return Box::pin(async move { Err(error) }),
         };
-        let validator_txns = block.validator_txns();
-        let extra_data = process_validator_transactions_util(validator_txns.map(|v| &**v), block);
-
-        let MutableState { validators, .. } =
-            self.state.read().as_ref().cloned().expect("must be set within an epoch");
+        let validators = &state.validators;
 
         // Look up the proposer's index in the validator set (None for NIL blocks)
         let proposer_index = block
@@ -499,7 +452,7 @@ impl StateComputer for ExecutionProxy {
         let txn_notifier = self.txn_notifier.clone();
         let block_id_hashvalue = block.id();
         let block_round = block.round();
-        let enable_randomness = self.state.read().as_ref().unwrap().is_randomness_enabled;
+        let enable_randomness = state.is_randomness_enabled;
         Box::pin(async move {
             let block_id = meta_data.block_id;
             let block_timestamp = meta_data.usecs;
@@ -721,6 +674,7 @@ impl StateComputer for ExecutionProxy {
         randomness_enabled: bool,
     ) {
         *self.state.write() = Some(MutableState {
+            epoch_state: Arc::new(epoch_state.clone()),
             validators: epoch_state
                 .verifier
                 .get_ordered_account_addresses_iter()

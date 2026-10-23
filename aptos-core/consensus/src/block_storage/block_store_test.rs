@@ -484,7 +484,7 @@ async fn issue845_recovery_includes_ordered_uncommitted_block() {
             Arc::new(Mutex::new(PendingBlocks::new())),
             false,
             true,
-            HashMap::new(),
+            Arc::new(gaptos::aptos_types::epoch_state::EpochState::empty()),
             Arc::new(ForwardEpochSyncService::from_env()),
         )
         .await,

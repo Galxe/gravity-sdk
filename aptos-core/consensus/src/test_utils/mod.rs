@@ -17,7 +17,9 @@ use aptos_consensus_types::{
 use gaptos::{
     aptos_crypto::{HashValue, PrivateKey, Uniform},
     aptos_logger::Level,
-    aptos_types::{ledger_info::LedgerInfo, validator_signer::ValidatorSigner},
+    aptos_types::{
+        epoch_state::EpochState, ledger_info::LedgerInfo, validator_signer::ValidatorSigner,
+    },
 };
 use std::{collections::HashMap, future::Future, sync::Arc, time::Duration};
 use tokio::{runtime, time::timeout};
@@ -95,7 +97,7 @@ pub async fn build_empty_tree() -> Arc<BlockStore> {
         Arc::new(Mutex::new(PendingBlocks::new())),
         false,
         false,
-        HashMap::new(), // validator_indices: empty for tests
+        Arc::new(EpochState::empty()),
         Arc::new(ForwardEpochSyncService::from_env()),
     ))
 }

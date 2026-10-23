@@ -87,6 +87,7 @@ static FUZZING_SIGNER: Lazy<ValidatorSigner> = Lazy::new(|| ValidatorSigner::fro
 fn build_empty_store(
     storage: Arc<dyn PersistentLivenessStorage>,
     initial_data: RecoveryData,
+    epoch_state: Arc<EpochState>,
 ) -> Arc<BlockStore> {
     let (_commit_cb_sender, _commit_cb_receiver) = mpsc::unbounded::<LedgerInfoWithSignatures>();
 
@@ -103,7 +104,7 @@ fn build_empty_store(
         Arc::new(Mutex::new(PendingBlocks::new())),
         false,
         false,
-        HashMap::new(), // validator_indices: empty for fuzzing
+        epoch_state,
         Arc::new(ForwardEpochSyncService::from_env()),
     ))
 }
@@ -181,7 +182,7 @@ fn create_node_for_fuzzing() -> RoundManager {
     ));
 
     // TODO: mock
-    let block_store = build_empty_store(storage.clone(), initial_data);
+    let block_store = build_empty_store(storage.clone(), initial_data, epoch_state.clone());
 
     // TODO: remove
     let time_service = Arc::new(SimulatedTimeService::new());

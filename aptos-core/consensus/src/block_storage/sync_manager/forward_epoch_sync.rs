@@ -1897,7 +1897,7 @@ mod forward_epoch_sync_tests {
             Arc::new(Mutex::new(PendingBlocks::new())),
             true,
             false,
-            HashMap::new(),
+            Arc::new(EpochState::empty()),
             Arc::new(ForwardEpochSyncService::from_env()),
         )
         .await;
