@@ -74,8 +74,8 @@ def _consensus_log(cluster: Cluster, node_id: str) -> Path:
     return cluster.base_dir / node_id / "consensus_log" / "validator.log"
 
 
-def _debug_log(cluster: Cluster, node_id: str) -> Path:
-    return cluster.base_dir / node_id / "logs" / "debug.log"
+def _reth_log(cluster: Cluster, node_id: str) -> Path:
+    return cluster.base_dir / node_id / "execution_logs" / "dev" / "reth.log"
 
 
 def _relayer_state(cluster: Cluster, node_id: str) -> Path:
@@ -90,10 +90,10 @@ def _assert_signature_verification_active(cluster: Cluster) -> None:
     generated_genesis = json.loads((SUITE_DIR / "artifacts" / "genesis.json").read_text())
     assert generated_genesis["config"]["oracleSignatureVerificationTime"] == 0
     for node_id in cluster.nodes:
-        debug_log = _debug_log(cluster, node_id)
-        assert debug_log.exists(), f"{node_id} has no startup debug log"
+        reth_log = _reth_log(cluster, node_id)
+        assert reth_log.exists(), f"{node_id} has no startup reth log"
         assert "Oracle signature verification activation time: Some(0) us" in (
-            debug_log.read_text(errors="replace")
+            reth_log.read_text(errors="replace")
         ), f"{node_id} did not activate Oracle QC verification"
 
 
