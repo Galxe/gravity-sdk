@@ -28,6 +28,7 @@ use gaptos::{
         ledger_info::LedgerInfoWithSignatures,
         transaction::{SignedTransaction, Transaction, TransactionStatus},
         validator_txn::ValidatorTransaction,
+        validator_verifier::ValidatorVerifier,
     },
 };
 use std::{
@@ -133,7 +134,7 @@ fn execution_proxy_with_payload_manager(
         true,
     );
     execution_proxy.new_epoch(
-        &EpochState::empty(),
+        &EpochState::new(1, ValidatorVerifier::new(vec![])),
         payload_manager,
         Arc::new(NoOpShuffler {}),
         BlockExecutorConfigFromOnchain::new_no_block_limit(),
@@ -232,7 +233,7 @@ async fn schedule_compute_should_discover_validator_txns() {
         None,
     );
 
-    let epoch_state = EpochState::empty();
+    let epoch_state = EpochState::new(block.epoch(), ValidatorVerifier::new(vec![]));
 
     execution_policy.new_epoch(
         &epoch_state,
@@ -424,7 +425,7 @@ mod oracle_signature_tests {
                 ProviderJWKs, QuorumCertifiedUpdate,
             },
             validator_signer::ValidatorSigner,
-            validator_verifier::{ValidatorConsensusInfo, ValidatorVerifier},
+            validator_verifier::ValidatorConsensusInfo,
         },
     };
 

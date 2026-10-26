@@ -456,7 +456,9 @@ async fn issue845_recovery_includes_ordered_uncommitted_block() {
         aptos_infallible::Mutex,
         aptos_types::{
             aggregate_signature::AggregateSignature,
+            epoch_state::EpochState,
             ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
+            validator_verifier::ValidatorVerifier,
         },
     };
     use std::{collections::HashMap, path::PathBuf, time::Duration};
@@ -465,6 +467,7 @@ async fn issue845_recovery_includes_ordered_uncommitted_block() {
     let consensus_db = Arc::new(ConsensusDB::new(db_dir.path(), &PathBuf::new()));
     let genesis = Block::make_genesis_block();
     genesis.set_block_number(0);
+    let epoch = genesis.epoch();
     let qc = certificate_for_genesis();
     let proof = qc.clone().into_wrapped_ledger_info();
     let store = Arc::new(
@@ -484,7 +487,7 @@ async fn issue845_recovery_includes_ordered_uncommitted_block() {
             Arc::new(Mutex::new(PendingBlocks::new())),
             false,
             true,
-            Arc::new(gaptos::aptos_types::epoch_state::EpochState::empty()),
+            Arc::new(EpochState::new(epoch, ValidatorVerifier::new(vec![]))),
             Arc::new(ForwardEpochSyncService::from_env()),
         )
         .await,
