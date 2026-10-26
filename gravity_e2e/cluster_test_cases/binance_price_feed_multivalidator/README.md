@@ -11,9 +11,11 @@ network access:
    `indexPriceKlines` fixture.
 4. At least three validators certify byte-identical payloads and form a JWK
    voting-power quorum.
-5. The execution layer records source progress in `NativeOracle` and invokes
+5. Oracle QC signature verification is active from genesis. The test checks
+   that certified updates pass the SDK execution path after task registration.
+6. The execution layer records source progress in `NativeOracle` and invokes
    `PriceFeedResolver`.
-6. The test checks each validator's relayer state, quorum evidence, resolver
+7. The test checks each validator's relayer state, quorum evidence, resolver
    values, and identical state from all four RPC endpoints at one block.
 
 Run from the SDK repository root after building `gravity_node` and
