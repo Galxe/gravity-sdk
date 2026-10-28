@@ -134,7 +134,7 @@ fn execution_proxy_with_payload_manager(
         true,
     );
     execution_proxy.new_epoch(
-        &EpochState::new(1, ValidatorVerifier::new(vec![])),
+        &EpochState::new(block_for_schedule_compute().epoch(), ValidatorVerifier::new(vec![])),
         payload_manager,
         Arc::new(NoOpShuffler {}),
         BlockExecutorConfigFromOnchain::new_no_block_limit(),
