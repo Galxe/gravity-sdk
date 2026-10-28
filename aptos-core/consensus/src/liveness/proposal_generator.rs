@@ -479,6 +479,55 @@ impl ProposalGenerator {
             (validator_txns, payload, timestamp.as_micros() as u64)
         };
 
+        #[cfg(feature = "byzantine-test")]
+        let (validator_txns, invalid_oracle_qc_evidence) = {
+            let mut validator_txns = validator_txns;
+            // The fixture waits for a normal user transaction and a real
+            // quorum-certified Oracle update in the same proposer payload.
+            // That lets the E2E assert that dropping only the forged update
+            // leaves both legitimate execution paths intact.
+            let valid_oracle_issuer = validator_txns.iter().find_map(|txn| {
+                let ValidatorTransaction::ObservedJWKUpdate(update) = txn else {
+                    return None;
+                };
+                let issuer = std::str::from_utf8(&update.update.issuer).ok()?;
+                issuer
+                    .starts_with(crate::byzantine_test::VALID_ORACLE_ISSUER_PREFIX)
+                    .then(|| issuer.to_string())
+            });
+            let evidence = if self.vtxn_config.enabled() && !payload.is_empty() {
+                if let Some(valid_oracle_issuer) = valid_oracle_issuer {
+                    let invalid = crate::byzantine_test::invalid_oracle_transaction()?;
+                    let current_bytes: usize =
+                        validator_txns.iter().map(ValidatorTransaction::size_in_bytes).sum();
+                    let has_room = validator_txns.len() <
+                        self.vtxn_config.per_block_limit_txn_count() as usize &&
+                        current_bytes.saturating_add(invalid.size_in_bytes()) <=
+                            self.vtxn_config.per_block_limit_total_bytes() as usize;
+                    if has_room {
+                        if let Some(request) = crate::byzantine_test::claim_invalid_oracle_qc(
+                            self.author,
+                            hqc.certified_block().epoch(),
+                            round,
+                        )? {
+                            let user_txn_count = payload.len();
+                            validator_txns.push(invalid);
+                            Some((request, user_txn_count, valid_oracle_issuer))
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+            (validator_txns, evidence)
+        };
+
         let quorum_cert = hqc.as_ref().clone();
         let failed_authors = self.compute_failed_authors(
             round,
@@ -507,6 +556,26 @@ impl ProposalGenerator {
                 quorum_cert,
             )
         };
+
+        #[cfg(feature = "byzantine-test")]
+        if let Some((request, user_txn_count, valid_oracle_issuer)) = invalid_oracle_qc_evidence {
+            let block_id = format!("{:x}", block.hash());
+            crate::byzantine_test::record_invalid_oracle_qc(
+                &request,
+                block.epoch(),
+                round,
+                &block_id,
+                user_txn_count,
+                &valid_oracle_issuer,
+            )?;
+            warn!(
+                fault_id = request.fault_id,
+                node_id = request.node_id,
+                block_id = block_id,
+                issuer = crate::byzantine_test::INVALID_ORACLE_ISSUER,
+                "Byzantine test hook appended Oracle update with empty quorum certificate"
+            );
+        }
 
         Ok(block)
     }

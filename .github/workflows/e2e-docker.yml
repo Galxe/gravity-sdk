@@ -55,6 +55,7 @@ jobs:
           # PR / default-dispatch suite set (matches prior excludes:
           # fuzzy_cluster, rolling_upgrade, long_test).
           PR_SUITES='[
+            "binance_price_feed_multivalidator",
             "bridge",
             "bridge_cross_epoch",
             "bridge_multi_round",
@@ -162,6 +163,9 @@ jobs:
           chmod +x gravity_e2e/run_docker.sh
           ls -la target/quick-release/gravity_node target/quick-release/gravity_cli
           # Named suite + --skip-build: reuse e2e-build artifact (no cargo).
+          if [ "${{ matrix.suite }}" = "binance_price_feed_multivalidator" ]; then
+            export GRAVITY_ORACLE_BAD_QC_E2E=1
+          fi
           ./gravity_e2e/run_docker.sh --skip-build "${{ matrix.suite }}"
 
   # Aggregate matrix + build into the required status check name

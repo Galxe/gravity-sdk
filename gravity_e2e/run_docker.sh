@@ -115,8 +115,8 @@ apt-get install -y --no-install-recommends \
 
 export RUSTFLAGS="--cfg tokio_unstable -C debug-assertions=yes"
 
-echo "[Build] gravity_node (quick-release)..."
-cargo build --bin gravity_node --profile quick-release 2>&1 | tail -20
+echo "[Build] gravity_node (quick-release, E2E fault hooks)..."
+cargo build --bin gravity_node --profile quick-release --features byzantine-test 2>&1 | tail -20
 
 echo "[Build] gravity_cli (quick-release)..."
 cargo build --bin gravity_cli --profile quick-release 2>&1 | tail -20
@@ -160,8 +160,8 @@ echo ""
 echo "===== Phase 2: Building Binaries ====="
 export RUSTFLAGS="--cfg tokio_unstable -C debug-assertions=yes"
 
-echo "[Step 4] Building gravity_node (quick-release)..."
-cargo build --bin gravity_node --profile quick-release 2>&1 | tail -5
+echo "[Step 4] Building gravity_node (quick-release, E2E fault hooks)..."
+cargo build --bin gravity_node --profile quick-release --features byzantine-test 2>&1 | tail -5
 
 echo "[Step 5] Building gravity_cli (quick-release)..."
 cargo build --bin gravity_cli --profile quick-release 2>&1 | tail -5
@@ -170,6 +170,7 @@ fi
 
 source_tar | docker run --rm -i \
     -e RUST_BACKTRACE=1 \
+    -e GRAVITY_ORACLE_BAD_QC_E2E \
     "${DOCKER_VOL_ARGS[@]+"${DOCKER_VOL_ARGS[@]}"}" \
     "$DOCKER_IMAGE" \
     bash -c "

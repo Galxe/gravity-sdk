@@ -452,22 +452,90 @@ async fn issue845_recovery_includes_ordered_uncommitted_block() {
     };
     use block_buffer_manager::get_block_buffer_manager;
     use gaptos::{
-        api_types::u256_define::BlockId,
+        api_types::{
+            compute_res::ComputeRes,
+            on_chain_config::{
+                dkg::DKGTranscript as ExecutionDKGTranscript,
+                jwks::ProviderJWKs as ExecutionProviderJWKs,
+            },
+            u256_define::BlockId,
+            ExtraDataType,
+        },
         aptos_infallible::Mutex,
         aptos_types::{
             aggregate_signature::AggregateSignature,
+            dkg::DKGTranscript,
             epoch_state::EpochState,
+            jwks::{
+                jwk::{JWKMoveStruct, JWK},
+                unsupported::UnsupportedJWK,
+                ProviderJWKs, QuorumCertifiedUpdate,
+            },
             ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
-            validator_verifier::ValidatorVerifier,
+            validator_txn::ValidatorTransaction,
+            validator_verifier::{ValidatorConsensusInfo, ValidatorVerifier},
         },
     };
     use std::{collections::HashMap, path::PathBuf, time::Duration};
+
+    // A future activation leaves other tests' ordinary timestamps unaffected.
+    // The simulated clock advances to this timestamp without a wall-clock wait.
+    let activation_usecs =
+        gaptos::aptos_infallible::duration_since_epoch().as_micros() as u64 + 240_000_000;
+    crate::oracle_hardfork::init_oracle_signature_verification_time(Some(activation_usecs));
 
     let db_dir = tempfile::tempdir().unwrap();
     let consensus_db = Arc::new(ConsensusDB::new(db_dir.path(), &PathBuf::new()));
     let genesis = Block::make_genesis_block();
     genesis.set_block_number(0);
     let epoch = genesis.epoch();
+    let signers = (1..=4).map(|seed| ValidatorSigner::random([seed; 32])).collect::<Vec<_>>();
+    let other_epoch_signers =
+        (11..=14).map(|seed| ValidatorSigner::random([seed; 32])).collect::<Vec<_>>();
+    let verifier_for = |signers: &[ValidatorSigner]| {
+        ValidatorVerifier::new(
+            signers
+                .iter()
+                .map(|signer| ValidatorConsensusInfo::new(signer.author(), signer.public_key(), 1))
+                .collect(),
+        )
+    };
+    let epoch_state = EpochState::new(epoch, verifier_for(&signers));
+    let other_epoch_state = EpochState::new(epoch, verifier_for(&other_epoch_signers));
+    assert_eq!(epoch_state.verifier.quorum_voting_power(), 3);
+    let aggregate = |update: &ProviderJWKs, signers: &[ValidatorSigner], state: &EpochState| {
+        let partials = signers
+            .iter()
+            .take(3)
+            .map(|signer| (signer.author(), signer.sign(update).unwrap()))
+            .collect::<Vec<_>>();
+        state
+            .verifier
+            .aggregate_signatures(partials.iter().map(|(author, signature)| (author, signature)))
+            .unwrap()
+    };
+    let valid_update = ProviderJWKs {
+        issuer: b"bridge".to_vec(),
+        version: 7,
+        jwks: vec![JWKMoveStruct::from(JWK::Unsupported(UnsupportedJWK {
+            id: b"event-1".to_vec(),
+            payload: b"payload-1".to_vec(),
+        }))],
+    };
+    let invalid_update = ProviderJWKs { issuer: b"other-epoch".to_vec(), ..valid_update.clone() };
+    let invalid_oracle = ValidatorTransaction::ObservedJWKUpdate(QuorumCertifiedUpdate {
+        update: invalid_update.clone(),
+        multi_sig: aggregate(&invalid_update, &other_epoch_signers, &other_epoch_state),
+    });
+    let dkg = ValidatorTransaction::DKGResult(DKGTranscript::new(
+        epoch,
+        signers[0].author(),
+        vec![1, 2, 3],
+    ));
+    let valid_oracle = ValidatorTransaction::ObservedJWKUpdate(QuorumCertifiedUpdate {
+        update: valid_update.clone(),
+        multi_sig: aggregate(&valid_update, &signers, &epoch_state),
+    });
     let qc = certificate_for_genesis();
     let proof = qc.clone().into_wrapped_ledger_info();
     let store = Arc::new(
@@ -487,14 +555,36 @@ async fn issue845_recovery_includes_ordered_uncommitted_block() {
             Arc::new(Mutex::new(PendingBlocks::new())),
             false,
             true,
-            Arc::new(EpochState::new(epoch, ValidatorVerifier::new(vec![]))),
+            Arc::new(epoch_state.clone()),
             Arc::new(ForwardEpochSyncService::from_env()),
         )
         .await,
     );
-    let mut inserter = TreeInserter::new_with_store(ValidatorSigner::random(None), store.clone());
+    let mut inserter = TreeInserter::new_with_store(signers[0].clone(), store.clone());
     let committed = store.commit_root();
-    let ordered = inserter.insert_block(&committed, 1, None).await;
+    let ordered = store
+        .insert_block_with_qc(
+            Block::new_proposal_ext(
+                vec![invalid_oracle, dkg, valid_oracle],
+                Payload::empty(false, true),
+                1,
+                activation_usecs,
+                certificate_for_genesis(),
+                inserter.signer(),
+                vec![],
+            )
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    // Normal execution converts this block with the same epoch snapshot. Recovery
+    // must submit byte-for-byte identical validator extra data to the external EL.
+    let normal_extra_data = crate::state_computer::process_validator_transactions_util(
+        ordered.block().validator_txns().map(|txns| &**txns),
+        ordered.block(),
+        &epoch_state,
+    )
+    .unwrap();
     let successor = inserter.insert_block(&ordered, 2, None).await;
     let competing = inserter.insert_block(&committed, 3, None).await;
     let proof = inserter
@@ -536,12 +626,13 @@ async fn issue845_recovery_includes_ordered_uncommitted_block() {
         )
         .await
         .unwrap();
-    tokio::time::timeout(Duration::from_secs(10), async {
+    let (_, external_block) = tokio::time::timeout(Duration::from_secs(10), async {
         tokio::try_join!(store.send_for_execution(proof, true, None), async {
             let ordered_blocks =
                 manager.get_ordered_blocks(block_number, Some(1), ordered.epoch()).await?;
             assert_eq!(ordered_blocks.len(), 1);
             assert_eq!(ordered_blocks[0].0.block_meta.block_id, BlockId(*ordered.id()));
+            let external_block = ordered_blocks[0].0.clone();
             manager
                 .set_compute_res(
                     BlockId(*ordered.id()),
@@ -551,12 +642,50 @@ async fn issue845_recovery_includes_ordered_uncommitted_block() {
                     Arc::new(None),
                     vec![],
                 )
-                .await
+                .await?;
+            Ok::<_, anyhow::Error>(external_block)
         })
     })
     .await
     .expect("recovery execution timed out")
     .unwrap();
+    assert_eq!(external_block.block_meta.block_number, block_number);
+    assert_eq!(external_block.block_meta.usecs, activation_usecs);
+    assert_eq!(external_block.block_meta.epoch, epoch);
+    assert_eq!(
+        external_block.block_meta.block_hash,
+        Some(ComputeRes::new(*block_hash, 0, vec![], vec![])),
+    );
+    assert!(external_block.block_meta.proposer_index.is_some());
+    assert!(external_block.block_meta.failed_proposer_indices.is_empty());
+    assert!(external_block.block_meta.randomness.is_none());
+    assert!(!external_block.enable_randomness);
+    assert!(external_block.txns.is_empty());
+    assert_eq!(external_block.extra_data.len(), normal_extra_data.len());
+    for (actual, normal) in external_block.extra_data.iter().zip(&normal_extra_data) {
+        match (actual, normal) {
+            (ExtraDataType::DKG(actual), ExtraDataType::DKG(normal)) |
+            (ExtraDataType::JWK(actual), ExtraDataType::JWK(normal)) => {
+                assert_eq!(actual, normal);
+            }
+            _ => panic!("recovery changed the validator extra-data type"),
+        }
+    }
+    assert_eq!(external_block.extra_data.len(), 2);
+    let ExtraDataType::DKG(dkg_bytes) = &external_block.extra_data[0] else {
+        panic!("DKG result must remain ahead of the valid Oracle update");
+    };
+    let decoded_dkg: ExecutionDKGTranscript = bcs::from_bytes(dkg_bytes).unwrap();
+    assert_eq!(decoded_dkg.metadata.epoch, epoch);
+    assert_eq!(decoded_dkg.transcript_bytes, vec![1, 2, 3]);
+    let ExtraDataType::JWK(bytes) = &external_block.extra_data[1] else {
+        panic!("valid Oracle update must be retained after the DKG result");
+    };
+    let decoded: ExecutionProviderJWKs = bcs::from_bytes(bytes).unwrap();
+    assert_eq!(decoded.issuer, valid_update.issuer);
+    assert_eq!(decoded.version, valid_update.version);
+    assert_eq!(decoded.jwks.len(), 1);
+    assert_eq!(decoded.jwks[0].data.as_slice(), b"payload-1");
     assert_eq!(store.commit_root().id(), ordered.id());
     assert_eq!(store.ordered_root().id(), ordered.id());
 
@@ -567,4 +696,98 @@ async fn issue845_recovery_includes_ordered_uncommitted_block() {
         tree.update_commit_and_finalized_root(successor.id());
     }
     assert!(store.recovery_path_from_commit_root(ordered.id()).unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn recovery_rejects_block_from_a_different_epoch_before_external_execution() {
+    use crate::{
+        block_storage::{pending_blocks::PendingBlocks, ForwardEpochSyncService},
+        consensusdb::{ConsensusDB, LedgerInfoSchema},
+        payload_manager::DirectMempoolPayloadManager,
+        persistent_liveness_storage::RootInfo,
+        pipeline::execution_client::DummyExecutionClient,
+        test_utils::EmptyStorage,
+    };
+    use gaptos::{
+        aptos_infallible::Mutex,
+        aptos_types::{
+            aggregate_signature::AggregateSignature,
+            epoch_state::EpochState,
+            jwks::{ProviderJWKs, QuorumCertifiedUpdate},
+            ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
+            validator_txn::ValidatorTransaction,
+            validator_verifier::ValidatorVerifier,
+        },
+    };
+    use std::path::PathBuf;
+
+    let db_dir = tempfile::tempdir().unwrap();
+    let consensus_db = Arc::new(ConsensusDB::new(db_dir.path(), &PathBuf::new()));
+    let genesis = Block::make_genesis_block();
+    genesis.set_block_number(0);
+    let epoch = genesis.epoch();
+    let qc = certificate_for_genesis();
+    let proof = qc.clone().into_wrapped_ledger_info();
+    let store = Arc::new(
+        super::BlockStore::build(
+            RootInfo(Box::new(genesis), qc, proof.clone(), proof),
+            vec![],
+            vec![],
+            None,
+            Arc::new(DummyExecutionClient),
+            Arc::new(EmptyStorage::with_consensus_db(consensus_db.clone())),
+            10,
+            Arc::new(SimulatedTimeService::new()),
+            10,
+            Arc::new(DirectMempoolPayloadManager::new()),
+            false,
+            true,
+            Arc::new(Mutex::new(PendingBlocks::new())),
+            false,
+            true,
+            Arc::new(EpochState::new(epoch + 1, ValidatorVerifier::new(vec![]))),
+            Arc::new(ForwardEpochSyncService::from_env()),
+        )
+        .await,
+    );
+    let inserter = TreeInserter::new_with_store(ValidatorSigner::random(None), store.clone());
+    let committed = store.commit_root();
+    let block = Block::new_proposal_ext(
+        vec![ValidatorTransaction::ObservedJWKUpdate(QuorumCertifiedUpdate {
+            update: ProviderJWKs { issuer: b"bridge".to_vec(), version: 1, jwks: vec![] },
+            multi_sig: AggregateSignature::empty(),
+        })],
+        Payload::empty(false, true),
+        1,
+        1,
+        certificate_for_genesis(),
+        inserter.signer(),
+        vec![],
+    )
+    .unwrap();
+    let ordered = store.insert_block_with_qc(block).await.unwrap();
+    let proof = inserter
+        .create_qc_for_block(&ordered, Some(ordered.block_info()))
+        .into_wrapped_ledger_info();
+    let persisted_li = LedgerInfoWithSignatures::new(
+        LedgerInfo::new_with_block_info(
+            ordered.block_info(),
+            proof.ledger_info().ledger_info().consensus_data_hash(),
+            HashValue::new([0x6b; 32]),
+            1,
+        ),
+        AggregateSignature::empty(),
+    );
+    consensus_db.put::<LedgerInfoSchema>(&1, &persisted_li).unwrap();
+
+    let error = tokio::time::timeout(
+        std::time::Duration::from_secs(5),
+        store.send_for_execution(proof, true, None),
+    )
+    .await
+    .expect("recovery did not reject the epoch mismatch promptly")
+    .unwrap_err();
+    assert!(error.to_string().contains("belongs to epoch"), "{error:?}");
+    assert_eq!(store.commit_root().id(), committed.id());
+    assert_eq!(store.ordered_root().id(), committed.id());
 }

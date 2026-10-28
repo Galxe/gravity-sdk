@@ -76,6 +76,9 @@ bytes.workspace = true
 dashmap.workspace = true
 bcs.workspace = true
 
+[dev-dependencies]
+aptos-consensus-types.workspace = true
+
 [build-dependencies]
 shadow-rs.workspace = true
 

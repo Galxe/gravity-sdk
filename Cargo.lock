@@ -8626,6 +8626,7 @@ dependencies = [
  "anyhow",
  "api",
  "aptos-consensus 0.1.0",
+ "aptos-consensus-types 0.1.0",
  "aptos-mempool 0.1.0",
  "async-trait",
  "bcs 0.1.4",
