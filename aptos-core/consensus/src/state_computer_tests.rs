@@ -413,9 +413,12 @@ fn dummy_guard() -> CountedRequest<()> {
 #[cfg(test)]
 mod oracle_signature_tests {
     use super::*;
-    use crate::state_computer::process_validator_transactions_with_activation;
+    use crate::state_computer::process_validator_transactions_util;
     use gaptos::{
-        api_types::{on_chain_config::jwks::ProviderJWKs as ExecutionProviderJWKs, ExtraDataType},
+        api_types::{
+            on_chain_config::jwks::{JWKStruct, ProviderJWKs as ExecutionProviderJWKs},
+            ExtraDataType,
+        },
         aptos_types::{
             aggregate_signature::AggregateSignature,
             dkg::DKGTranscript,
@@ -491,14 +494,12 @@ mod oracle_signature_tests {
     fn convert(
         txns: Vec<ValidatorTransaction>,
         epoch_state: &EpochState,
-        verify_oracle_signature: bool,
     ) -> anyhow::Result<Vec<ExtraDataType>> {
         let block = block_with_validator_txns(txns);
-        process_validator_transactions_with_activation(
+        process_validator_transactions_util(
             block.validator_txns().map(|txns| &**txns),
             &block,
             epoch_state,
-            verify_oracle_signature,
         )
     }
 
@@ -510,7 +511,7 @@ mod oracle_signature_tests {
         let quorum_signature = signature_from(&update, &signers, &epoch_state, 3);
 
         let valid =
-            convert(vec![oracle_txn(update.clone(), quorum_signature.clone())], &epoch_state, true)
+            convert(vec![oracle_txn(update.clone(), quorum_signature.clone())], &epoch_state)
                 .unwrap();
         assert_eq!(valid.len(), 1);
         let ExtraDataType::JWK(bytes) = &valid[0] else {
@@ -522,6 +523,22 @@ mod oracle_signature_tests {
         assert_eq!(decoded.jwks.len(), 2);
         assert_eq!(decoded.jwks[0].data.as_slice(), b"payload-1");
         assert_eq!(decoded.jwks[1].data.as_slice(), b"payload-2");
+        // A valid certificate must keep the external executor's original wire format.
+        let expected = ExecutionProviderJWKs {
+            issuer: update.issuer.clone(),
+            version: update.version,
+            jwks: vec![
+                JWKStruct {
+                    type_name: "0x1::jwks::Unsupported_JWK".to_string(),
+                    data: b"payload-1".to_vec(),
+                },
+                JWKStruct {
+                    type_name: "0x1::jwks::Unsupported_JWK".to_string(),
+                    data: b"payload-2".to_vec(),
+                },
+            ],
+        };
+        assert_eq!(bytes, &bcs::to_bytes(&expected).unwrap());
 
         let invalid_certificates = [
             AggregateSignature::empty(),
@@ -535,7 +552,7 @@ mod oracle_signature_tests {
             ),
         ];
         for multi_sig in invalid_certificates {
-            assert!(convert(vec![oracle_txn(update.clone(), multi_sig)], &epoch_state, true)
+            assert!(convert(vec![oracle_txn(update.clone(), multi_sig)], &epoch_state)
                 .unwrap()
                 .is_empty());
         }
@@ -544,13 +561,9 @@ mod oracle_signature_tests {
         invalid_bitmap.set(4); // Four validators have indices 0 through 3.
         let malformed_certificate =
             AggregateSignature::new(invalid_bitmap, (*quorum_signature.sig()).clone());
-        assert!(convert(
-            vec![oracle_txn(update.clone(), malformed_certificate)],
-            &epoch_state,
-            true,
-        )
-        .unwrap()
-        .is_empty());
+        assert!(convert(vec![oracle_txn(update.clone(), malformed_certificate)], &epoch_state,)
+            .unwrap()
+            .is_empty());
 
         let mut modified_updates = vec![
             ProviderJWKs { issuer: b"price-feed".to_vec(), ..update.clone() },
@@ -569,18 +582,14 @@ mod oracle_signature_tests {
         }));
         modified_updates.push(changed_payload);
         for modified in modified_updates {
-            assert!(convert(
-                vec![oracle_txn(modified, quorum_signature.clone())],
-                &epoch_state,
-                true,
-            )
-            .unwrap()
-            .is_empty());
+            assert!(convert(vec![oracle_txn(modified, quorum_signature.clone())], &epoch_state,)
+                .unwrap()
+                .is_empty());
         }
     }
 
     #[test]
-    fn invalid_oracle_certificate_drops_only_its_update_after_activation() {
+    fn invalid_oracle_certificate_drops_only_its_update() {
         let block = block_with_validator_txns(vec![]);
         let (signers, epoch_state) = validator_set(&block);
         let valid_update = oracle_update();
@@ -594,16 +603,10 @@ mod oracle_signature_tests {
         ));
         let valid = oracle_txn(valid_update.clone(), valid_signature);
 
-        // Historical blocks retain the old conversion behavior at the pre-activation call.
-        let before_activation =
-            convert(vec![invalid.clone(), dkg.clone(), valid.clone()], &epoch_state, false)
-                .unwrap();
-        assert_eq!(before_activation.len(), 3);
-
-        let after_activation = convert(vec![invalid, dkg, valid], &epoch_state, true).unwrap();
-        assert_eq!(after_activation.len(), 2);
-        assert!(matches!(&after_activation[0], ExtraDataType::DKG(_)));
-        let ExtraDataType::JWK(bytes) = &after_activation[1] else {
+        let converted = convert(vec![invalid, dkg, valid], &epoch_state).unwrap();
+        assert_eq!(converted.len(), 2);
+        assert!(matches!(&converted[0], ExtraDataType::DKG(_)));
+        let ExtraDataType::JWK(bytes) = &converted[1] else {
             panic!("the valid Oracle update must remain after the DKG result");
         };
         let decoded: ExecutionProviderJWKs = bcs::from_bytes(bytes).unwrap();
@@ -612,7 +615,7 @@ mod oracle_signature_tests {
     }
 
     #[test]
-    fn oracle_conversion_rejects_epoch_mismatch_before_and_after_activation() {
+    fn oracle_conversion_rejects_epoch_mismatch() {
         let block = block_with_validator_txns(vec![]);
         let (signers, matching_epoch_state) = validator_set(&block);
         let wrong_epoch_state = EpochState {
@@ -622,14 +625,7 @@ mod oracle_signature_tests {
         let update = oracle_update();
         let signature = signature_from(&update, &signers, &matching_epoch_state, 3);
 
-        for verify_oracle_signature in [false, true] {
-            let error = convert(
-                vec![oracle_txn(update.clone(), signature.clone())],
-                &wrong_epoch_state,
-                verify_oracle_signature,
-            )
-            .unwrap_err();
-            assert!(error.to_string().contains("belongs to epoch"));
-        }
+        let error = convert(vec![oracle_txn(update, signature)], &wrong_epoch_state).unwrap_err();
+        assert!(error.to_string().contains("belongs to epoch"));
     }
 }

@@ -4,7 +4,6 @@ use api::{
     config_storage::ConfigStorageWrapper,
     consensus_api::{ConsensusEngine, ConsensusEngineArgs},
 };
-use aptos_consensus::oracle_hardfork::init_oracle_signature_verification_time;
 use consensus::mock_consensus::mock::MockConsensus;
 use gaptos::{
     api_types::{
@@ -90,19 +89,6 @@ fn consensus_hardforks_from_genesis_extra_fields(
     hardforks
 }
 
-/// The genesis field uses Unix seconds; consensus blocks use microseconds.
-fn oracle_signature_verification_time_from_genesis_extra_fields(
-    value: Option<&serde_json::Value>,
-) -> Option<u64> {
-    value.map(|value| {
-        let seconds =
-            value.as_u64().expect("oracleSignatureVerificationTime must be an unsigned integer");
-        seconds
-            .checked_mul(1_000_000)
-            .expect("oracleSignatureVerificationTime exceeds microsecond timestamp range")
-    })
-}
-
 fn run_reth(
     cli: Cli<GravityChainSpecParser>,
     execution_args_rx: oneshot::Receiver<ExecutionArgs>,
@@ -151,15 +137,6 @@ fn run_reth(
                         });
                         info!("Consensus hardforks:\n{}", hardforks);
                         init_consensus_hardforks(hardforks);
-                        let oracle_verification_time =
-                            oracle_signature_verification_time_from_genesis_extra_fields(
-                                extra.get("oracleSignatureVerificationTime"),
-                            );
-                        info!(
-                            "Oracle signature verification activation time: {:?} us",
-                            oracle_verification_time
-                        );
-                        init_oracle_signature_verification_time(oracle_verification_time);
                     }
 
                     let eth_api = handle.node.rpc_registry.eth_api().clone();
@@ -472,24 +449,6 @@ fn main() {
 mod tests {
     use super::*;
 
-    /// Exercise the same file-based `--chain` parser that the node uses at
-    /// startup, including the binary's per-chain fork overrides.
-    fn oracle_activation_from_genesis_file(network: &str, configured_seconds: u64) -> Option<u64> {
-        let genesis_path =
-            format!("{}/../../genesis/{network}/genesis.json", env!("CARGO_MANIFEST_DIR"));
-        let mut genesis: serde_json::Value =
-            serde_json::from_slice(&std::fs::read(genesis_path).unwrap()).unwrap();
-        genesis["config"]["oracleSignatureVerificationTime"] =
-            serde_json::json!(configured_seconds);
-
-        let input = tempfile::NamedTempFile::new().unwrap();
-        std::fs::write(input.path(), serde_json::to_vec(&genesis).unwrap()).unwrap();
-        let chain_spec = GravityChainSpecParser::parse(input.path().to_str().unwrap()).unwrap();
-        oracle_signature_verification_time_from_genesis_extra_fields(
-            chain_spec.genesis.config.extra_fields.get("oracleSignatureVerificationTime"),
-        )
-    }
-
     /// Guards the audit fix (Galxe/gravity-audit#925): the CL builds Alpha's
     /// activation solely from `alphaTime`. The closure below supplies a value
     /// for every field EXCEPT `alphaTime`, so if the CL ever read any other
@@ -520,114 +479,5 @@ mod tests {
             hardforks.condition(ConsensusHardfork::ConsensusAlpha),
             ForkCondition::Timestamp(1_785_128_400_000_000),
         );
-    }
-
-    #[test]
-    fn oracle_signature_verification_time_converts_seconds_to_microseconds() {
-        let activation_time = serde_json::json!(42);
-        assert_eq!(
-            oracle_signature_verification_time_from_genesis_extra_fields(Some(&activation_time)),
-            Some(42_000_000),
-        );
-        assert_eq!(oracle_signature_verification_time_from_genesis_extra_fields(None), None);
-    }
-
-    #[test]
-    fn oracle_activation_follows_parsed_genesis_and_inclusive_block_timestamp() {
-        use aptos_consensus_types::{block::Block, common::Payload};
-        use gaptos::{
-            aptos_bitvec::BitVec,
-            aptos_crypto::HashValue,
-            aptos_types::{
-                aggregate_signature::AggregateSignature,
-                epoch_state::EpochState,
-                jwks::{
-                    jwk::{JWKMoveStruct, JWK},
-                    unsupported::UnsupportedJWK,
-                    ProviderJWKs, QuorumCertifiedUpdate,
-                },
-                validator_signer::ValidatorSigner,
-                validator_txn::ValidatorTransaction,
-                validator_verifier::{ValidatorConsensusInfo, ValidatorVerifier},
-            },
-        };
-
-        const ACTIVATION_USECS: u64 = 42_000_000;
-
-        let signer = ValidatorSigner::random([1; 32]);
-        let epoch_state = EpochState::new(
-            1,
-            ValidatorVerifier::new(vec![ValidatorConsensusInfo::new(
-                signer.author(),
-                signer.public_key(),
-                1,
-            )]),
-        );
-        let invalid_oracle_txn = ValidatorTransaction::ObservedJWKUpdate(QuorumCertifiedUpdate {
-            update: ProviderJWKs {
-                issuer: b"bridge".to_vec(),
-                version: 7,
-                jwks: vec![JWKMoveStruct::from(JWK::Unsupported(UnsupportedJWK {
-                    id: b"event-1".to_vec(),
-                    payload: b"payload-1".to_vec(),
-                }))],
-            },
-            multi_sig: AggregateSignature::empty(),
-        });
-        let converted_oracle_txns_at = |timestamp_usecs| {
-            let block = Block::new_for_dag(
-                epoch_state.epoch,
-                1,
-                timestamp_usecs,
-                vec![invalid_oracle_txn.clone()],
-                Payload::empty(false, true),
-                signer.author(),
-                vec![],
-                HashValue::zero(),
-                BitVec::default(),
-                vec![],
-            );
-            block.set_block_number(1);
-            aptos_consensus::process_validator_transactions_util(
-                block.validator_txns().map(Vec::as_slice),
-                &block,
-                &epoch_state,
-            )
-            .unwrap()
-        };
-
-        // Mainnet has no scheduled activation in the binary's authoritative
-        // fork table, even if an operator supplies a timestamp in genesis.
-        assert_eq!(oracle_activation_from_genesis_file("mainnet", 42), None);
-        assert!(!aptos_consensus::oracle_hardfork::is_active(u64::MAX));
-        assert_eq!(converted_oracle_txns_at(u64::MAX).len(), 1);
-
-        let activation_time = oracle_activation_from_genesis_file("testnet", 42);
-        assert_eq!(activation_time, Some(ACTIVATION_USECS));
-
-        // This test binary initializes the production OnceLock only here.
-        init_oracle_signature_verification_time(activation_time);
-        assert!(!aptos_consensus::oracle_hardfork::is_active(ACTIVATION_USECS - 1));
-        assert!(aptos_consensus::oracle_hardfork::is_active(ACTIVATION_USECS));
-        assert!(aptos_consensus::oracle_hardfork::is_active(ACTIVATION_USECS + 1));
-        assert_eq!(converted_oracle_txns_at(ACTIVATION_USECS - 1).len(), 1);
-        assert!(converted_oracle_txns_at(ACTIVATION_USECS).is_empty());
-        assert!(converted_oracle_txns_at(ACTIVATION_USECS + 1).is_empty());
-    }
-
-    #[test]
-    #[should_panic(expected = "oracleSignatureVerificationTime must be an unsigned integer")]
-    fn oracle_signature_verification_time_rejects_malformed_value() {
-        let malformed = serde_json::json!("42");
-        oracle_signature_verification_time_from_genesis_extra_fields(Some(&malformed));
-    }
-
-    #[test]
-    #[should_panic(
-        expected = "oracleSignatureVerificationTime exceeds microsecond timestamp range"
-    )]
-    fn oracle_signature_verification_time_rejects_overflow() {
-        let overflow = serde_json::json!(u64::MAX);
-        oracle_signature_verification_time_from_genesis_extra_fields(Some(&overflow));
     }
 }

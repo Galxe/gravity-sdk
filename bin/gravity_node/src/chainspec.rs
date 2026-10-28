@@ -7,8 +7,9 @@
 //! - The constructed [`ChainSpec`] (and its derived `genesis_header`, `fork_id`, `fork_filter`)
 //!   reflects the binary's authoritative values from the moment the `Arc<ChainSpec>` is built — no
 //!   post-construction mutation, no `Arc::get_mut`, no `OnceLock` timing pain.
-//! - The CL side reads `alphaTime` and `oracleSignatureVerificationTime` from the **same**
-//!   mutated `extra_fields`, so all nodes see one consistent view from a single source of truth.
+//! - The CL side (main.rs `consensus_hardforks_from_genesis_extra_fields`) reads `alphaTime` from
+//!   the **same** mutated `extra_fields`, so EL and CL see one consistent view from a single source
+//!   of truth.
 //!
 //! For named chains (`mainnet` / `sepolia` / `holesky` / `hoodi` / `dev`)
 //! we delegate to upstream [`EthereumChainSpecParser`] unchanged — those
@@ -84,8 +85,6 @@ pub(crate) const GRAVITY_MAINNET_BETA_OSAKA_TIME: u64 = 1_787_018_400;
 ///
 /// `beta_time` is written into `extra_fields["betaTime"]` (EL-only Gravity
 /// hardfork). `osaka_time` maps to the typed `ChainConfig.osaka_time` field.
-/// `oracle_signature_verification_time` is CL-only; it stays unset on mainnet
-/// until a coordinated activation timestamp is selected.
 struct GravityForkOverrides {
     /// Maps to `genesis.config.prague_time` (typed field on `ChainConfig`).
     prague_time: Option<u64>,
@@ -98,8 +97,6 @@ struct GravityForkOverrides {
     /// Maps to `genesis.config.extra_fields["betaTime"]`. EL reads this in
     /// `From<Genesis>` for `GravityHardfork::Beta`. Fail-closed if unset.
     beta_time: Option<u64>,
-    /// Maps to `genesis.config.extra_fields["oracleSignatureVerificationTime"]`.
-    oracle_signature_verification_time: Option<u64>,
 }
 
 /// Chain ids the binary owns. Listed entries are authoritative for the
@@ -122,8 +119,6 @@ const HARDCODED: &[(u64, GravityForkOverrides)] = &[
             alpha_time: Some(GRAVITY_MAINNET_ALPHA_TIME),
             // Mainnet Beta (same wall-clock as Osaka).
             beta_time: Some(GRAVITY_MAINNET_BETA_OSAKA_TIME),
-            // No production activation timestamp has been coordinated yet.
-            oracle_signature_verification_time: None,
         },
     ),
 ];
@@ -267,30 +262,6 @@ fn apply_overrides(g: &mut Genesis) -> Vec<OverrideEvent> {
         }
     }
 
-    let oracle_key = "oracleSignatureVerificationTime";
-    let genesis_oracle = g.config.extra_fields.get(oracle_key).and_then(|v| v.as_u64());
-    // Clear even malformed values on mainnet, so the genesis field cannot
-    // silently acquire different meanings in future parsers.
-    if genesis_oracle != ov.oracle_signature_verification_time ||
-        (ov.oracle_signature_verification_time.is_none() &&
-            g.config.extra_fields.contains_key(oracle_key))
-    {
-        events.push(OverrideEvent {
-            chain_id,
-            fork: oracle_key,
-            genesis: genesis_oracle,
-            forced: ov.oracle_signature_verification_time,
-        });
-        match ov.oracle_signature_verification_time {
-            Some(t) => {
-                g.config.extra_fields.insert(oracle_key.to_string(), serde_json::Value::from(t));
-            }
-            None => {
-                g.config.extra_fields.remove(oracle_key);
-            }
-        }
-    }
-
     events
 }
 
@@ -308,7 +279,6 @@ mod tests {
         osaka: Option<u64>,
         alpha: Option<u64>,
         beta: Option<u64>,
-        oracle_signature_verification: Option<u64>,
     }
 
     fn opt_field(name: &str, value: Option<u64>) -> String {
@@ -323,10 +293,8 @@ mod tests {
         let osaka = opt_field("osakaTime", forks.osaka);
         let alpha = opt_field("alphaTime", forks.alpha);
         let beta = opt_field("betaTime", forks.beta);
-        let oracle_signature_verification =
-            opt_field("oracleSignatureVerificationTime", forks.oracle_signature_verification);
         format!(
-            r#"{{"config":{{"chainId":{chain_id},"homesteadBlock":0,"eip150Block":0,"eip155Block":0,"eip158Block":0,"byzantiumBlock":0,"constantinopleBlock":0,"petersburgBlock":0,"istanbulBlock":0,"berlinBlock":0,"londonBlock":0,"terminalTotalDifficulty":0,"terminalTotalDifficultyPassed":true,"shanghaiTime":0,"cancunTime":0{prague}{osaka}{alpha}{beta}{oracle_signature_verification}}},"nonce":"0x0","timestamp":"0x0","extraData":"0x","gasLimit":"0x4c4b40","difficulty":"0x0","mixHash":"0x0000000000000000000000000000000000000000000000000000000000000000","coinbase":"0x0000000000000000000000000000000000000000","alloc":{{}},"number":"0x0","gasUsed":"0x0","parentHash":"0x0000000000000000000000000000000000000000000000000000000000000000"}}"#
+            r#"{{"config":{{"chainId":{chain_id},"homesteadBlock":0,"eip150Block":0,"eip155Block":0,"eip158Block":0,"byzantiumBlock":0,"constantinopleBlock":0,"petersburgBlock":0,"istanbulBlock":0,"berlinBlock":0,"londonBlock":0,"terminalTotalDifficulty":0,"terminalTotalDifficultyPassed":true,"shanghaiTime":0,"cancunTime":0{prague}{osaka}{alpha}{beta}}},"nonce":"0x0","timestamp":"0x0","extraData":"0x","gasLimit":"0x4c4b40","difficulty":"0x0","mixHash":"0x0000000000000000000000000000000000000000000000000000000000000000","coinbase":"0x0000000000000000000000000000000000000000","alloc":{{}},"number":"0x0","gasUsed":"0x0","parentHash":"0x0000000000000000000000000000000000000000000000000000000000000000"}}"#
         )
     }
 
@@ -366,7 +334,6 @@ mod tests {
             osaka: Some(table_osaka_timestamp()),
             alpha: Some(table_alpha_timestamp()),
             beta: Some(table_beta_timestamp()),
-            oracle_signature_verification: None,
         }
     }
 
@@ -579,33 +546,6 @@ mod tests {
         assert_eq!(cs.gravity_hardforks.fork(GravityHardfork::Beta), ForkCondition::Timestamp(100),);
     }
 
-    // ---------- Consensus-side (extra_fields): Oracle signature verification ----------
-
-    #[test]
-    fn mainnet_disables_oracle_signature_verification_until_coordinated() {
-        let cs = build_via_parser(
-            GRAVITY_MAINNET_CHAIN_ID,
-            ForkInputs { oracle_signature_verification: Some(100), ..matching_mainnet_forks() },
-        );
-        assert!(cs.genesis().config.extra_fields.get("oracleSignatureVerificationTime").is_none());
-    }
-
-    #[test]
-    fn non_mainnet_chain_id_preserves_oracle_signature_verification_time() {
-        let cs = build_via_parser(
-            7_771_625,
-            ForkInputs { oracle_signature_verification: Some(100), ..Default::default() },
-        );
-        assert_eq!(
-            cs.genesis()
-                .config
-                .extra_fields
-                .get("oracleSignatureVerificationTime")
-                .and_then(|v| v.as_u64()),
-            Some(100),
-        );
-    }
-
     // ---------- Unified-view invariant ----------
 
     /// D-1 explicitly DOES mutate `chain_spec.genesis` (unlike #369's
@@ -616,13 +556,7 @@ mod tests {
     fn post_override_genesis_reflects_the_table() {
         let cs = build_via_parser(
             GRAVITY_MAINNET_CHAIN_ID,
-            ForkInputs {
-                prague: Some(100),
-                osaka: Some(200),
-                alpha: Some(50),
-                beta: Some(60),
-                oracle_signature_verification: Some(70),
-            },
+            ForkInputs { prague: Some(100), osaka: Some(200), alpha: Some(50), beta: Some(60) },
         );
         assert_eq!(
             cs.genesis().config.prague_time,
@@ -644,7 +578,6 @@ mod tests {
             Some(table_beta_timestamp()),
             "preserved Genesis must reflect the table (betaTime)",
         );
-        assert!(cs.genesis().config.extra_fields.get("oracleSignatureVerificationTime").is_none());
         assert_eq!(
             cs.hardforks.fork(EthereumHardfork::Prague),
             ForkCondition::Timestamp(table_prague_timestamp()),
@@ -669,13 +602,7 @@ mod tests {
     fn parse_is_idempotent_on_mainnet() {
         let s = genesis_json(
             GRAVITY_MAINNET_CHAIN_ID,
-            ForkInputs {
-                prague: Some(100),
-                osaka: Some(200),
-                alpha: Some(50),
-                beta: Some(60),
-                oracle_signature_verification: Some(70),
-            },
+            ForkInputs { prague: Some(100), osaka: Some(200), alpha: Some(50), beta: Some(60) },
         );
         let a = GravityChainSpecParser::parse(&s).expect("parse a");
         let b = GravityChainSpecParser::parse(&s).expect("parse b");
@@ -840,33 +767,13 @@ mod tests {
         assert_eq!(events[0].forced, Some(table_beta_timestamp()));
     }
 
-    #[test]
-    fn apply_overrides_reports_mainnet_oracle_time_removal() {
-        let mut g = parse_genesis_only(
-            GRAVITY_MAINNET_CHAIN_ID,
-            ForkInputs { oracle_signature_verification: Some(100), ..matching_mainnet_forks() },
-        );
-        let events = apply_overrides(&mut g);
-        assert_eq!(events.len(), 1);
-        assert_eq!(events[0].fork, "oracleSignatureVerificationTime");
-        assert_eq!(events[0].genesis, Some(100));
-        assert_eq!(events[0].forced, None);
-        assert!(!g.config.extra_fields.contains_key("oracleSignatureVerificationTime"));
-    }
-
     /// All four gated forks disagree → all four events fire, in apply order
     /// (prague_time, osaka_time, alphaTime, betaTime).
     #[test]
     fn apply_overrides_emits_all_events_when_all_disagree() {
         let mut g = parse_genesis_only(
             GRAVITY_MAINNET_CHAIN_ID,
-            ForkInputs {
-                prague: Some(42),
-                osaka: Some(43),
-                alpha: Some(99),
-                beta: Some(100),
-                ..Default::default()
-            },
+            ForkInputs { prague: Some(42), osaka: Some(43), alpha: Some(99), beta: Some(100) },
         );
         let events = apply_overrides(&mut g);
         assert_eq!(events.len(), 4);
@@ -890,13 +797,7 @@ mod tests {
     fn apply_overrides_is_silent_for_chain_id_not_in_table() {
         let mut g = parse_genesis_only(
             7_771_625,
-            ForkInputs {
-                prague: Some(100),
-                osaka: Some(200),
-                alpha: Some(50),
-                beta: Some(60),
-                oracle_signature_verification: Some(70),
-            },
+            ForkInputs { prague: Some(100), osaka: Some(200), alpha: Some(50), beta: Some(60) },
         );
         let events = apply_overrides(&mut g);
         assert!(events.is_empty(), "no events for chain id outside HARDCODED");

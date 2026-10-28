@@ -34,7 +34,6 @@ mod metrics_safety_rules;
 mod network;
 #[cfg(test)]
 mod network_tests;
-pub mod oracle_hardfork;
 pub mod payload_client;
 mod pending_order_votes;
 mod pending_votes;

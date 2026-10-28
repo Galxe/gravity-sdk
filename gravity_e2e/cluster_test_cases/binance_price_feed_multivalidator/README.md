@@ -11,12 +11,18 @@ network access:
    `indexPriceKlines` fixture.
 4. At least three validators certify byte-identical payloads and form a JWK
    voting-power quorum.
-5. Oracle QC signature verification is active from genesis. The test checks
-   that certified updates pass the SDK execution path after task registration.
+5. The SDK verifies each Oracle QC before conversion to execution data. The
+   test checks that certified updates pass this path after task registration.
 6. The execution layer records source progress in `NativeOracle` and invokes
    `PriceFeedResolver`.
 7. The test checks each validator's relayer state, quorum evidence, resolver
    values, and identical state from all four RPC endpoints at one block.
+
+All four validators run the same upgraded node binary. A production rollout
+must coordinate the validator upgrade because Oracle QC verification changes
+which Oracle updates reach execution. Oracle QCs in replayed history and during
+the upgrade must be valid; an invalid QC accepted by the old binary would
+produce a different execution result when replayed by the new binary.
 
 Run from the SDK repository root after building `gravity_node` and
 `gravity_cli`:

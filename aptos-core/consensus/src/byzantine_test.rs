@@ -85,6 +85,9 @@ struct InvalidOracleEvidenceDocument<'a> {
     behavior: &'static str,
     node_id: &'a str,
     issuer: &'static str,
+    source_type: u32,
+    source_id: u64,
+    nonce: u128,
     proposals: &'a [InvalidOracleProposal],
 }
 
@@ -269,6 +272,38 @@ pub(crate) fn invalid_oracle_transaction() -> anyhow::Result<ValidatorTransactio
     }))
 }
 
+/// Read the source and delivery nonce from the same fixture constructor used
+/// by the proposer, so the evidence cannot silently diverge from its payload.
+fn invalid_oracle_source_and_nonce() -> anyhow::Result<(u32, u64, u128)> {
+    let ValidatorTransaction::ObservedJWKUpdate(update) = invalid_oracle_transaction()? else {
+        bail!("invalid Oracle fixture is not an observed JWK update");
+    };
+    let issuer =
+        std::str::from_utf8(&update.update.issuer).context("invalid Oracle issuer UTF-8")?;
+    let mut source =
+        issuer.strip_prefix("gravity://").context("invalid Oracle issuer scheme")?.split('/');
+    let source_type = source.next().context("missing Oracle source type")?.parse()?;
+    let source_id = source.next().context("missing Oracle source ID")?.parse()?;
+    anyhow::ensure!(
+        source.next() == Some("price_feed") && source.next().is_none(),
+        "invalid Oracle issuer path"
+    );
+
+    let jwk = update.update.jwks.first().context("missing invalid Oracle payload")?;
+    let JWK::Unsupported(entry) = JWK::try_from(jwk).context("decoding invalid Oracle payload")?
+    else {
+        bail!("invalid Oracle fixture does not contain an UnsupportedJWK");
+    };
+    anyhow::ensure!(entry.payload.len() == 192, "invalid Oracle wrapper length");
+    anyhow::ensure!(
+        entry.payload[32..48].iter().all(|byte| *byte == 0),
+        "invalid Oracle nonce exceeds uint128"
+    );
+    let mut nonce_bytes = [0u8; 16];
+    nonce_bytes.copy_from_slice(&entry.payload[48..64]);
+    Ok((source_type, source_id, u128::from_be_bytes(nonce_bytes)))
+}
+
 pub(crate) fn record_invalid_oracle_qc(
     request: &InvalidOracleQcRequest,
     epoch: u64,
@@ -280,6 +315,7 @@ pub(crate) fn record_invalid_oracle_qc(
     let Some(path) = configured_path(EVIDENCE_PATH_ENV)? else {
         bail!("{EVIDENCE_PATH_ENV} is not configured");
     };
+    let (source_type, source_id, nonce) = invalid_oracle_source_and_nonce()?;
     let mut state = RUNTIME_STATE
         .lock()
         .map_err(|_| anyhow::anyhow!("Byzantine runtime state lock is poisoned"))?;
@@ -301,6 +337,9 @@ pub(crate) fn record_invalid_oracle_qc(
         behavior: "invalid_oracle_qc",
         node_id: &request.node_id,
         issuer: INVALID_ORACLE_ISSUER,
+        source_type,
+        source_id,
+        nonce,
         proposals: &state.invalid_oracle_proposals,
     };
     write_json_atomically(&path, &document)
@@ -462,6 +501,7 @@ mod tests {
         ))
         .unwrap();
         assert_eq!(entry.payload, expected);
+        assert_eq!(invalid_oracle_source_and_nonce().unwrap(), (3, 2001, 1));
     }
 
     #[test]
@@ -503,6 +543,9 @@ mod tests {
         let document: serde_json::Value =
             serde_json::from_slice(&fs::read(evidence).unwrap()).unwrap();
         assert_eq!(document["issuer"], INVALID_ORACLE_ISSUER);
+        assert_eq!(document["sourceType"], 3);
+        assert_eq!(document["sourceId"], 2001);
+        assert_eq!(document["nonce"], 1);
         assert_eq!(document["proposals"][0]["userTxnCount"], 1);
 
         env::remove_var(CONTROL_PATH_ENV);

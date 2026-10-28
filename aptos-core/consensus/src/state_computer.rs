@@ -231,22 +231,6 @@ pub fn process_validator_transactions_util(
     block: &Block,
     epoch_state: &EpochState,
 ) -> Result<Vec<ExtraDataType>> {
-    process_validator_transactions_with_activation(
-        validator_txns,
-        block,
-        epoch_state,
-        crate::oracle_hardfork::is_active(block.timestamp_usecs()),
-    )
-}
-
-/// Shared conversion path for normal and recovery execution.
-/// The explicit activation flag also lets tests exercise both sides of the fork.
-pub(crate) fn process_validator_transactions_with_activation(
-    validator_txns: Option<&[ValidatorTransaction]>,
-    block: &Block,
-    epoch_state: &EpochState,
-    verify_oracle_signature: bool,
-) -> Result<Vec<ExtraDataType>> {
     ensure!(
         block.epoch() == epoch_state.epoch,
         "block {} belongs to epoch {}, but execution has epoch {}",
@@ -258,14 +242,7 @@ pub(crate) fn process_validator_transactions_with_activation(
     Ok(validator_txns
         .unwrap_or_default()
         .iter()
-        .filter_map(|txn| {
-            process_single_validator_transaction_util(
-                txn,
-                block,
-                epoch_state,
-                verify_oracle_signature,
-            )
-        })
+        .filter_map(|txn| process_single_validator_transaction_util(txn, block, epoch_state))
         .collect())
 }
 
@@ -274,7 +251,6 @@ fn process_single_validator_transaction_util(
     txn: &ValidatorTransaction,
     block: &Block,
     epoch_state: &EpochState,
-    verify_oracle_signature: bool,
 ) -> Option<ExtraDataType> {
     match txn {
         ValidatorTransaction::DKGResult(transcript) => {
@@ -301,18 +277,14 @@ fn process_single_validator_transaction_util(
             multi_sig,
         }) => {
             // The certificate covers the original issuer, version, and every JWK entry.
-            // Verify before converting or filtering any entry. Historical blocks before
-            // the activation timestamp retain their original execution behavior.
-            if verify_oracle_signature {
-                if let Err(error) = epoch_state.verifier.verify_multi_signatures(update, multi_sig)
-                {
-                    warn!(
-                        "discarding Oracle update with invalid quorum certificate in block {}: {}",
-                        block.id(),
-                        error
-                    );
-                    return None;
-                }
+            // Verify before converting or filtering any entry.
+            if let Err(error) = epoch_state.verifier.verify_multi_signatures(update, multi_sig) {
+                warn!(
+                    "discarding Oracle update with invalid quorum certificate in block {}: {}",
+                    block.id(),
+                    error
+                );
+                return None;
             }
             process_jwk_update_util(update, block).map(ExtraDataType::JWK)
         }

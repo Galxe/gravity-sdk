@@ -33,6 +33,8 @@ SUITE_DIR = Path(__file__).resolve().parent
 GOOD_SOURCE_ID = 1004
 BAD_SOURCE_ID = 2001
 BAD_ISSUER = "gravity://3/2001/price_feed"
+BAD_NONCE = 1
+SYSTEM_CALLER = Web3.to_checksum_address("0x00000000000000000000000000000001625f0000")
 CONTROL_NAME = "invalid_oracle_qc_control.json"
 EVIDENCE_NAME = "invalid_oracle_qc_evidence.json"
 COMMITTED_BLOCK_RE = re.compile(r"HashValue\(([0-9a-f]{64})\), (\d+)\)")
@@ -81,6 +83,9 @@ def _read_evidence(path: Path) -> list[dict]:
     assert document["behavior"] == "invalid_oracle_qc"
     assert document["nodeId"] == "node1"
     assert document["issuer"] == BAD_ISSUER
+    assert document["sourceType"] == support.SOURCE_TYPE_PRICE_FEED
+    assert document["sourceId"] == BAD_SOURCE_ID
+    assert document["nonce"] == BAD_NONCE
     return document["proposals"]
 
 
@@ -207,20 +212,20 @@ async def _wait_for_committed_injection(
     )
 
 
-async def _wait_for_height(cluster: Cluster, height: int, timeout: int = 45) -> None:
+async def _wait_for_height(nodes: dict, height: int, timeout: int = 45) -> None:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        if all(node.w3.eth.block_number >= height for node in cluster.nodes.values()):
+        if all(node.w3.eth.block_number >= height for node in nodes.values()):
             return
         await asyncio.sleep(0.5)
-    raise AssertionError(f"Four validators did not reach block {height}")
+    raise AssertionError(f"Nodes {list(nodes)} did not reach block {height}")
 
 
-async def _wait_for_guard_warnings(cluster: Cluster, block_id: str) -> None:
+async def _wait_for_guard_warnings(cluster: Cluster, nodes: dict, block_id: str) -> None:
     deadline = time.monotonic() + 30
     while time.monotonic() < deadline:
         missing = []
-        for node_id in cluster.nodes:
+        for node_id in nodes:
             path = cluster.base_dir / node_id / "consensus_log" / "validator.log"
             content = path.read_text(errors="replace") if path.exists() else ""
             if not any(
@@ -262,15 +267,14 @@ def _delivered_logs(w3: Web3, native, height: int, source_id: int):
 
 @pytest.mark.asyncio
 async def test_committed_invalid_oracle_qc_drops_only_bad_update(cluster: Cluster):
+    generated_genesis = json.loads((SUITE_DIR / "artifacts" / "genesis.json").read_text())
+    assert "oracleSignatureVerificationTime" not in generated_genesis["config"]
     assert len(cluster.nodes) == 4
     assert await cluster.set_full_live(timeout=180)
     assert await cluster.check_block_increasing(timeout=60)
     node1 = cluster.get_node("node1")
     assert node1 is not None and node1.w3.is_connected()
     w3 = node1.w3
-
-    generated_genesis = json.loads((SUITE_DIR / "artifacts" / "genesis.json").read_text())
-    assert generated_genesis["config"]["oracleSignatureVerificationTime"] == 0
 
     contracts_out = support.ensure_contract_artifacts(
         SUITE_DIR,
@@ -344,92 +348,152 @@ async def test_committed_invalid_oracle_qc_drops_only_bad_update(cluster: Cluste
         evidence_path = cluster.base_dir / EVIDENCE_NAME
         evidence_path.unlink(missing_ok=True)
         target_author = _validator_author(cluster, "node1")
-        _write_control(control_path, target_author, active=True)
+        node4 = cluster.get_node("node4")
+        assert node4 is not None
+        live_nodes = {node_id: node for node_id, node in cluster.nodes.items() if node_id != "node4"}
+        node4_restart_required = False
+        control_active = False
         try:
+            # A 3-of-4 voting quorum can certify and commit while node4 is
+            # offline. Restarting it later exercises block sync/replay over H.
+            node4_restart_required = True
+            assert await node4.stop(), "failed to stop node4 before bad QC proposal"
+            _write_control(control_path, target_author, active=True)
+            control_active = True
             proposal, height, submitted = await _wait_for_committed_injection(
                 cluster, w3, native, evidence_path
             )
-        finally:
             _write_control(control_path, target_author, active=False)
+            control_active = False
 
-        block_id = _normalize_block_id(proposal["blockId"])
-        await _wait_for_height(cluster, height + 4)
-        await _wait_for_guard_warnings(cluster, proposal["blockId"])
+            block_id = _normalize_block_id(proposal["blockId"])
+            await _wait_for_height(live_nodes, height + 4)
+            await _wait_for_guard_warnings(cluster, live_nodes, proposal["blockId"])
+            peer_tip = max(node.w3.eth.block_number for node in live_nodes.values())
+            assert await node4.start(rpc_timeout=120), "failed to restart node4"
+            node4_restart_required = False
+            await _wait_for_height({"node4": node4}, peer_tip, timeout=120)
+            recovery_log = (cluster.base_dir / "node4" / "consensus_log" / "validator.log").read_text(
+                errors="replace"
+            )
+            assert any(
+                f"recover block [id: {block_id[:8]}," in line
+                and f"block_number: Some({height})" in line
+                for line in recovery_log.splitlines()
+            ), f"node4 did not replay bad-QC block {block_id} through BlockStore recovery"
 
-        snapshots = {}
-        for node_id, node in cluster.nodes.items():
-            block = node.w3.eth.get_block(height, full_transactions=True)
-            successor = node.w3.eth.get_block(height + 1)
-            assert bytes(successor["parentBeaconBlockRoot"]).hex() == block_id, (
-                node_id,
-                height,
-                block_id,
-            )
-            snapshots[node_id] = (
-                bytes(block["hash"]),
-                bytes(block["stateRoot"]),
-                bytes(block["receiptsRoot"]),
-                bytes(block["transactionsRoot"]),
-            )
-
-            bad_record_transactions = [
-                tx for tx in block["transactions"]
-                if _record_source_id(native, tx) == BAD_SOURCE_ID
-            ]
-            replica_native = node.w3.eth.contract(
-                address=support.NATIVE_ORACLE_ADDRESS, abi=native_artifact["abi"]
-            )
-            assert not bad_record_transactions, (
-                f"{node_id} executed a NativeOracle system transaction for bad QC "
-                f"at committed height {height}"
-            )
-            assert not _delivered_logs(node.w3, replica_native, height, BAD_SOURCE_ID)
-            assert tuple(
-                replica_native.functions.getSourceProgress(
-                    support.SOURCE_TYPE_PRICE_FEED, BAD_SOURCE_ID
-                ).call(block_identifier=height)
-            ) == (0, 0)
-            replica_resolver = node.w3.eth.contract(
-                address=resolver.address, abi=resolver_artifact["abi"]
-            )
-            assert tuple(
-                replica_resolver.functions.latestPrice(BAD_SOURCE_ID).call(
-                    block_identifier=height
+            snapshots = {}
+            followup_snapshots = {}
+            for node_id, node in cluster.nodes.items():
+                block = node.w3.eth.get_block(height, full_transactions=True)
+                successor = node.w3.eth.get_block(height + 1)
+                assert bytes(successor["parentBeaconBlockRoot"]).hex() == block_id, (
+                    node_id,
+                    height,
+                    block_id,
                 )
-            ) == (0, 0, 0)
+                snapshots[node_id] = (
+                    bytes(block["hash"]),
+                    bytes(block["stateRoot"]),
+                    bytes(block["receiptsRoot"]),
+                    bytes(block["transactionsRoot"]),
+                )
+                followup = node.w3.eth.get_block(height + 4)
+                followup_snapshots[node_id] = (
+                    bytes(followup["hash"]),
+                    bytes(followup["stateRoot"]),
+                )
 
-            good_record_transactions = [
-                tx for tx in block["transactions"]
-                if _record_source_id(native, tx) == GOOD_SOURCE_ID
-            ]
-            assert good_record_transactions, (
-                f"{node_id} lost the same-block valid Oracle update at {height}"
-            )
-            assert all(
-                node.w3.eth.get_transaction_receipt(tx["hash"])["status"] == 1
-                for tx in good_record_transactions
-            )
-            assert _delivered_logs(node.w3, replica_native, height, GOOD_SOURCE_ID)
-            prior_good = tuple(
-                replica_native.functions.getSourceProgress(
-                    support.SOURCE_TYPE_PRICE_FEED, GOOD_SOURCE_ID
-                ).call(block_identifier=height - 1)
-            )
-            current_good = tuple(
-                replica_native.functions.getSourceProgress(
-                    support.SOURCE_TYPE_PRICE_FEED, GOOD_SOURCE_ID
-                ).call(block_identifier=height)
-            )
-            assert current_good[0] > prior_good[0], node_id
+                bad_record_transactions = [
+                    tx for tx in block["transactions"]
+                    if _record_source_id(native, tx) == BAD_SOURCE_ID
+                ]
+                replica_native = node.w3.eth.contract(
+                    address=support.NATIVE_ORACLE_ADDRESS, abi=native_artifact["abi"]
+                )
+                assert not bad_record_transactions, (
+                    f"{node_id} executed a NativeOracle system transaction for bad QC "
+                    f"at committed height {height}"
+                )
+                assert not _delivered_logs(node.w3, replica_native, height, BAD_SOURCE_ID)
+                assert tuple(
+                    replica_native.functions.getSourceProgress(
+                        support.SOURCE_TYPE_PRICE_FEED, BAD_SOURCE_ID
+                    ).call(block_identifier=height)
+                ) == (0, 0)
+                replica_resolver = node.w3.eth.contract(
+                    address=resolver.address, abi=resolver_artifact["abi"]
+                )
+                assert tuple(
+                    replica_resolver.functions.latestPrice(BAD_SOURCE_ID).call(
+                        block_identifier=height
+                    )
+                ) == (0, 0, 0)
 
-            user_transactions = [
-                tx for tx in block["transactions"]
-                if Web3.to_hex(tx["hash"]).lower() in submitted
-            ]
-            assert user_transactions, f"{node_id} lost the same-block user transaction"
-            assert all(
-                node.w3.eth.get_transaction_receipt(tx["hash"])["status"] == 1
-                for tx in user_transactions
-            )
+                good_record_transactions = [
+                    tx for tx in block["transactions"]
+                    if _record_source_id(native, tx) == GOOD_SOURCE_ID
+                ]
+                assert good_record_transactions, (
+                    f"{node_id} lost the same-block valid Oracle update at {height}"
+                )
+                assert all(
+                    node.w3.eth.get_transaction_receipt(tx["hash"])["status"] == 1
+                    for tx in good_record_transactions
+                )
+                assert _delivered_logs(node.w3, replica_native, height, GOOD_SOURCE_ID)
+                prior_good = tuple(
+                    replica_native.functions.getSourceProgress(
+                        support.SOURCE_TYPE_PRICE_FEED, GOOD_SOURCE_ID
+                    ).call(block_identifier=height - 1)
+                )
+                current_good = tuple(
+                    replica_native.functions.getSourceProgress(
+                        support.SOURCE_TYPE_PRICE_FEED, GOOD_SOURCE_ID
+                    ).call(block_identifier=height)
+                )
+                assert current_good[0] > prior_good[0], node_id
 
-        assert len(set(snapshots.values())) == 1, snapshots
+                # Metadata consumes one SYSTEM_CALLER nonce on every block;
+                # each delivered Oracle record consumes another. Compare the
+                # actual H-1/H account nonce with all system transactions in H.
+                system_transactions = [
+                    tx for tx in block["transactions"]
+                    if tx["from"].lower() == SYSTEM_CALLER.lower()
+                ]
+                assert all(
+                    tx["from"].lower() == SYSTEM_CALLER.lower()
+                    for tx in good_record_transactions
+                )
+                nonce_before = node.w3.eth.get_transaction_count(SYSTEM_CALLER, height - 1)
+                nonce_after = node.w3.eth.get_transaction_count(SYSTEM_CALLER, height)
+                assert nonce_after - nonce_before == len(system_transactions), (
+                    node_id,
+                    height,
+                    nonce_before,
+                    nonce_after,
+                    len(system_transactions),
+                )
+                assert sorted(tx["nonce"] for tx in system_transactions) == list(
+                    range(nonce_before, nonce_after)
+                ), node_id
+
+                user_transactions = [
+                    tx for tx in block["transactions"]
+                    if Web3.to_hex(tx["hash"]).lower() in submitted
+                ]
+                assert user_transactions, f"{node_id} lost the same-block user transaction"
+                assert all(
+                    node.w3.eth.get_transaction_receipt(tx["hash"])["status"] == 1
+                    for tx in user_transactions
+                )
+
+            assert len(set(snapshots.values())) == 1, snapshots
+            assert len(set(followup_snapshots.values())) == 1, followup_snapshots
+        finally:
+            try:
+                if control_active:
+                    _write_control(control_path, target_author, active=False)
+            finally:
+                if node4_restart_required:
+                    assert await node4.start(rpc_timeout=120), "failed to restore node4 after test"

@@ -45,7 +45,6 @@ alloy-transport-http = "=2.0.5"
 alloy-rpc-types-eth = "=2.0.5"
 async-trait.workspace = true
 api.workspace = true
-aptos-consensus.workspace = true
 aptos-mempool = { workspace = true }
 gaptos = { workspace = true, features = ["gcp-secret-manager"] }
 block-buffer-manager.workspace = true
@@ -75,9 +74,6 @@ once_cell.workspace = true
 bytes.workspace = true
 dashmap.workspace = true
 bcs.workspace = true
-
-[dev-dependencies]
-aptos-consensus-types.workspace = true
 
 [build-dependencies]
 shadow-rs.workspace = true
