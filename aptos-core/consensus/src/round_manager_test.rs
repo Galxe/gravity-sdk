@@ -326,7 +326,7 @@ impl NodeSetup {
             Arc::new(Mutex::new(PendingBlocks::new())),
             false,
             false,
-            HashMap::new(), // validator_indices: empty for tests
+            epoch_state.clone(),
             Arc::new(ForwardEpochSyncService::from_env()),
         ));
 

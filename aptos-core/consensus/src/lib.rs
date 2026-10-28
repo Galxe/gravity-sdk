@@ -44,6 +44,7 @@ mod rand;
 mod recovery_manager;
 mod round_manager;
 mod state_computer;
+pub use state_computer::process_validator_transactions_util;
 #[cfg(test)]
 mod state_computer_tests;
 mod state_replication;
