@@ -158,8 +158,9 @@ def publish(directory, tag, commit):
         os.environ['GH_TOKEN'] = publication_token
     assert_new(tag)
     verify_assets(directory, tag, commit)
+    classification = ['--prerelease'] if '-' in tag else []
     gh('release', 'create', tag, '--repo', REPOSITORY, '--verify-tag', '--target', commit,
-       '--draft', '--title', tag, '--notes',
+       *classification, '--draft', '--title', tag, '--notes',
        'Built from ' + commit + '. See signed release-manifest.json for artifact and OCI digests.')
     # No upload overwrite option exists in this path. Any interruption leaves a
     # draft for operator investigation; reruns cannot rewrite it.
@@ -175,6 +176,7 @@ def publish(directory, tag, commit):
     release = api('repos/' + REPOSITORY + '/releases/tags/' + tag)
     require(release.get('immutable') is True and release.get('draft') is False,
             'published release immutability not confirmed; stop and alert the release owner')
+    require(release.get('prerelease') is ('-' in tag), 'published release classification mismatch')
 
 
 def main():

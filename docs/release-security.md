@@ -24,7 +24,7 @@ The checker rejects malformed/truncated responses, disabled/evaluate rulesets, b
 
 ## Build, approval and publication
 
-Create a new reviewed version tag pointing to the intended source commit. A tag push triggers the workflow; manual dispatch must select that same tag as its workflow ref and input (`gh workflow run release.yml --repo Galxe/gravity-sdk --ref vX.Y.Z -f tag=vX.Y.Z`). Branch dispatch cannot publish. The tag must already be protected; existing releases **including drafts** are refused.
+Create a new reviewed version tag pointing to the intended source commit. A tag push triggers the workflow; manual dispatch must select that same tag as its workflow ref and input (`gh workflow run release.yml --repo Galxe/gravity-sdk --ref vX.Y.Z -f tag=vX.Y.Z`). Branch dispatch cannot publish. The tag must already be protected; existing releases **including drafts** are refused. Tags with prerelease suffixes (for example `v1.2.3-rc.1`) are marked as GitHub prereleases; stable tags become ordinary releases.
 
 Each policy/build/publish job runs in its own fresh GitHub-hosted Ubuntu 22.04 VM. PR validation runs the offline helper tests and never enters policy/build/publish. The build job has no release App key, publication token, package write or OIDC permission. It installs the pinned Rust toolchain from `rust-toolchain.toml`, uses `cargo build --locked` with ordinary production features, fresh Cargo/Rustup directories and no restored caches. Root/package installation and Docker access are confined to the disposable hosted VM; Docker does not connect to the historical self-hosted runner or its socket. The source build must still be trusted and reviewed.
 

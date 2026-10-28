@@ -88,8 +88,9 @@ class PolicyTests(unittest.TestCase):
 
 class GitHubFixture:
     """Mimic remote release state, complete downloads and signed proof rejection."""
-    def __init__(self, assets):
+    def __init__(self, assets, tag=TAG):
         self.assets = assets
+        self.tag = tag
         self.calls = []
         self.exists = False
         self.uploaded = False
@@ -103,10 +104,10 @@ class GitHubFixture:
     def __call__(self, *args):
         self.calls.append(args)
         if args[:3] == ('api', '--paginate', '--slurp'):
-            return json.dumps([[{'tag_name': TAG, 'draft': True}] if self.exists else []])
+            return json.dumps([[{'tag_name': self.tag, 'draft': True}] if self.exists else []])
         if args[:2] == ('attestation', 'verify'):
             for flag, value in [('--repo', release.REPOSITORY), ('--signer-workflow', release.WORKFLOW),
-                                ('--signer-digest', COMMIT), ('--source-ref', 'refs/tags/' + TAG),
+                                ('--signer-digest', COMMIT), ('--source-ref', 'refs/tags/' + self.tag),
                                 ('--source-digest', COMMIT)]:
                 assert args[args.index(flag) + 1] == value
             assert '--deny-self-hosted-runners' in args
@@ -116,6 +117,7 @@ class GitHubFixture:
         if args[:2] == ('release', 'create'):
             assert not self.exists
             assert '--draft' in args and '--verify-tag' in args
+            assert ('--prerelease' in args) == ('-' in self.tag)
             self.exists = True
             return 'draft-url'
         if args[:2] == ('release', 'upload'):
@@ -140,7 +142,7 @@ class GitHubFixture:
             self.published = True
             return ''
         if args[0] == 'api' and '/releases/tags/' in args[1]:
-            return json.dumps({'draft': False, 'immutable': self.immutable})
+            return json.dumps({'draft': False, 'immutable': self.immutable, 'prerelease': '-' in self.tag})
         raise AssertionError(args)
 
 
@@ -182,6 +184,16 @@ class ReleaseTests(unittest.TestCase):
         self.assertEqual([call[:2] for call in self.remote.calls if call[0] == 'release'],
                          [('release', 'create'), ('release', 'upload'),
                           ('release', 'download'), ('release', 'edit')])
+
+    def test_prerelease_suffix_is_preserved_during_publication(self):
+        candidate = 'v1.11.0-rc.1'
+        release.make_manifest(self.directory, candidate, COMMIT, IMAGE_DIGEST, 123, 1)
+        self.remote = GitHubFixture(self.directory, candidate)
+        with patch.object(release, 'gh', side_effect=self.remote), patch.object(release, 'audit_policy'):
+            release.publish(self.directory, candidate, COMMIT)
+        self.assertTrue(self.remote.published)
+        create = next(call for call in self.remote.calls if call[:2] == ('release', 'create'))
+        self.assertIn('--prerelease', create)
 
     def test_existing_draft_or_release_cannot_be_modified(self):
         self.remote.exists = True
