@@ -1,0 +1,5 @@
+{
+  "uri_mappings": {
+    "gravity://3/1005/price_feed?provider=binance_index_kline_v1&pair=NVDAUSDT&interval=1m&bucketStartMs=1783252500000&decimals=8&graceMs=0": "http://127.0.0.1:18547"
+  }
+}

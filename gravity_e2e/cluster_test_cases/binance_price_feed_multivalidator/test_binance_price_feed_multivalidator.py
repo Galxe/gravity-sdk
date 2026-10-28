@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 from pathlib import Path
+import re
 import time
 
 import pytest
@@ -25,6 +26,10 @@ SUITE_DIR = Path(__file__).resolve().parent
 FEEDS = {1001: "NVDAUSDT", 1002: "TSLAUSDT"}
 TARGET_NONCE = 1
 QUORUM_VALIDATORS = 3
+_JWK_EXECUTION_RE = re.compile(
+    r"jwk txn epoch \d+, block number (\d+), data len (\d+)"
+)
+_INVALID_ORACLE_QC = "discarding Oracle update with invalid quorum certificate"
 PRICE_V1_GOLDEN_INNER = bytes.fromhex(
     "0100000000000007d101b2e020018e23f2365f0000000000000009543637a800"
 )
@@ -75,6 +80,46 @@ def _relayer_state(cluster: Cluster, node_id: str) -> Path:
 
 def _line_matches(content: str, marker: str, issuer: str) -> bool:
     return any(marker in line and issuer in line for line in content.splitlines())
+
+
+async def _wait_for_verified_oracle_execution(
+    cluster: Cluster,
+    registration_block: int,
+    snapshot_block: int,
+    *,
+    timeout: int = 30,
+) -> None:
+    deadline = time.monotonic() + timeout
+    executed = {}
+    while True:
+        for node_id in cluster.nodes:
+            path = _consensus_log(cluster, node_id)
+            assert path.exists(), f"{node_id} has no consensus log"
+            content = path.read_text(errors="replace")
+            assert _INVALID_ORACLE_QC not in content, (
+                f"{node_id} discarded an Oracle update with an invalid QC"
+            )
+            executed[node_id] = [
+                int(match.group(1))
+                for match in _JWK_EXECUTION_RE.finditer(content)
+                if registration_block < int(match.group(1)) <= snapshot_block
+                and int(match.group(2)) > 0
+            ]
+
+        # The marker is emitted after QC verification and before conversion to
+        # JWK extra data. It has no issuer; the per-feed quorum and on-chain
+        # assertions supply the feed-specific evidence.
+        if any(len(blocks) >= len(FEEDS) for blocks in executed.values()):
+            return
+        if time.monotonic() >= deadline:
+            break
+        await asyncio.sleep(1)
+
+    raise AssertionError(
+        f"fewer than {len(FEEDS)} post-registration SDK Oracle execution "
+        f"entries appeared by block {snapshot_block}: "
+        f"{executed}"
+    )
 
 
 async def _wait_for_consensus_evidence(
@@ -165,10 +210,11 @@ async def _wait_for_block(w3, block_number: int, timeout: int = 60) -> None:
 
 @pytest.mark.asyncio
 async def test_four_validators_resolve_deterministic_binance_prices(cluster: Cluster):
+    generated_genesis = json.loads((SUITE_DIR / "artifacts" / "genesis.json").read_text())
+    assert "oracleSignatureVerificationTime" not in generated_genesis["config"]
     assert len(cluster.nodes) == 4
     assert await cluster.set_full_live(timeout=180)
     assert await cluster.check_block_increasing(timeout=60)
-
     validator_set = await cluster.validator_list()
     assert {validator.id for validator in validator_set.active} == set(cluster.nodes)
 
@@ -227,7 +273,7 @@ async def test_four_validators_resolve_deterministic_binance_prices(cluster: Clu
                 )
             )
 
-        await support.execute_governance_proposal(
+        registration_receipt = await support.execute_governance_proposal(
             w3,
             support.faucet_voting_pool(w3),
             targets,
@@ -298,6 +344,10 @@ async def test_four_validators_resolve_deterministic_binance_prices(cluster: Clu
                 )
                 assert progress == expected_progress[feed_id], node_id
                 assert latest == expected_rounds[feed_id], node_id
+
+        await _wait_for_verified_oracle_execution(
+            cluster, int(registration_receipt["blockNumber"]), snapshot_block
+        )
 
         LOG.info(
             "Four-validator Binance QC stored rounds: %s",

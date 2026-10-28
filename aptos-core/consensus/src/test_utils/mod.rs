@@ -17,7 +17,10 @@ use aptos_consensus_types::{
 use gaptos::{
     aptos_crypto::{HashValue, PrivateKey, Uniform},
     aptos_logger::Level,
-    aptos_types::{ledger_info::LedgerInfo, validator_signer::ValidatorSigner},
+    aptos_types::{
+        epoch_state::EpochState, ledger_info::LedgerInfo, validator_signer::ValidatorSigner,
+        validator_verifier::ValidatorVerifier,
+    },
 };
 use std::{collections::HashMap, future::Future, sync::Arc, time::Duration};
 use tokio::{runtime, time::timeout};
@@ -82,6 +85,7 @@ pub async fn build_simple_tree() -> (Vec<Arc<PipelinedBlock>>, Arc<BlockStore>) 
 
 pub async fn build_empty_tree() -> Arc<BlockStore> {
     let (initial_data, storage) = EmptyStorage::start_for_testing().await;
+    let epoch = initial_data.root_block().epoch();
     Arc::new(BlockStore::new(
         storage,
         initial_data,
@@ -95,7 +99,7 @@ pub async fn build_empty_tree() -> Arc<BlockStore> {
         Arc::new(Mutex::new(PendingBlocks::new())),
         false,
         false,
-        HashMap::new(), // validator_indices: empty for tests
+        Arc::new(EpochState::new(epoch, ValidatorVerifier::new(vec![]))),
         Arc::new(ForwardEpochSyncService::from_env()),
     ))
 }
