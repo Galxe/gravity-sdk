@@ -1,0 +1,70 @@
+[cluster]
+name = "gravity-devnet-oracle-cross-epoch-recovery"
+base_dir = "/tmp/gravity-cluster-oracle-cross-epoch-recovery"
+
+[genesis_source]
+genesis_path = "./artifacts/genesis.json"
+waypoint_path = "./artifacts/waypoint.txt"
+
+[[nodes]]
+id = "node1"
+role = "genesis"
+source = { project_path = "../" }
+host = "127.0.0.1"
+validator_port = 27180
+vfn_port = 27190
+rpc_port = 27200
+api_port = 27210
+metrics_port = 27220
+inspection_port = 27230
+https_port = 27240
+authrpc_port = 27250
+reth_p2p_port = 27260
+
+[[nodes]]
+id = "node2"
+role = "genesis"
+source = { project_path = "../" }
+host = "127.0.0.1"
+validator_port = 27181
+vfn_port = 27191
+rpc_port = 27201
+api_port = 27211
+metrics_port = 27221
+inspection_port = 27231
+https_port = 27241
+authrpc_port = 27251
+reth_p2p_port = 27261
+
+[[nodes]]
+id = "node3"
+role = "genesis"
+source = { project_path = "../" }
+host = "127.0.0.1"
+validator_port = 27182
+vfn_port = 27192
+rpc_port = 27202
+api_port = 27212
+metrics_port = 27222
+inspection_port = 27232
+https_port = 27242
+authrpc_port = 27252
+reth_p2p_port = 27262
+
+[[nodes]]
+id = "node4"
+role = "genesis"
+source = { project_path = "../" }
+host = "127.0.0.1"
+validator_port = 27183
+vfn_port = 27193
+rpc_port = 27203
+api_port = 27213
+metrics_port = 27223
+inspection_port = 27233
+https_port = 27243
+authrpc_port = 27253
+reth_p2p_port = 27263
+
+[faucet_init]
+num_accounts = 0

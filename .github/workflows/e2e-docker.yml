@@ -64,6 +64,7 @@ jobs:
             "four_validator",
             "gov_consensus_config_test",
             "gov_validator_whitelist_test",
+            "oracle_cross_epoch_recovery",
             "pfn_chain",
             "prague",
             "randomness_config_transition",
