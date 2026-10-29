@@ -14,6 +14,7 @@ use gaptos::{
     aptos_types::transaction::Transaction,
 };
 use tokio::sync::Mutex;
+use tokio_util::sync::CancellationToken;
 
 /// A simple handler for sending notifications to mempool
 #[derive(Clone)]
@@ -37,8 +38,8 @@ impl<M: MempoolNotificationSender> MempoolNotificationHandler<M> {
             .notify_new_commit(committed_transactions, block_timestamp_usecs)
             .await;
 
-        if let Err(_error) = result {
-            todo!()
+        if let Err(error) = result {
+            Err(anyhow::anyhow!("failed to notify mempool of committed transactions: {error}"))
         } else {
             Ok(())
         }
@@ -64,7 +65,9 @@ impl<M: MempoolNotificationSender> ConsensusToMempoolHandler<M> {
         }
     }
 
-    /// Handles a commit notification sent by consensus
+    /// Handles a commit notification sent by consensus.
+    ///
+    /// Fails only when mempool can no longer receive notifications.
     async fn handle_consensus_commit_notification(
         &mut self,
         consensus_commit_notification: ConsensusCommitNotification,
@@ -87,14 +90,23 @@ impl<M: MempoolNotificationSender> ConsensusToMempoolHandler<M> {
         if let Err(error) = event_subscription_service.notify_events(block_number, events) {
             warn!("Failed to notify events for block {}: {:?}", block_number, error);
         }
-        self.consensus_notification_listener
+        if let Err(error) = self
+            .consensus_notification_listener
             .respond_to_commit_notification(consensus_commit_notification, Ok(()))
-            .map_err(|e| anyhow::anyhow!(e))
+        {
+            warn!(
+                "Failed to respond to commit notification for block {}: {:?}",
+                block_number, error
+            );
+        }
+        Ok(())
     }
 
-    async fn handle_consensus_notification(&mut self, notification: ConsensusNotification) {
-        // Handle the notification
-        let result = match notification {
+    async fn handle_consensus_notification(
+        &mut self,
+        notification: ConsensusNotification,
+    ) -> anyhow::Result<()> {
+        match notification {
             ConsensusNotification::NotifyCommit(commit_notification) => {
                 self.handle_consensus_commit_notification(commit_notification).await
             }
@@ -131,24 +143,171 @@ impl<M: MempoolNotificationSender> ConsensusToMempoolHandler<M> {
             ConsensusNotification::SyncForDuration(_consensus_sync_duration_notification) => {
                 todo!()
             }
-        };
-
-        // Log any errors from notification handling
-        if let Err(error) = result {
-            warn!("Error encountered when handling the consensus notification! {:?}", error);
         }
     }
 
-    pub async fn start(&mut self) {
+    /// Forwards consensus notifications until `shutdown` is cancelled.
+    ///
+    /// Returns `Ok(())` for a requested shutdown. Any other exit means consensus
+    /// or mempool went away while the node was still running, and is returned as
+    /// an error so the engine can report it.
+    pub async fn start(&mut self, shutdown: CancellationToken) -> anyhow::Result<()> {
         loop {
-            ::futures::select! {
-                notification = self.consensus_notification_listener.select_next_some() => {
-                    self.handle_consensus_notification(notification).await;
-                },
-                // _ = progress_check_interval.select_next_some() => {
-                //     self.drive_progress().await;
-                // }
+            let notification = tokio::select! {
+                // Checked first so queued notifications are dropped, not drained,
+                // once shutdown has been requested.
+                biased;
+                _ = shutdown.cancelled() => return Ok(()),
+                notification = self.consensus_notification_listener.next() => notification,
+            };
+
+            // Consensus and mempool close their channels when their runtimes shut
+            // down, which is only expected after shutdown has been requested.
+            let result = match notification {
+                Some(notification) => self.handle_consensus_notification(notification).await,
+                None => Err(anyhow::anyhow!("consensus notification stream closed")),
+            };
+            if let Err(error) = result {
+                if shutdown.is_cancelled() {
+                    return Ok(());
+                }
+                return Err(error);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use futures::channel::mpsc;
+    use gaptos::{
+        aptos_consensus_notifications::{
+            new_consensus_notifier_listener_pair, ConsensusNotificationSender, ConsensusNotifier,
+        },
+        aptos_crypto::HashValue,
+        aptos_infallible::RwLock,
+        aptos_mempool_notifications::{MempoolCommitNotification, MempoolNotifier},
+        aptos_storage_interface::{DbReader, DbReaderWriter, DbWriter},
+    };
+    use tokio::task::JoinHandle;
+
+    use super::*;
+
+    /// The handler never reads storage in these tests.
+    struct UnusedDb;
+    impl DbReader for UnusedDb {}
+    impl DbWriter for UnusedDb {}
+
+    struct RunningHandler {
+        consensus_notifier: ConsensusNotifier,
+        mempool_receiver: mpsc::Receiver<MempoolCommitNotification>,
+        shutdown: CancellationToken,
+        task: JoinHandle<anyhow::Result<()>>,
+    }
+
+    fn spawn_handler() -> RunningHandler {
+        let (consensus_notifier, consensus_listener) = new_consensus_notifier_listener_pair(5_000);
+        let (mempool_sender, mempool_receiver) = mpsc::channel(16);
+        let event_subscription_service = Arc::new(Mutex::new(EventSubscriptionService::new(
+            Arc::new(RwLock::new(DbReaderWriter::new(UnusedDb))),
+        )));
+        let mut handler = ConsensusToMempoolHandler::new(
+            MempoolNotificationHandler::new(MempoolNotifier::new(mempool_sender)),
+            consensus_listener,
+            event_subscription_service,
+        );
+        let shutdown = CancellationToken::new();
+        let handler_shutdown = shutdown.clone();
+        let task = tokio::spawn(async move { handler.start(handler_shutdown).await });
+        RunningHandler { consensus_notifier, mempool_receiver, shutdown, task }
+    }
+
+    /// Sends a commit from a task that owns its own notifier clone, so the
+    /// consensus stream stays open until that commit has been answered.
+    fn send_commit(notifier: &ConsensusNotifier, block_number: u64) -> JoinHandle<()> {
+        let notifier = notifier.clone();
+        tokio::spawn(async move {
+            let transactions = vec![Transaction::StateCheckpoint(HashValue::zero())];
+            let _ = notifier.notify_new_commit(transactions, vec![], block_number).await;
+        })
+    }
+
+    async fn handler_exit(task: JoinHandle<anyhow::Result<()>>) -> anyhow::Result<()> {
+        tokio::time::timeout(Duration::from_secs(5), task)
+            .await
+            .expect("handler did not stop")
+            .expect("handler panicked")
+    }
+
+    #[tokio::test]
+    async fn closed_consensus_stream_while_running_is_reported() {
+        let handler = spawn_handler();
+
+        drop(handler.consensus_notifier);
+
+        assert!(handler_exit(handler.task).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn closed_consensus_stream_after_shutdown_is_clean() {
+        let handler = spawn_handler();
+
+        handler.shutdown.cancel();
+        drop(handler.consensus_notifier);
+
+        handler_exit(handler.task).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn idle_stream_keeps_handler_running_until_shutdown() {
+        let handler = spawn_handler();
+
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        assert!(!handler.task.is_finished());
+
+        handler.shutdown.cancel();
+        handler_exit(handler.task).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn queued_commits_are_forwarded_before_closure_is_reported() {
+        let handler = spawn_handler();
+        let commits: Vec<_> =
+            (1..=3).map(|block| send_commit(&handler.consensus_notifier, block)).collect();
+
+        drop(handler.consensus_notifier);
+
+        assert!(handler_exit(handler.task).await.is_err());
+        for commit in commits {
+            commit.await.unwrap();
+        }
+        assert_eq!(handler.mempool_receiver.collect::<Vec<_>>().await.len(), 3);
+    }
+
+    #[tokio::test]
+    async fn queued_commits_are_dropped_after_shutdown() {
+        let handler = spawn_handler();
+        // A single poll enqueues the commit without yielding to the handler task.
+        let transactions = vec![Transaction::StateCheckpoint(HashValue::zero())];
+        let mut commit =
+            Box::pin(handler.consensus_notifier.notify_new_commit(transactions, vec![], 1));
+        assert!(futures::poll!(&mut commit).is_pending());
+
+        handler.shutdown.cancel();
+
+        handler_exit(handler.task).await.unwrap();
+        assert!(handler.mempool_receiver.collect::<Vec<_>>().await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn closed_mempool_while_running_is_reported() {
+        let handler = spawn_handler();
+
+        drop(handler.mempool_receiver);
+        let _commit = send_commit(&handler.consensus_notifier, 1);
+
+        assert!(handler_exit(handler.task).await.is_err());
     }
 }

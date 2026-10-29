@@ -26,14 +26,18 @@ use gaptos::{
     aptos_config::config::{NodeConfig, RoleType},
     aptos_dkg_runtime::DKGMessage,
     aptos_event_notifications::EventNotificationSender,
-    aptos_logger::{info, warn},
+    aptos_logger::{error, info, warn},
     aptos_network_builder::builder::NetworkBuilder,
     aptos_storage_interface::DbReaderWriter,
     aptos_telemetry::service::start_telemetry_service,
     aptos_types::chain_id::ChainId,
     aptos_validator_transaction_pool::VTxnPoolState,
 };
-use tokio::{runtime::Runtime, sync::Mutex};
+use tokio::{
+    runtime::Runtime,
+    sync::{watch, Mutex},
+};
+use tokio_util::sync::CancellationToken;
 
 #[cfg(unix)]
 #[global_allocator]
@@ -42,10 +46,29 @@ static ALLOC: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 pub struct ConsensusEngine {
     #[allow(dead_code)]
     runtimes: Vec<Runtime>,
+    /// Cancelled before the runtimes shut down, so engine tasks can tell a
+    /// requested stop from a dependency closing underneath them.
+    shutdown: CancellationToken,
+    critical_task_failure: watch::Receiver<Option<String>>,
+}
+
+impl ConsensusEngine {
+    /// Resolves with the reason if a critical engine task stops while the
+    /// engine is still running; never resolves otherwise.
+    pub async fn critical_task_failure(&self) -> String {
+        let mut failure = self.critical_task_failure.clone();
+        let reason = match failure.wait_for(Option::is_some).await {
+            Ok(reason) => reason.clone().unwrap_or_default(),
+            // Every reporting task stopped without a failure.
+            Err(_) => std::future::pending().await,
+        };
+        reason
+    }
 }
 
 impl Drop for ConsensusEngine {
     fn drop(&mut self) {
+        self.shutdown.cancel();
         // The engine may be dropped from an async context, where a plain
         // Runtime drop panics; shutdown_background is non-blocking.
         for runtime in self.runtimes.drain(..) {
@@ -349,9 +372,21 @@ impl ConsensusEngine {
             consensus_listener,
             event_subscription_service.clone(),
         );
+        let shutdown = CancellationToken::new();
+        let (critical_task_failure_tx, critical_task_failure) = watch::channel(None);
         let runtime = gaptos::aptos_runtimes::spawn_named_runtime("Con2Mempool".into(), None);
+        let handler_shutdown = shutdown.clone();
         runtime.spawn(async move {
-            consensus_mempool_handler.start().await;
+            if let Err(error) = consensus_mempool_handler.start(handler_shutdown).await {
+                let reason = format!("consensus-to-mempool handler stopped: {error:#}");
+                error!("{reason}");
+                let _ = critical_task_failure_tx.send(Some(reason));
+            }
+            // The handler owns the mempool notifier and the last reference to the
+            // event subscription service. Dropping them here would close streams
+            // that mempool, consensus, DKG and JWK tasks still poll, so keep them
+            // until this runtime is shut down.
+            std::future::pending::<()>().await;
         });
         runtimes.push(runtime);
         // The HTTP/HTTPS API server exposes consensus/DKG endpoints,
@@ -374,7 +409,7 @@ impl ConsensusEngine {
                 runtimes.push(runtime);
             }
         }
-        let arc_consensus_engine = Arc::new(Self { runtimes });
+        let arc_consensus_engine = Arc::new(Self { runtimes, shutdown, critical_task_failure });
         // process new round should be after init reth hash
         info!("pass latest_block_number: {:?} to event_subscription_service", latest_block_number);
         let _ = event_subscription_service.lock().await.notify_initial_configs(latest_block_number);
