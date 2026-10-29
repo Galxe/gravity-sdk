@@ -57,12 +57,14 @@ impl ConsensusEngine {
     /// engine is still running; never resolves otherwise.
     pub async fn critical_task_failure(&self) -> String {
         let mut failure = self.critical_task_failure.clone();
-        let reason = match failure.wait_for(Option::is_some).await {
-            Ok(reason) => reason.clone().unwrap_or_default(),
+        // Clone out of the watch guard before any further await, keeping the
+        // future Send.
+        let reason = failure.wait_for(Option::is_some).await.ok().and_then(|reason| reason.clone());
+        match reason {
+            Some(reason) => reason,
             // Every reporting task stopped without a failure.
-            Err(_) => std::future::pending().await,
-        };
-        reason
+            None => std::future::pending().await,
+        }
     }
 }
 

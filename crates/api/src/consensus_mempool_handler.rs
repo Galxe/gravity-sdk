@@ -225,12 +225,13 @@ mod tests {
     }
 
     /// Sends a commit from a task that owns its own notifier clone, so the
-    /// consensus stream stays open until that commit has been answered.
-    fn send_commit(notifier: &ConsensusNotifier, block_number: u64) -> JoinHandle<()> {
+    /// consensus stream stays open until that commit has been answered. The
+    /// task resolves to whether consensus got a successful response.
+    fn send_commit(notifier: &ConsensusNotifier, block_number: u64) -> JoinHandle<bool> {
         let notifier = notifier.clone();
         tokio::spawn(async move {
             let transactions = vec![Transaction::StateCheckpoint(HashValue::zero())];
-            let _ = notifier.notify_new_commit(transactions, vec![], block_number).await;
+            notifier.notify_new_commit(transactions, vec![], block_number).await.is_ok()
         })
     }
 
@@ -272,7 +273,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn queued_commits_are_forwarded_before_closure_is_reported() {
+    async fn pending_commits_are_answered_before_closure_is_reported() {
         let handler = spawn_handler();
         let commits: Vec<_> =
             (1..=3).map(|block| send_commit(&handler.consensus_notifier, block)).collect();
@@ -281,7 +282,7 @@ mod tests {
 
         assert!(handler_exit(handler.task).await.is_err());
         for commit in commits {
-            commit.await.unwrap();
+            assert!(commit.await.unwrap(), "consensus did not get a commit response");
         }
         assert_eq!(handler.mempool_receiver.collect::<Vec<_>>().await.len(), 3);
     }
