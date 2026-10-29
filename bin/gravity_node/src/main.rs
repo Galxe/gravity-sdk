@@ -42,6 +42,7 @@ mod broadcast_listener;
 mod chainspec;
 mod cli;
 mod consensus;
+mod fork_times;
 mod mempool;
 mod node_metrics;
 pub mod relayer;
@@ -471,7 +472,7 @@ mod tests {
     #[test]
     fn alpha_time_registers_timestamp_condition() {
         let hardforks = consensus_hardforks_from_genesis_extra_fields(|key| match key {
-            "alphaTime" => Some(crate::chainspec::GRAVITY_MAINNET_ALPHA_TIME),
+            "alphaTime" => Some(crate::fork_times::GRAVITY_MAINNET_ALPHA_TIME),
             _ => None,
         });
 
