@@ -2,213 +2,239 @@ name: Release
 
 on:
   push:
-    tags:
-      - 'v*.*.*'
+    tags: ['v*.*.*']
   pull_request:
     paths:
       - '.github/workflows/release.yml'
+      - 'scripts/release/**'
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Existing tag to release (must match v*.*.*, e.g. v1.7.0). The tag and its GitHub Release must already exist.'
+        description: 'Existing protected version tag. Select this same tag as the workflow ref.'
         required: true
         type: string
 
 concurrency:
-  group: release-${{ github.event.pull_request.number || inputs.tag || github.ref_name }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
+# PR validation and native builds never get publication or OIDC credentials.
 permissions:
-  contents: write
-  packages: write
+  contents: read
 
 jobs:
-  build-and-release:
-    name: Build and release
-    runs-on: [self-hosted, linux]
-    # Native build on the runner — no container.
-    # Invariant: runner OS must match production node OS, otherwise the
-    # binary's required glibc may exceed what target nodes provide and
-    # they'll fail to start with `GLIBC_X.YY not found`. Verify before
-    # changing the runner: `cat /etc/os-release && ldd --version`
-    # on both runner and target should agree (or runner glibc ≤ target).
-    # Runner must have these installed once:
-    #   - rust toolchain matching rust-toolchain.toml (rustup default <ver>)
-    #   - gh CLI (`apt install gh` via cli.github.com apt repo)
-    #   - build deps: clang llvm libclang-dev build-essential pkg-config
-    #                 libudev-dev
-    #     (libssl-dev no longer needed — bin/gravity_node and bin/gravity_cli
-    #     both vendor OpenSSL via `openssl = { features = ["vendored"] }`,
-    #     so openssl-sys self-compiles. Perl is required for the vendored
-    #     OpenSSL Configure script; usually present already on Debian.)
-    #   - docker (BuildKit enabled) — used by the release docker image step
-    #     to wrap the native binary into ghcr.io/galxe/gravity_node:$TAG
-    timeout-minutes: 180
-    env:
-      RUSTFLAGS: "--cfg tokio_unstable"
-
+  test:
+    runs-on: ubuntu-22.04
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          # For workflow_dispatch, check out the user-specified tag instead of
-          # the branch where the dispatch was triggered. For push/PR, fall back
-          # to the default ref (the tag or PR head).
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+          persist-credentials: false
+      - run: python3 -m unittest discover -s scripts/release -p 'test_*.py' -v
 
-      - name: Show build environment
-        # Logs runner OS / glibc / rustc so any future divergence from
-        # production OS is visible in the release run record.
-        shell: bash
+  policy:
+    if: github.repository == 'Galxe/gravity-sdk' && github.ref_type == 'tag'
+    runs-on: ubuntu-22.04
+    outputs:
+      source: ${{ steps.source.outputs.commit }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Require exact protected tag context
+        id: source
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          REF_PROTECTED: ${{ github.ref_protected }}
+          RUNNER_KIND: ${{ runner.environment }}
         run: |
           set -euo pipefail
-          grep -E '^(NAME|VERSION|VERSION_CODENAME)=' /etc/os-release
+          test "$RUNNER_KIND" = github-hosted
+          test "$REF_PROTECTED" = true
+          test "$GITHUB_REF" = "refs/tags/$GITHUB_REF_NAME"
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+            test "$INPUT_TAG" = "$GITHUB_REF_NAME"
+          fi
+          python3 -c 'import sys; sys.path.insert(0, "scripts/release"); import release; release.validate_identity(sys.argv[1], sys.argv[2])' "$GITHUB_REF_NAME" "$GITHUB_SHA"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          echo "commit=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+      - name: Mint policy reader identity
+        id: policy-token
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
+        with:
+          app-id: ${{ vars.RELEASE_POLICY_APP_ID }}
+          private-key: ${{ secrets.RELEASE_POLICY_APP_PRIVATE_KEY }}
+          owner: Galxe
+          repositories: gravity-sdk
+          permission-administration: read
+          permission-environments: read
+      - name: Audit live release controls
+        env:
+          GH_TOKEN: ${{ steps.policy-token.outputs.token }}
+        run: python3 scripts/release/release.py audit-policy
+      - name: Refuse existing releases and drafts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/release/release.py assert-new --tag "$GITHUB_REF_NAME"
+
+  build:
+    needs: [test, policy]
+    # Hosted VM is destroyed after the job; no self-hosted state/cache/socket.
+    runs-on: ubuntu-22.04
+    timeout-minutes: 240
+    outputs:
+      artifact-id: ${{ steps.upload.outputs.artifact-id }}
+    env:
+      RUSTFLAGS: '--cfg tokio_unstable'
+      CARGO_BUILD_JOBS: '2'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Prepare clean hosted build environment
+        env:
+          RUNNER_KIND: ${{ runner.environment }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$RUNNER_KIND" = github-hosted
+          export CARGO_HOME="$RUNNER_TEMP/cargo" RUSTUP_HOME="$RUNNER_TEMP/rustup"
+          echo "CARGO_HOME=$CARGO_HOME" >> "$GITHUB_ENV"
+          echo "RUSTUP_HOME=$RUSTUP_HOME" >> "$GITHUB_ENV"
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends clang llvm libclang-dev build-essential pkg-config libudev-dev libzstd-dev cmake protobuf-compiler perl
+          toolchain=$(python3 -c 'import re; print(re.search(r"channel\s*=\s*\"([^\"]+)\"", open("rust-toolchain.toml").read())[1])')
+          rustup toolchain install "$toolchain" --profile minimal
+          cat /etc/os-release
           ldd --version | head -1
           rustc --version
           cargo --version
-
-      - name: Assert rustc matches rust-toolchain.toml
-        shell: bash
+          docker version
+      - name: Build locked production binaries
         run: |
           set -euo pipefail
-          expected=$(grep -E '^channel[[:space:]]*=' rust-toolchain.toml | sed -E 's/.*"([^"]+)".*/\1/')
-          actual=$(rustc --version | awk '{print $2}')
-          echo "expected: $expected"
-          echo "actual:   $actual"
-          if [ "$expected" != "$actual" ]; then
-            echo "rustc on runner does not match rust-toolchain.toml." >&2
-            echo "update the runner toolchain (rustup install $expected && rustup default $expected) or update rust-toolchain.toml." >&2
-            exit 1
-          fi
-
-      - name: Build gravity_node and gravity_cli
-        shell: bash
-        run: |
-          set -euo pipefail
-          cargo build --profile quick-release --bin gravity_node --bin gravity_cli
-
-      - name: Stage release assets and compute sha256
-        id: stage
-        shell: bash
-        run: |
-          set -euo pipefail
-          OUT="${RUNNER_TEMP}/release-assets"
-          rm -rf "$OUT" && mkdir -p "$OUT"
-          for bin in gravity_node gravity_cli; do
-            src="target/quick-release/$bin"
-            if [ ! -x "$src" ]; then
-              echo "$src not built or not executable" >&2
-              exit 1
-            fi
-            cp "$src" "$OUT/$bin"
-            ( cd "$OUT" && sha256sum "$bin" > "$bin.sha256" )
+          cargo build --locked --profile quick-release --bin gravity_node --bin gravity_cli
+          mkdir -p "$RUNNER_TEMP/release-inputs" docker/gravity_node/bin
+          for binary in gravity_node gravity_cli; do
+            test -x "target/quick-release/$binary"
+            cp "target/quick-release/$binary" "$RUNNER_TEMP/release-inputs/$binary"
+            cp "target/quick-release/$binary" "docker/gravity_node/bin/$binary"
+            ldd "target/quick-release/$binary"
           done
-          ls -lh "$OUT"
-          echo "--- sha256 ---"
-          cat "$OUT"/*.sha256
-          echo "dir=$OUT" >> "$GITHUB_OUTPUT"
-
-      - name: Upload PR dry-run artifact
-        if: github.event_name == 'pull_request'
-        uses: actions/upload-artifact@v4
+          python3 scripts/release/release.py check-abi --directory "$RUNNER_TEMP/release-inputs"
+      - name: Package and smoke-test image in isolated build VM
+        run: |
+          set -euo pipefail
+          DOCKER_BUILDKIT=1 docker build --target runtime-host-binary -t gravity_node:release-input -f docker/gravity_node/Dockerfile .
+          docker run --rm --entrypoint /usr/local/bin/gravity_cli gravity_node:release-input --version
+          docker run --rm --entrypoint /usr/bin/curl gravity_node:release-input --version
+          docker save gravity_node:release-input -o "$RUNNER_TEMP/release-inputs/image.tar"
+      - name: Transfer this run's exact build outputs
+        id: upload
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: release-dryrun-${{ github.sha }}
-          path: ${{ steps.stage.outputs.dir }}
+          name: release-inputs-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release-inputs/
           if-no-files-found: error
           retention-days: 7
+          compression-level: 0
 
-      - name: Build gravity_node docker image
-        # Uses the `runtime-host-binary` target of docker/gravity_node/Dockerfile,
-        # which COPYs the binaries the previous cargo step just produced. BuildKit
-        # stage pruning skips the `builder` stage entirely — no double compile.
-        # Runs on both PR (build-only, no push) and tag pushes.
-        #
-        # Note: the repo's .dockerignore excludes `target/` from the build
-        # context, so we stage the binaries into docker/gravity_node/bin/ (a path
-        # that IS in the context) before invoking `docker build`. This matches
-        # the pre-existing pattern used by regression/pfn_chain_stress/run.sh.
-        shell: bash
+  publish:
+    needs: [policy, build]
+    runs-on: ubuntu-22.04
+    # Platform must require an independent reviewer, no admin bypass, v* tags only.
+    environment: release
+    permissions:
+      contents: write
+      packages: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          artifact-ids: ${{ needs.build.outputs.artifact-id }}
+          merge-multiple: true
+          path: ${{ runner.temp }}/release-inputs
+      - name: Require the same reviewed source
         env:
-          IMAGE_REF: gravity_node:build-${{ github.sha }}
+          SOURCE: ${{ needs.policy.outputs.source }}
+          RUNNER_KIND: ${{ runner.environment }}
         run: |
           set -euo pipefail
-          mkdir -p docker/gravity_node/bin
-          cp -f target/quick-release/gravity_node docker/gravity_node/bin/gravity_node
-          cp -f target/quick-release/gravity_cli docker/gravity_node/bin/gravity_cli
-          DOCKER_BUILDKIT=1 docker build \
-            --target runtime-host-binary \
-            --build-arg HOST_BINARY=docker/gravity_node/bin/gravity_node \
-            --build-arg HOST_CLI_BINARY=docker/gravity_node/bin/gravity_cli \
-            -t "${IMAGE_REF}" \
-            -f docker/gravity_node/Dockerfile .
-          docker run --rm --entrypoint /usr/local/bin/gravity_cli "${IMAGE_REF}" --version
-          docker run --rm --entrypoint /usr/bin/curl "${IMAGE_REF}" --version
-          echo "--- image size ---"
-          docker images --format '{{.Repository}}:{{.Tag}} {{.Size}}' | grep "^${IMAGE_REF}"
-          # Don't leave the binaries in the repo working dir after the build —
-          # the runner reuses the checkout between jobs.
-          rm -f docker/gravity_node/bin/gravity_node docker/gravity_node/bin/gravity_cli
-
-      - name: Resolve tag
-        id: tag
-        if: github.event_name != 'pull_request'
-        shell: bash
+          test "$RUNNER_KIND" = github-hosted
+          test "$SOURCE" = "$GITHUB_SHA"
+          test "$(git rev-parse HEAD)" = "$SOURCE"
+          mkdir -p "$RUNNER_TEMP/release-assets"
+          cp "$RUNNER_TEMP/release-inputs/gravity_node" "$RUNNER_TEMP/release-inputs/gravity_cli" "$RUNNER_TEMP/release-assets/"
+      - name: Mint short-lived policy reader for final check
+        id: policy-token
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
+        with:
+          app-id: ${{ vars.RELEASE_POLICY_APP_ID }}
+          private-key: ${{ secrets.RELEASE_POLICY_APP_PRIVATE_KEY }}
+          owner: Galxe
+          repositories: gravity-sdk
+          permission-administration: read
+          permission-environments: read
+      - name: Recheck policy after environment review
         env:
-          INPUT_TAG: ${{ inputs.tag }}
+          GH_TOKEN: ${{ steps.policy-token.outputs.token }}
+        run: python3 scripts/release/release.py audit-policy
+      - name: Publish OCI content under a unique run reference
+        id: image
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DOCKER_CONFIG: ${{ runner.temp }}/release-docker-auth
         run: |
           set -euo pipefail
-          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
-            TAG="$INPUT_TAG"
-          else
-            TAG="${GITHUB_REF##refs/tags/}"
-          fi
-          if ! echo "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+'; then
-            echo "tag must match v*.*.* (e.g. v1.7.0, v1.7.0-rc1): $TAG" >&2
-            exit 1
-          fi
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-
-      - name: Upload assets to GitHub release
-        if: github.event_name != 'pull_request'
+          docker load -i "$RUNNER_TEMP/release-inputs/image.tar"
+          image="ghcr.io/galxe/gravity_node:sha-$GITHUB_SHA-run-$GITHUB_RUN_ID-attempt-$GITHUB_RUN_ATTEMPT"
+          echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          docker tag gravity_node:release-input "$image"
+          docker push "$image"
+          digest=$(docker inspect --format '{{index .RepoDigests 0}}' "$image")
+          digest="${digest##*@}"
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          python3 scripts/release/release.py manifest --directory "$RUNNER_TEMP/release-assets" --tag "$GITHUB_REF_NAME" --commit "$GITHUB_SHA" --image-digest "$digest" --run-id "$GITHUB_RUN_ID" --run-attempt "$GITHUB_RUN_ATTEMPT"
+      - name: Attest production binaries
+        id: binaries
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
+        with:
+          subject-path: |
+            ${{ runner.temp }}/release-assets/gravity_node
+            ${{ runner.temp }}/release-assets/gravity_cli
+      - name: Attest OCI digest
+        id: image-proof
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ steps.tag.outputs.tag }}
-          ASSETS_DIR: ${{ steps.stage.outputs.dir }}
-        shell: bash
+          DOCKER_CONFIG: ${{ runner.temp }}/release-docker-auth
+        with:
+          subject-name: ghcr.io/galxe/gravity_node
+          subject-digest: ${{ steps.image.outputs.digest }}
+          push-to-registry: true
+      - name: Attest release manifest
+        id: manifest
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
+        with:
+          subject-path: ${{ runner.temp }}/release-assets/release-manifest.json
+      - name: Verify proofs and full draft asset bytes, then publish immutable
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_POLICY_TOKEN: ${{ steps.policy-token.outputs.token }}
+          DOCKER_CONFIG: ${{ runner.temp }}/release-docker-auth
+          BINARY_BUNDLE: ${{ steps.binaries.outputs.bundle-path }}
+          IMAGE_BUNDLE: ${{ steps.image-proof.outputs.bundle-path }}
+          MANIFEST_BUNDLE: ${{ steps.manifest.outputs.bundle-path }}
         run: |
           set -euo pipefail
-          if ! gh release view "$TAG" >/dev/null 2>&1; then
-            echo "release $TAG does not exist." >&2
-            echo "create it first via GitHub UI (Releases → Draft a new release) with notes, then publish — that will push the tag and re-trigger this workflow." >&2
-            exit 1
-          fi
-          gh release upload "$TAG" \
-            "$ASSETS_DIR/gravity_node" \
-            "$ASSETS_DIR/gravity_node.sha256" \
-            "$ASSETS_DIR/gravity_cli" \
-            "$ASSETS_DIR/gravity_cli.sha256" \
-            --clobber
-
-      - name: Login to ghcr.io
-        if: github.event_name != 'pull_request'
-        shell: bash
+          cp "$BINARY_BUNDLE" "$RUNNER_TEMP/release-assets/binary-provenance.jsonl"
+          cp "$IMAGE_BUNDLE" "$RUNNER_TEMP/release-assets/image-provenance.jsonl"
+          cp "$MANIFEST_BUNDLE" "$RUNNER_TEMP/release-assets/manifest-provenance.jsonl"
+          python3 scripts/release/release.py publish --directory "$RUNNER_TEMP/release-assets" --tag "$GITHUB_REF_NAME" --commit "$GITHUB_SHA"
+      - name: Remove registry credentials
+        if: always()
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          echo "${GH_TOKEN}" | docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
-
-      - name: Tag and push docker image to ghcr.io
-        if: github.event_name != 'pull_request'
-        shell: bash
-        env:
-          TAG: ${{ steps.tag.outputs.tag }}
-          BUILT_IMAGE: gravity_node:build-${{ github.sha }}
-        run: |
-          set -euo pipefail
-          # GHCR namespaces are lowercase; convert the github org name to be safe.
-          OWNER_LC="$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')"
-          IMAGE="ghcr.io/${OWNER_LC}/gravity_node:${TAG}"
-          docker tag "${BUILT_IMAGE}" "${IMAGE}"
-          docker push "${IMAGE}"
-          echo "pushed: ${IMAGE}"
+          DOCKER_CONFIG: ${{ runner.temp }}/release-docker-auth
+        run: docker logout ghcr.io
