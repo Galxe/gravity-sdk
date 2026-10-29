@@ -18,6 +18,7 @@ ASSETS = (*BINARIES, *(name + '.sha256' for name in BINARIES),
 TAG = re.compile(r'v[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?')
 SHA = re.compile(r'[0-9a-f]{40}')
 DIGEST = re.compile(r'sha256:[0-9a-f]{64}')
+MAX_GLIBC = (2, 35)  # Preserve the selected Ubuntu 22.04 build ABI ceiling.
 
 
 def require(condition, message):
@@ -40,6 +41,15 @@ def pages(path):
 def validate_identity(tag, commit):
     require(TAG.fullmatch(tag), 'invalid release tag')
     require(SHA.fullmatch(commit), 'source commit must be a lowercase full SHA')
+
+
+def check_abi(directory):
+    """Inspect required ELF symbol versions without executing build outputs."""
+    for binary in BINARIES:
+        output = subprocess.check_output(['readelf', '--version-info', str(directory / binary)], text=True)
+        versions = [tuple(map(int, value.split('.'))) for value in re.findall(r'\bGLIBC_([0-9]+\.[0-9]+(?:\.[0-9]+)?)\b', output)]
+        require(versions, 'cannot establish required GLIBC ABI: ' + binary)
+        require(max(versions) <= MAX_GLIBC, 'required GLIBC exceeds 2.35: ' + binary)
 
 
 def check_policy(immutable, rulesets, environment, deployment_policies):
@@ -183,6 +193,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest='command', required=True)
     sub.add_parser('audit-policy')
+    abi = sub.add_parser('check-abi')
+    abi.add_argument('--directory', required=True, type=Path)
     check = sub.add_parser('assert-new')
     check.add_argument('--tag', required=True)
     for command in ('manifest', 'publish'):
@@ -197,6 +209,8 @@ def main():
     args = parser.parse_args()
     if args.command == 'audit-policy':
         audit_policy()
+    elif args.command == 'check-abi':
+        check_abi(args.directory)
     elif args.command == 'assert-new':
         require(TAG.fullmatch(args.tag), 'invalid release tag')
         assert_new(args.tag)

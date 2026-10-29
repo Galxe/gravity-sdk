@@ -120,6 +120,7 @@ jobs:
             cp "target/quick-release/$binary" "docker/gravity_node/bin/$binary"
             ldd "target/quick-release/$binary"
           done
+          python3 scripts/release/release.py check-abi --directory "$RUNNER_TEMP/release-inputs"
       - name: Package and smoke-test image in isolated build VM
         run: |
           set -euo pipefail

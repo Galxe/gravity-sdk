@@ -31,6 +31,21 @@ def valid_policy():
 
 
 class PolicyTests(unittest.TestCase):
+    def test_built_binary_glibc_requirements_are_bounded(self):
+        for version, accepted in [('2.17', True), ('2.35', True), ('2.36', False), ('3.0', False)]:
+            with self.subTest(version=version), patch.object(
+                    release.subprocess, 'check_output', return_value='Name: GLIBC_' + version):
+                if accepted:
+                    release.check_abi(Path('/unused'))
+                else:
+                    with self.assertRaisesRegex(ValueError, 'GLIBC exceeds'):
+                        release.check_abi(Path('/unused'))
+
+    def test_unknown_binary_abi_fails_closed(self):
+        with patch.object(release.subprocess, 'check_output', return_value='no version information'):
+            with self.assertRaisesRegex(ValueError, 'cannot establish'):
+                release.check_abi(Path('/unused'))
+
     def test_accepts_complete_policy(self):
         release.check_policy(*valid_policy())
 
