@@ -30,6 +30,10 @@ image tag — configuration and chain state persist across restarts.
 - Either `net.ipv4.ip_forward=1` on the host, **or** pass `--network=host` to
   `docker build` so the builder can resolve DNS and reach package mirrors.
 - Roughly 20 GB free on the Docker root filesystem for build cache.
+- The host-side artifact generation prerequisites from
+  [`cluster/README.md`](../../cluster/README.md): Rust, Foundry, Git, `jq`,
+  `envsubst`, Node.js with npm (or Yarn), and Python 3.11+ (or Python 3 with
+  the `toml` package).
 
 ## Build
 
@@ -61,7 +65,12 @@ promoting a tag.
 1. Generate cluster artifacts once:
 
    ```bash
+   RUSTFLAGS="--cfg tokio_unstable" \
+       cargo build --profile quick-release --bin gravity_cli
+
    cd cluster
+   test -f genesis.toml || cp genesis.toml.example genesis.toml
+   test -f cluster.toml || cp cluster.toml.example cluster.toml
    make init && make genesis
    cd ..
    ```
@@ -84,7 +93,8 @@ promoting a tag.
 3. Start the topology:
 
    ```bash
-   IMAGE_TAG=<your-tag> docker compose -f docker-compose.cluster.yaml up -d
+   GRAVITY_IMAGE=gravity_node IMAGE_TAG=<your-tag> \
+       docker compose -f docker-compose.cluster.yaml up -d
    ```
 
    All five services use `network_mode: host`. The `cluster`-generated

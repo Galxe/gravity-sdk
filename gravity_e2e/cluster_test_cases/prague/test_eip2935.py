@@ -34,6 +34,12 @@ HISTORY_STORAGE_ADDRESS = Web3.to_checksum_address(
 )
 CONTRACTS_DIR = Path(__file__).parent / "contracts"
 
+# Gravity can expose a newly sealed header through the RPC before the matching
+# EVM state is available to eth_call. Keep history assertions behind the tip so
+# they test EIP-2935 storage rather than the header/state publication race.
+HISTORY_STABILITY_DEPTH = 5
+HISTORY_LOOKUP_COUNT = 8
+
 
 def _load_artifact(name: str):
     with open(CONTRACTS_DIR / f"{name}.json") as f:
@@ -67,14 +73,14 @@ def _block_id(node, n: int) -> bytes:
 
 @pytest.mark.asyncio
 async def test_p_a1_parent_hash_via_eth_call(cluster: Cluster):
-    """P-A1: eth_call(HISTORY_STORAGE, abi(N-1)) @ latest == block(N-1).block_id."""
+    """P-A1: eth_call(HISTORY_STORAGE, abi(n)) @ latest == block(n).block_id."""
     assert await cluster.set_full_live(timeout=60), "cluster failed to become live"
     node = cluster.get_node("node1")
 
-    # Need at least block 2 so N-1 is a populated post-Prague block, and so
-    # block N exists (we read N's parentBeaconBlockRoot to derive (N-1).block_id).
-    height = await _wait_for_block(node, 2)
-    n = height - 1  # query parent of latest
+    # Stay behind the RPC tip: the header for height can become visible before
+    # eth_call's latest state has committed height's EIP-2935 SSTORE.
+    height = await _wait_for_block(node, HISTORY_STABILITY_DEPTH + 1)
+    n = height - HISTORY_STABILITY_DEPTH
 
     raw = _system_contract_call(node, n)
     expected = _block_id(node, n)
@@ -87,16 +93,17 @@ async def test_p_a2_multi_block_history(cluster: Cluster):
     """P-A2: eight consecutive lookups all return correct block_ids."""
     node = cluster.get_node("node1")
 
-    # Need height ≥ 10 so we can query [N-8, N-1] and block N exists for
-    # the last lookup's derivation.
-    height = await _wait_for_block(node, 10)
+    # End the lookup window behind the tip for the same reason as P-A1.
+    height = await _wait_for_block(node, HISTORY_STABILITY_DEPTH + HISTORY_LOOKUP_COUNT)
+    end = height - HISTORY_STABILITY_DEPTH + 1
+    start = end - HISTORY_LOOKUP_COUNT
 
-    for i in range(height - 8, height):
+    for i in range(start, end):
         raw = _system_contract_call(node, i)
         expected = _block_id(node, i)
         assert raw == expected, f"block_id for n={i} mismatch: {raw.hex()} != {expected.hex()}"
 
-    LOG.info(f"P-A2 verified 8 consecutive block_ids [{height-8}, {height-1}]")
+    LOG.info(f"P-A2 verified {HISTORY_LOOKUP_COUNT} consecutive block_ids [{start}, {end-1}]")
 
 
 @pytest.mark.asyncio
@@ -120,9 +127,9 @@ async def test_p_a3_solidity_history_reader(cluster: Cluster):
 
     contract = node.w3.eth.contract(address=contract_addr, abi=abi)
 
-    # Pick a block at least 5 back from latest so the slot is definitely SSTORE'd.
-    height = await _wait_for_block(node, node.w3.eth.block_number + 5)
-    n = height - 5
+    # Pick a block behind the latest so the slot is definitely SSTORE'd.
+    height = await _wait_for_block(node, node.w3.eth.block_number + HISTORY_STABILITY_DEPTH)
+    n = height - HISTORY_STABILITY_DEPTH
 
     via_solidity = bytes(contract.functions.getHash(n).call())
     via_rpc = _block_id(node, n)
@@ -161,7 +168,7 @@ async def test_p_a5_history_after_epoch_crossing(cluster: Cluster):
     assert height > start_height, f"chain did not advance during sleep ({height} <= {start_height})"
     LOG.info(f"P-A5 advanced to block {height}")
 
-    n = height - 1
+    n = height - HISTORY_STABILITY_DEPTH
     raw = _system_contract_call(node, n)
     expected = _block_id(node, n)
     assert raw == expected, f"post-epoch block_id mismatch: {raw.hex()} != {expected.hex()}"
