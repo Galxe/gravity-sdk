@@ -49,6 +49,12 @@ class PolicyTests(unittest.TestCase):
     def test_accepts_complete_policy(self):
         release.check_policy(*valid_policy())
 
+    def test_hidden_bypass_list_reports_permission_boundary_without_accepting_policy(self):
+        policy = valid_policy()
+        policy[1][0].pop('bypass_actors')
+        with self.assertRaisesRegex(ValueError, 'Administration read is insufficient'):
+            release.check_policy(*policy)
+
     def test_each_missing_boundary_fails(self):
         mutations = [
             lambda p: p[0].update(enabled=False),

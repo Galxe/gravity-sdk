@@ -59,8 +59,13 @@ def check_policy(immutable, rulesets, environment, deployment_policies):
     for rule in rulesets:
         refs = rule.get('conditions', {}).get('ref_name', {})
         if (rule.get('target') == 'tag' and rule.get('enforcement') == 'active'
-                and rule.get('bypass_actors') == [] and refs.get('exclude') == []
-                and 'refs/tags/v*' in refs.get('include', [])):
+                and refs.get('exclude') == [] and 'refs/tags/v*' in refs.get('include', [])):
+            require('bypass_actors' in rule,
+                    'ruleset bypass_actors is hidden: complete audit requires ruleset-write visibility; '
+                    'Administration read is insufficient. Stop publication and obtain an approved '
+                    'policy-reader design; do not treat omitted bypass actors as empty')
+            if rule['bypass_actors'] != []:
+                continue
             types = {item.get('type') for item in rule.get('rules', [])}
             if {'update', 'deletion'} <= types:
                 protected = True
