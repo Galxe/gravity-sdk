@@ -417,9 +417,26 @@ fn main() {
             }
         }
         coordinator.send_execution_args().await;
-        let result = coordinator.run().await;
+        let run = coordinator.run();
+        tokio::pin!(run);
+        let engine_failure = async {
+            match &_engine {
+                Some(engine) => engine.critical_task_failure().await,
+                None => std::future::pending().await,
+            }
+        };
+        let result = tokio::select! {
+            biased;
+            result = &mut run => result,
+            reason = engine_failure => {
+                // Stop Reth through the normal shutdown path, but still exit non-zero.
+                let _ = shutdown_tx.send(());
+                let _ = run.await;
+                Err(reason)
+            }
+        };
         if let Err(err) = &result {
-            tracing::error!("Reth coordinator stopped with error: {err}");
+            tracing::error!("Node stopped with error: {err}");
             let _ = shutdown_tx.send(());
         }
 
@@ -440,7 +457,7 @@ fn main() {
     }
 
     if let Err(err) = coordinator_result {
-        eprintln!("Reth coordinator stopped with error: {err}");
+        eprintln!("Node stopped with error: {err}");
         std::process::exit(1);
     }
 }
