@@ -1,6 +1,6 @@
 use build_info::{
     build_information, BUILD_BRANCH, BUILD_CLEAN_CHECKOUT, BUILD_COMMIT_HASH, BUILD_OS,
-    BUILD_PKG_VERSION, BUILD_PROFILE_NAME, BUILD_RUST_VERSION, BUILD_TAG, BUILD_TIME,
+    BUILD_PKG_VERSION, BUILD_PROFILE_NAME, BUILD_RUST_VERSION, BUILD_TAG,
 };
 use gaptos::aptos_metrics_core::{register_int_gauge_vec, IntGaugeVec};
 use once_cell::sync::Lazy;
@@ -21,7 +21,6 @@ static GRAVITY_NODE_BUILD_INFO: Lazy<IntGaugeVec> = Lazy::new(|| {
             "commit_hash",
             "branch",
             "tag",
-            "build_time",
             "build_os",
             "rust_version",
             "profile",
@@ -45,7 +44,6 @@ pub(crate) fn register_binary_info_metrics() {
             build_info_value(&build_info, BUILD_COMMIT_HASH),
             build_info_value(&build_info, BUILD_BRANCH),
             build_info_value(&build_info, BUILD_TAG),
-            build_info_value(&build_info, BUILD_TIME),
             build_info_value(&build_info, BUILD_OS),
             build_info_value(&build_info, BUILD_RUST_VERSION),
             build_info_value(&build_info, BUILD_PROFILE_NAME),
