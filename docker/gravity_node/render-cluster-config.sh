@@ -4,6 +4,11 @@
 # come from cluster.toml.example defaults.
 set -euo pipefail
 
+# These disposable devnet configs are bind-mounted into a container running as
+# uid 10001. Keep their existing documented world-readable behavior even when
+# the caller has a restrictive umask; never use this renderer for mainnet keys.
+umask 022
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 CLUSTER_OUT="$REPO_ROOT/cluster/output"
@@ -20,9 +25,25 @@ mkdir -p "$OUT"
 
 # All paths inside the container.
 export DATA_DIR=/gravity/data
+export STORAGE_DIR=/gravity/data/data
+export LOG_DIR=/gravity/data
 export CONFIG_DIR=/gravity/config
 export GENESIS_PATH=/gravity/config/genesis.json
 export RELAYER_RPC_URL="${RELAYER_RPC_URL:-https://sepolia.drpc.org}"
+
+# The image-verification topology always uses generated identity files and
+# on-chain discovery. Keep these in sync with cluster/deploy.sh's file-source
+# defaults as the shared YAML templates evolve.
+export SAFETY_RULES_IDENTITY_VARIANT=from_file
+export SAFETY_RULES_IDENTITY_KEY=identity_blob_path
+export SAFETY_RULES_IDENTITY_VALUE=/gravity/config/identity.yaml
+export NETWORK_IDENTITY_TYPE=from_file
+export NETWORK_IDENTITY_FIELD=path
+export NETWORK_IDENTITY_VALUE=/gravity/config/identity.yaml
+export DISCOVERY_METHOD_NETWORK_BLOCK=$'  discovery_method:\n    onchain'
+export DISCOVERY_METHOD_FULLNODE_BLOCK=$'    discovery_method:\n      onchain'
+export VFN_SEEDS_BLOCK=""
+export PUBLIC_NETWORK_BLOCK=""
 
 # HARDCODED devnet defaults (open CORS, full API incl. debug namespace).
 # Unlike cluster/deploy.sh, this script does NOT read cluster.toml [rpc];
@@ -31,6 +52,22 @@ export RELAYER_RPC_URL="${RELAYER_RPC_URL:-https://sepolia.drpc.org}"
 # TODO: factor into a shared snippet sourced by both scripts.
 export RPC_HTTP_CORSDOMAIN="${RPC_HTTP_CORSDOMAIN:-*}"
 export RPC_HTTP_API="${RPC_HTTP_API:-debug,eth,net,trace,txpool,web3,rpc}"
+export TXPOOL_MAX_ACCOUNT_SLOTS="${TXPOOL_MAX_ACCOUNT_SLOTS:-16}"
+
+render_template() {
+    local template="$1"
+    local output="$2"
+    local variable
+
+    while IFS= read -r variable; do
+        if [[ -z ${!variable+x} ]]; then
+            echo "Missing template variable $variable for $template" >&2
+            exit 1
+        fi
+    done < <(envsubst --variables "$(< "$template")")
+
+    envsubst < "$template" > "$output"
+}
 
 render_validator() {
     local node_id="$1"
@@ -41,9 +78,10 @@ render_validator() {
     cp "$CLUSTER_OUT/waypoint.txt"                "$dir/waypoint.txt"
     cp "$CLUSTER_OUT/$node_id/config/identity.yaml" "$dir/identity.yaml"
 
-    envsubst < "$TEMPLATES/validator.yaml.tpl"     > "$dir/validator.yaml"
-    envsubst < "$TEMPLATES/reth_config.json.tpl"   > "$dir/reth_config.json"
-    envsubst < "$TEMPLATES/relayer_config.json.tpl" > "$dir/relayer_config.json"
+    render_template "$TEMPLATES/validator.yaml.tpl" "$dir/validator.yaml"
+    render_template "$TEMPLATES/reth_config.json.tpl" "$dir/reth_config.json"
+    render_template "$TEMPLATES/relayer_config.json.tpl" "$dir/relayer_config.json"
+    jq empty "$dir/reth_config.json"
 
     # identity.yaml has private keys. Left world-readable for the devnet
     # topology test (host uid 1000 != container uid 10001). In mainnet,
@@ -62,9 +100,10 @@ render_vfn() {
     cp "$CLUSTER_OUT/waypoint.txt"                "$dir/waypoint.txt"
     cp "$CLUSTER_OUT/$node_id/config/identity.yaml" "$dir/identity.yaml"
 
-    envsubst < "$TEMPLATES/validator_full_node.yaml.tpl" > "$dir/validator_full_node.yaml"
-    envsubst < "$TEMPLATES/reth_config_vfn.json.tpl"     > "$dir/reth_config.json"
-    envsubst < "$TEMPLATES/relayer_config.json.tpl"      > "$dir/relayer_config.json"
+    render_template "$TEMPLATES/validator_full_node.yaml.tpl" "$dir/validator_full_node.yaml"
+    render_template "$TEMPLATES/reth_config_vfn.json.tpl" "$dir/reth_config.json"
+    render_template "$TEMPLATES/relayer_config.json.tpl" "$dir/relayer_config.json"
+    jq empty "$dir/reth_config.json"
 
     chmod 644 "$dir/identity.yaml"
 
@@ -76,6 +115,7 @@ set_ports() {
     export HOST=127.0.0.1
     export NODE_ID="$1"
     export P2P_PORT="$2"
+    export VALIDATOR_PORT="$2"
     export VFN_PORT="$3"
     export RPC_PORT="$4"
     export METRICS_PORT="$5"
