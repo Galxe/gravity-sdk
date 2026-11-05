@@ -36,7 +36,7 @@
 //! - Anywhere in this binary that calls `From<Genesis> for ChainSpec` directly on a hand-built
 //!   `Genesis` for a gravity chain id.
 //!
-//! Today the only production funnel for gravity mainnet
+//! Today the only production funnel for gravity mainnet and Longevity testnet
 //! (`--chain $GENESIS_PATH`) goes through this parser, so the practical
 //! risk is zero. The tripwire test
 //! [`tests::chainspec_builder_mainnet_does_not_match_gravity_chain_id`]
@@ -51,30 +51,17 @@
 //! identical fork conditions. To re-time a fork, ship a new binary; there
 //! is no in-place override path by design.
 
+use crate::fork_times::*;
 use alloy_genesis::Genesis;
 use greth::{
     reth::chainspec::EthereumChainSpecParser,
-    reth_chainspec::ChainSpec,
+    reth_chainspec::{ChainSpec, LONGEVITY_TESTNET_CHAIN_ID},
     reth_cli::chainspec::{parse_genesis, ChainSpecParser},
 };
 use std::{fmt, sync::Arc};
 
 /// Gravity mainnet chain id.
 pub const GRAVITY_MAINNET_CHAIN_ID: u64 = 127_001;
-
-/// Gravity mainnet Alpha activation timestamp in Unix seconds.
-///
-/// 2026-07-27 13:00:00 Beijing (UTC+08:00), which is
-/// 2026-07-27 05:00:00 UTC.
-pub(crate) const GRAVITY_MAINNET_ALPHA_TIME: u64 = 1_785_128_400;
-
-/// Gravity mainnet Beta and Osaka activation timestamp in Unix seconds.
-///
-/// Both forks share this value: Beta (Gravity EIP-7702 lockdown release +
-/// block-gas last-gate) and Osaka (Ethereum hardfork) activate together.
-///
-/// 2026-08-18 02:00:00 UTC.
-pub(crate) const GRAVITY_MAINNET_BETA_OSAKA_TIME: u64 = 1_787_018_400;
 
 /// Per-chain hardcoded override. Each field gates one fork.
 ///
@@ -97,6 +84,30 @@ struct GravityForkOverrides {
     /// Maps to `genesis.config.extra_fields["betaTime"]`. EL reads this in
     /// `From<Genesis>` for `GravityHardfork::Beta`. Fail-closed if unset.
     beta_time: Option<u64>,
+    /// Maps to `genesis.config.extra_fields["gammaTime"]`. greth has no
+    /// chain-id gate on Gamma, so only this value decides whether the
+    /// Oracle system-contract runtime swap is scheduled.
+    gamma_time: Option<u64>,
+    /// Maps to `genesis.config.extra_fields["testnetOwnerFixTime"]`. greth
+    /// additionally requires the Longevity testnet chain id.
+    testnet_owner_fix_time: Option<u64>,
+    /// Maps to `genesis.config.extra_fields["testnetOwnerFixV2Time"]`. greth
+    /// additionally requires the Longevity testnet chain id.
+    testnet_owner_fix_v2_time: Option<u64>,
+}
+
+impl GravityForkOverrides {
+    /// Gravity forks keyed by the genesis `extra_fields` name greth reads,
+    /// in the order their override events are reported.
+    fn extra_field_forks(&self) -> [(&'static str, Option<u64>); 5] {
+        [
+            ("alphaTime", self.alpha_time),
+            ("betaTime", self.beta_time),
+            ("gammaTime", self.gamma_time),
+            ("testnetOwnerFixTime", self.testnet_owner_fix_time),
+            ("testnetOwnerFixV2Time", self.testnet_owner_fix_v2_time),
+        ]
+    }
 }
 
 /// Chain ids the binary owns. Listed entries are authoritative for the
@@ -106,19 +117,28 @@ struct GravityForkOverrides {
 /// change. The PR doing so must reference the onchain governance or
 /// coordination record that authorised the timestamp.
 const HARDCODED: &[(u64, GravityForkOverrides)] = &[
-    // Gravity mainnet. Source: gravity-mainet-gitops/genesis.json.
     (
         GRAVITY_MAINNET_CHAIN_ID,
         GravityForkOverrides {
-            // Pinned to deployed mainnet genesis (config.pragueTime).
-            prague_time: Some(1_782_709_200),
-            // Mainnet Osaka activation coordinated for 2026-08-18 02:00:00 UTC.
+            prague_time: Some(GRAVITY_MAINNET_PRAGUE_TIME),
             osaka_time: Some(GRAVITY_MAINNET_BETA_OSAKA_TIME),
-            // Mainnet Alpha activation coordinated for 2026-07-27 13:00:00
-            // Beijing (UTC+08:00), equivalent to 2026-07-27 05:00:00 UTC.
             alpha_time: Some(GRAVITY_MAINNET_ALPHA_TIME),
-            // Mainnet Beta (same wall-clock as Osaka).
             beta_time: Some(GRAVITY_MAINNET_BETA_OSAKA_TIME),
+            gamma_time: None,
+            testnet_owner_fix_time: None,
+            testnet_owner_fix_v2_time: None,
+        },
+    ),
+    (
+        LONGEVITY_TESTNET_CHAIN_ID,
+        GravityForkOverrides {
+            prague_time: Some(LONGEVITY_TESTNET_PRAGUE_TIME),
+            osaka_time: Some(LONGEVITY_TESTNET_BETA_OSAKA_TIME),
+            alpha_time: Some(LONGEVITY_TESTNET_ALPHA_TIME),
+            beta_time: Some(LONGEVITY_TESTNET_BETA_OSAKA_TIME),
+            gamma_time: Some(LONGEVITY_TESTNET_GAMMA_TIME),
+            testnet_owner_fix_time: Some(LONGEVITY_TESTNET_OWNER_FIX_TIME),
+            testnet_owner_fix_v2_time: Some(LONGEVITY_TESTNET_OWNER_FIX_V2_TIME),
         },
     ),
 ];
@@ -226,38 +246,18 @@ fn apply_overrides(g: &mut Genesis) -> Vec<OverrideEvent> {
     // Gravity hardforks live in `extra_fields`. `OtherFields` derefs to
     // `BTreeMap<String, serde_json::Value>`, so we can `insert` / `remove`
     // directly.
-    let genesis_alpha = g.config.extra_fields.get("alphaTime").and_then(|v| v.as_u64());
-    if genesis_alpha != ov.alpha_time {
-        events.push(OverrideEvent {
-            chain_id,
-            fork: "alphaTime",
-            genesis: genesis_alpha,
-            forced: ov.alpha_time,
-        });
-        match ov.alpha_time {
-            Some(t) => {
-                g.config.extra_fields.insert("alphaTime".to_string(), serde_json::Value::from(t));
-            }
-            None => {
-                g.config.extra_fields.remove("alphaTime");
-            }
+    for (key, forced) in ov.extra_field_forks() {
+        let genesis = g.config.extra_fields.get(key).and_then(|v| v.as_u64());
+        if genesis == forced {
+            continue;
         }
-    }
-
-    let genesis_beta = g.config.extra_fields.get("betaTime").and_then(|v| v.as_u64());
-    if genesis_beta != ov.beta_time {
-        events.push(OverrideEvent {
-            chain_id,
-            fork: "betaTime",
-            genesis: genesis_beta,
-            forced: ov.beta_time,
-        });
-        match ov.beta_time {
+        events.push(OverrideEvent { chain_id, fork: key, genesis, forced });
+        match forced {
             Some(t) => {
-                g.config.extra_fields.insert("betaTime".to_string(), serde_json::Value::from(t));
+                g.config.extra_fields.insert(key.to_string(), serde_json::Value::from(t));
             }
             None => {
-                g.config.extra_fields.remove("betaTime");
+                g.config.extra_fields.remove(key);
             }
         }
     }
@@ -272,6 +272,10 @@ mod tests {
         ChainSpecBuilder, EthereumHardfork, EthereumHardforks, ForkCondition, GravityHardfork,
     };
 
+    /// A chain id outside [`HARDCODED`] (the e2e cluster chain id), used to
+    /// prove genesis values pass through untouched.
+    const UNLISTED_CHAIN_ID: u64 = 1337;
+
     /// Optional hardfork fields for synthetic genesis JSON used by tests.
     #[derive(Clone, Copy, Default)]
     struct ForkInputs {
@@ -279,6 +283,9 @@ mod tests {
         osaka: Option<u64>,
         alpha: Option<u64>,
         beta: Option<u64>,
+        gamma: Option<u64>,
+        owner_fix: Option<u64>,
+        owner_fix_v2: Option<u64>,
     }
 
     fn opt_field(name: &str, value: Option<u64>) -> String {
@@ -293,8 +300,11 @@ mod tests {
         let osaka = opt_field("osakaTime", forks.osaka);
         let alpha = opt_field("alphaTime", forks.alpha);
         let beta = opt_field("betaTime", forks.beta);
+        let gamma = opt_field("gammaTime", forks.gamma);
+        let owner_fix = opt_field("testnetOwnerFixTime", forks.owner_fix);
+        let owner_fix_v2 = opt_field("testnetOwnerFixV2Time", forks.owner_fix_v2);
         format!(
-            r#"{{"config":{{"chainId":{chain_id},"homesteadBlock":0,"eip150Block":0,"eip155Block":0,"eip158Block":0,"byzantiumBlock":0,"constantinopleBlock":0,"petersburgBlock":0,"istanbulBlock":0,"berlinBlock":0,"londonBlock":0,"terminalTotalDifficulty":0,"terminalTotalDifficultyPassed":true,"shanghaiTime":0,"cancunTime":0{prague}{osaka}{alpha}{beta}}},"nonce":"0x0","timestamp":"0x0","extraData":"0x","gasLimit":"0x4c4b40","difficulty":"0x0","mixHash":"0x0000000000000000000000000000000000000000000000000000000000000000","coinbase":"0x0000000000000000000000000000000000000000","alloc":{{}},"number":"0x0","gasUsed":"0x0","parentHash":"0x0000000000000000000000000000000000000000000000000000000000000000"}}"#
+            r#"{{"config":{{"chainId":{chain_id},"homesteadBlock":0,"eip150Block":0,"eip155Block":0,"eip158Block":0,"byzantiumBlock":0,"constantinopleBlock":0,"petersburgBlock":0,"istanbulBlock":0,"berlinBlock":0,"londonBlock":0,"terminalTotalDifficulty":0,"terminalTotalDifficultyPassed":true,"shanghaiTime":0,"cancunTime":0{prague}{osaka}{alpha}{beta}{gamma}{owner_fix}{owner_fix_v2}}},"nonce":"0x0","timestamp":"0x0","extraData":"0x","gasLimit":"0x4c4b40","difficulty":"0x0","mixHash":"0x0000000000000000000000000000000000000000000000000000000000000000","coinbase":"0x0000000000000000000000000000000000000000","alloc":{{}},"number":"0x0","gasUsed":"0x0","parentHash":"0x0000000000000000000000000000000000000000000000000000000000000000"}}"#
         )
     }
 
@@ -328,12 +338,30 @@ mod tests {
     }
 
     /// Genesis that already matches every mainnet table entry — silent apply.
+    /// Mainnet pins Gamma and both TestnetOwnerFix keys to absent.
     fn matching_mainnet_forks() -> ForkInputs {
         ForkInputs {
             prague: Some(table_prague_timestamp()),
             osaka: Some(table_osaka_timestamp()),
             alpha: Some(table_alpha_timestamp()),
             beta: Some(table_beta_timestamp()),
+            ..Default::default()
+        }
+    }
+
+    /// Longevity testnet schedule, mapped fork-by-fork without going through
+    /// [`HARDCODED`], so a constant wired to the wrong fork in the table
+    /// fails the schedule assertions. The constants' values are pinned by
+    /// `gravity_testnet_timestamps_pinned_to_onchain_activations`.
+    fn expected_testnet_forks() -> ForkInputs {
+        ForkInputs {
+            prague: Some(LONGEVITY_TESTNET_PRAGUE_TIME),
+            osaka: Some(LONGEVITY_TESTNET_BETA_OSAKA_TIME),
+            alpha: Some(LONGEVITY_TESTNET_ALPHA_TIME),
+            beta: Some(LONGEVITY_TESTNET_BETA_OSAKA_TIME),
+            gamma: Some(LONGEVITY_TESTNET_GAMMA_TIME),
+            owner_fix: Some(LONGEVITY_TESTNET_OWNER_FIX_TIME),
+            owner_fix_v2: Some(LONGEVITY_TESTNET_OWNER_FIX_V2_TIME),
         }
     }
 
@@ -383,9 +411,11 @@ mod tests {
 
     #[test]
     fn non_mainnet_chain_id_passes_prague_through() {
-        // Gravity testnet chain id — not in the table, so genesis wins.
-        let cs =
-            build_via_parser(7_771_625, ForkInputs { prague: Some(100), ..Default::default() });
+        // Chain id not in the table, so genesis wins.
+        let cs = build_via_parser(
+            UNLISTED_CHAIN_ID,
+            ForkInputs { prague: Some(100), ..Default::default() },
+        );
         assert_eq!(cs.hardforks.fork(EthereumHardfork::Prague), ForkCondition::Timestamp(100),);
         assert!(cs.is_prague_active_at_timestamp(100));
         assert!(!cs.is_prague_active_at_timestamp(99));
@@ -431,7 +461,10 @@ mod tests {
 
     #[test]
     fn non_mainnet_chain_id_passes_osaka_through() {
-        let cs = build_via_parser(7_771_625, ForkInputs { osaka: Some(100), ..Default::default() });
+        let cs = build_via_parser(
+            UNLISTED_CHAIN_ID,
+            ForkInputs { osaka: Some(100), ..Default::default() },
+        );
         assert_eq!(cs.hardforks.fork(EthereumHardfork::Osaka), ForkCondition::Timestamp(100),);
         assert!(cs.is_osaka_active_at_timestamp(100));
         assert!(!cs.is_osaka_active_at_timestamp(99));
@@ -481,9 +514,12 @@ mod tests {
 
     #[test]
     fn non_mainnet_chain_id_passes_alpha_through() {
-        // Testnet: not in the table, so the operator's alphaTime survives
-        // in extra_fields, and the CL side will pick it up at startup.
-        let cs = build_via_parser(7_771_625, ForkInputs { alpha: Some(100), ..Default::default() });
+        // Not in the table, so the operator's alphaTime survives in
+        // extra_fields, and the CL side will pick it up at startup.
+        let cs = build_via_parser(
+            UNLISTED_CHAIN_ID,
+            ForkInputs { alpha: Some(100), ..Default::default() },
+        );
         assert_eq!(
             cs.genesis().config.extra_fields.get("alphaTime").and_then(|v| v.as_u64()),
             Some(100),
@@ -538,7 +574,10 @@ mod tests {
 
     #[test]
     fn non_mainnet_chain_id_passes_beta_through() {
-        let cs = build_via_parser(7_771_625, ForkInputs { beta: Some(100), ..Default::default() });
+        let cs = build_via_parser(
+            UNLISTED_CHAIN_ID,
+            ForkInputs { beta: Some(100), ..Default::default() },
+        );
         assert_eq!(
             cs.genesis().config.extra_fields.get("betaTime").and_then(|v| v.as_u64()),
             Some(100),
@@ -556,7 +595,13 @@ mod tests {
     fn post_override_genesis_reflects_the_table() {
         let cs = build_via_parser(
             GRAVITY_MAINNET_CHAIN_ID,
-            ForkInputs { prague: Some(100), osaka: Some(200), alpha: Some(50), beta: Some(60) },
+            ForkInputs {
+                prague: Some(100),
+                osaka: Some(200),
+                alpha: Some(50),
+                beta: Some(60),
+                ..Default::default()
+            },
         );
         assert_eq!(
             cs.genesis().config.prague_time,
@@ -602,7 +647,13 @@ mod tests {
     fn parse_is_idempotent_on_mainnet() {
         let s = genesis_json(
             GRAVITY_MAINNET_CHAIN_ID,
-            ForkInputs { prague: Some(100), osaka: Some(200), alpha: Some(50), beta: Some(60) },
+            ForkInputs {
+                prague: Some(100),
+                osaka: Some(200),
+                alpha: Some(50),
+                beta: Some(60),
+                ..Default::default()
+            },
         );
         let a = GravityChainSpecParser::parse(&s).expect("parse a");
         let b = GravityChainSpecParser::parse(&s).expect("parse b");
@@ -767,20 +818,34 @@ mod tests {
         assert_eq!(events[0].forced, Some(table_beta_timestamp()));
     }
 
-    /// All four gated forks disagree → all four events fire, in apply order
-    /// (prague_time, osaka_time, alphaTime, betaTime).
+    /// All seven gated forks disagree → all seven events fire, in apply order.
     #[test]
     fn apply_overrides_emits_all_events_when_all_disagree() {
         let mut g = parse_genesis_only(
             GRAVITY_MAINNET_CHAIN_ID,
-            ForkInputs { prague: Some(42), osaka: Some(43), alpha: Some(99), beta: Some(100) },
+            ForkInputs {
+                prague: Some(42),
+                osaka: Some(43),
+                alpha: Some(99),
+                beta: Some(100),
+                gamma: Some(101),
+                owner_fix: Some(102),
+                owner_fix_v2: Some(103),
+            },
         );
-        let events = apply_overrides(&mut g);
-        assert_eq!(events.len(), 4);
-        assert_eq!(events[0].fork, "prague_time");
-        assert_eq!(events[1].fork, "osaka_time");
-        assert_eq!(events[2].fork, "alphaTime");
-        assert_eq!(events[3].fork, "betaTime");
+        let forks: Vec<_> = apply_overrides(&mut g).iter().map(|ev| ev.fork).collect();
+        assert_eq!(
+            forks,
+            [
+                "prague_time",
+                "osaka_time",
+                "alphaTime",
+                "betaTime",
+                "gammaTime",
+                "testnetOwnerFixTime",
+                "testnetOwnerFixV2Time",
+            ],
+        );
     }
 
     /// Genesis already matches the binary on every gated fork → silent.
@@ -796,8 +861,16 @@ mod tests {
     #[test]
     fn apply_overrides_is_silent_for_chain_id_not_in_table() {
         let mut g = parse_genesis_only(
-            7_771_625,
-            ForkInputs { prague: Some(100), osaka: Some(200), alpha: Some(50), beta: Some(60) },
+            UNLISTED_CHAIN_ID,
+            ForkInputs {
+                prague: Some(100),
+                osaka: Some(200),
+                alpha: Some(50),
+                beta: Some(60),
+                gamma: Some(70),
+                owner_fix: Some(80),
+                owner_fix_v2: Some(90),
+            },
         );
         let events = apply_overrides(&mut g);
         assert!(events.is_empty(), "no events for chain id outside HARDCODED");
@@ -820,5 +893,117 @@ mod tests {
         assert!(s.contains("prague_time"), "got: {s}");
         assert!(s.contains("1782709200"), "got: {s}");
         assert!(s.contains("<unset>"), "got: {s}");
+    }
+
+    // ---------- Full schedule (all seven gated forks) ----------
+
+    fn condition(ts: Option<u64>) -> ForkCondition {
+        ts.map_or(ForkCondition::Never, ForkCondition::Timestamp)
+    }
+
+    /// Asserts every fork the table gates; `None` means never scheduled.
+    fn assert_schedule(cs: &ChainSpec, want: ForkInputs) {
+        assert_eq!(cs.hardforks.fork(EthereumHardfork::Prague), condition(want.prague), "Prague");
+        assert_eq!(cs.hardforks.fork(EthereumHardfork::Osaka), condition(want.osaka), "Osaka");
+        let gravity = &cs.gravity_hardforks;
+        assert_eq!(gravity.fork(GravityHardfork::Alpha), condition(want.alpha), "Alpha");
+        assert_eq!(gravity.fork(GravityHardfork::Beta), condition(want.beta), "Beta");
+        assert_eq!(gravity.fork(GravityHardfork::Gamma), condition(want.gamma), "Gamma");
+        assert_eq!(
+            gravity.fork(GravityHardfork::TestnetOwnerFix),
+            condition(want.owner_fix),
+            "TestnetOwnerFix",
+        );
+        assert_eq!(
+            gravity.fork(GravityHardfork::TestnetOwnerFixV2),
+            condition(want.owner_fix_v2),
+            "TestnetOwnerFixV2",
+        );
+    }
+
+    // ---------- Longevity testnet ----------
+
+    #[test]
+    fn testnet_schedule_is_forced_when_genesis_omits_every_fork() {
+        let cs = build_via_parser(LONGEVITY_TESTNET_CHAIN_ID, ForkInputs::default());
+        assert_schedule(&cs, expected_testnet_forks());
+    }
+
+    #[test]
+    fn testnet_overrides_a_genesis_value_that_disagrees() {
+        let genesis = ForkInputs { owner_fix_v2: Some(1), ..expected_testnet_forks() };
+        let mut g = parse_genesis_only(LONGEVITY_TESTNET_CHAIN_ID, genesis);
+        let events = apply_overrides(&mut g);
+        assert_eq!(
+            events,
+            [OverrideEvent {
+                chain_id: LONGEVITY_TESTNET_CHAIN_ID,
+                fork: "testnetOwnerFixV2Time",
+                genesis: Some(1),
+                forced: Some(LONGEVITY_TESTNET_OWNER_FIX_V2_TIME),
+            }],
+        );
+        assert_schedule(&ChainSpec::from(g), expected_testnet_forks());
+    }
+
+    #[test]
+    fn testnet_genesis_matching_the_table_is_silent() {
+        let mut g = parse_genesis_only(LONGEVITY_TESTNET_CHAIN_ID, expected_testnet_forks());
+        assert!(apply_overrides(&mut g).is_empty());
+    }
+
+    /// The shipped testnet genesis may omit fork keys (the binary supplies
+    /// them), but must never carry a value that contradicts the binary.
+    #[test]
+    fn repository_testnet_genesis_never_contradicts_table() {
+        let mut g: Genesis =
+            serde_json::from_str(include_str!("../../../genesis/testnet/genesis.json"))
+                .expect("valid testnet genesis");
+        assert_eq!(g.config.chain_id, LONGEVITY_TESTNET_CHAIN_ID);
+        for ev in apply_overrides(&mut g) {
+            assert_eq!(ev.genesis, None, "repository genesis contradicts the binary: {ev}");
+        }
+        assert_schedule(&ChainSpec::from(g), expected_testnet_forks());
+    }
+
+    /// Consensus-affecting pin: each value is the timestamp of the first
+    /// Longevity block that crossed the fork. Changing any of them makes the
+    /// binary diverge from the live chain on replay.
+    #[test]
+    fn gravity_testnet_timestamps_pinned_to_onchain_activations() {
+        let (_, ov) = HARDCODED
+            .iter()
+            .find(|(id, _)| *id == LONGEVITY_TESTNET_CHAIN_ID)
+            .expect("testnet must be in HARDCODED");
+        assert_eq!(ov.prague_time, Some(1_780_909_442));
+        assert_eq!(ov.osaka_time, Some(1_785_812_400));
+        assert_eq!(ov.alpha_time, Some(1_783_328_400));
+        assert_eq!(ov.beta_time, Some(1_785_812_400));
+        assert_eq!(ov.gamma_time, Some(1_787_108_400));
+        assert_eq!(ov.testnet_owner_fix_time, Some(1_788_490_800));
+        assert_eq!(ov.testnet_owner_fix_v2_time, Some(1_788_948_000));
+    }
+
+    // ---------- Mainnet: Gamma and TestnetOwnerFix keys ----------
+
+    /// Mainnet schedules neither Gamma nor the testnet owner fixes, even when
+    /// an operator adds the keys to genesis.
+    #[test]
+    fn mainnet_removes_gamma_and_owner_fix_keys() {
+        let mut g = parse_genesis_only(
+            GRAVITY_MAINNET_CHAIN_ID,
+            ForkInputs {
+                gamma: Some(1),
+                owner_fix: Some(2),
+                owner_fix_v2: Some(3),
+                ..matching_mainnet_forks()
+            },
+        );
+        let forks: Vec<_> = apply_overrides(&mut g).iter().map(|ev| ev.fork).collect();
+        assert_eq!(forks, ["gammaTime", "testnetOwnerFixTime", "testnetOwnerFixV2Time"]);
+        for key in ["gammaTime", "testnetOwnerFixTime", "testnetOwnerFixV2Time"] {
+            assert!(!g.config.extra_fields.contains_key(key), "{key} must be removed");
+        }
+        assert_schedule(&ChainSpec::from(g), matching_mainnet_forks());
     }
 }
